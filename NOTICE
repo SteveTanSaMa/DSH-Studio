@@ -15,14 +15,26 @@ or third-party dependencies.
 Whale Girl artwork
 ------------------
 
-The source artwork in `鲸鱼娘.png` and the derived app icon images under
-`DSH Studio/Assets.xcassets/AppIcon.appiconset/` are separate artwork and are
-not covered by the DSH Studio MIT License.
+The original community artwork and character design used as a reference were
+created by a community artist and were publicly identified as being available
+under the Creative Commons Attribution-NonCommercial-ShareAlike 4.0
+International license (CC BY-NC-SA 4.0).
 
-The artwork was created by a community artist and was publicly identified as
-being available under the Creative Commons Attribution-NonCommercial-ShareAlike
-4.0 International license (CC BY-NC-SA 4.0). DSH Studio uses the artwork with
-permission from the original creator.
+The image in `鲸鱼娘.png` is not an unmodified copy of that original work.
+Steve Tan created it as a new derivative/recreated artwork after requesting
+and receiving permission from the original creator. The final recreation
+combines Steve Tan's original contributions with elements derived from the
+authorized reference work. The final image and its derived app icon images
+under `DSH Studio/Assets.xcassets/AppIcon.appiconset/` are separate artwork
+and are not covered by the DSH Studio MIT License; they are identified here as
+CC BY-NC-SA 4.0 material and are released under that license.
+
+Attribution and permission:
+
+- Original reference artwork and character: the original community creator,
+  released under CC BY-NC-SA 4.0.
+- Final recreation and app icon derivatives: Steve Tan, created with
+  permission from the original community creator.
 
 License: https://creativecommons.org/licenses/by-nc-sa/4.0/
 Legal code: https://creativecommons.org/licenses/by-nc-sa/4.0/legalcode
