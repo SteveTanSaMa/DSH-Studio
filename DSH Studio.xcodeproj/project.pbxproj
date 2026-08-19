@@ -3,126 +3,545 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 110;
+	objectVersion = 70;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		38C19E2A729F20BF14CF9A52 /* libDeepSeekHarness.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 8D815112A13191890BB1C897 /* libDeepSeekHarness.a */; };
+		663832909CDC660175A554D0 /* libDeepSeekLogging.a in Frameworks */ = {isa = PBXBuildFile; fileRef = F909571DEA0A578AE06C4992 /* libDeepSeekLogging.a */; };
+		7E25156FD6540F424474B981 /* libDeepSeekRuntime.a in Frameworks */ = {isa = PBXBuildFile; fileRef = EAD4210FB16AE2BCFCC642F8 /* libDeepSeekRuntime.a */; };
+		8253FB285F88098D08E0806C /* libDeepSeekLogging.a in Frameworks */ = {isa = PBXBuildFile; fileRef = F909571DEA0A578AE06C4992 /* libDeepSeekLogging.a */; };
+		B5FDB2702541704DC4427E75 /* libDeepSeekHarness.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 8D815112A13191890BB1C897 /* libDeepSeekHarness.a */; };
+		D5A7B0010000000000000001 /* DSH Studio/Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = D5A7C0010000000000000001 /* DSH Studio/Assets.xcassets */; };
+		D5A7B0030000000000000003 /* DSH Studio/RuntimeManifest in Resources */ = {isa = PBXBuildFile; fileRef = D5A7C0030000000000000003 /* DSH Studio/RuntimeManifest */; };
+		DCF767977CB8818241A3104C /* libDeepSeekRuntime.a in Frameworks */ = {isa = PBXBuildFile; fileRef = EAD4210FB16AE2BCFCC642F8 /* libDeepSeekRuntime.a */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		07BF579818E3AF53E46B4EE1 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 428247BE0633B0329CDD0040 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 35BFE544F4858BD4A393E744;
+			remoteInfo = DeepSeekLogging;
+		};
+		1D80FD3DB0544955E8867BFB /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 428247BE0633B0329CDD0040 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = F672C4FC77F48E7AE5DDB49C;
+			remoteInfo = DeepSeekRuntime;
+		};
+		1DD42129E4F620094C385642 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 428247BE0633B0329CDD0040 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = CD5D7BDEC6816B1F068511D2;
+			remoteInfo = DeepSeekHarness;
+		};
+		38A394EC36B1BFEEA88C0F40 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 428247BE0633B0329CDD0040 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 35BFE544F4858BD4A393E744;
+			remoteInfo = DeepSeekLogging;
+		};
+		E775F9313B96BE6B4D8277F6 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 428247BE0633B0329CDD0040 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = CD5D7BDEC6816B1F068511D2;
+			remoteInfo = DeepSeekHarness;
+		};
+		EC98D1FAAE7ED3BDCB72A846 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 428247BE0633B0329CDD0040 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 35BFE544F4858BD4A393E744;
+			remoteInfo = DeepSeekLogging;
+		};
+		F53415312ED68AC1FEFA9B1D /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 428247BE0633B0329CDD0040 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = CD5D7BDEC6816B1F068511D2;
+			remoteInfo = DeepSeekHarness;
+		};
+		F7BE9A9CDFF6CC7FAC1CE8B8 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 428247BE0633B0329CDD0040 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = F672C4FC77F48E7AE5DDB49C;
+			remoteInfo = DeepSeekRuntime;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
-		E4C00FE63034CF10007A488E /* DSH Studio.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "DSH Studio.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		22E87BD308FA39271709FCF4 /* DSH Studio.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "DSH Studio.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		8D815112A13191890BB1C897 /* libDeepSeekHarness.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libDeepSeekHarness.a; sourceTree = BUILT_PRODUCTS_DIR; };
+		C6B1936914B87F694A17B386 /* HarnessRuntimeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HarnessRuntimeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		D5A7C0010000000000000001 /* DSH Studio/Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "DSH Studio/Assets.xcassets"; sourceTree = SOURCE_ROOT; };
+		D5A7C0030000000000000003 /* DSH Studio/RuntimeManifest */ = {isa = PBXFileReference; lastKnownFileType = folder; path = "DSH Studio/RuntimeManifest"; sourceTree = SOURCE_ROOT; };
+		EAD4210FB16AE2BCFCC642F8 /* libDeepSeekRuntime.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libDeepSeekRuntime.a; sourceTree = BUILT_PRODUCTS_DIR; };
+		F909571DEA0A578AE06C4992 /* libDeepSeekLogging.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libDeepSeekLogging.a; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		E4C00FE83034CF10007A488E /* DSH Studio */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = "DSH Studio";
-			sourceTree = "<group>";
-		};
+		D5A7F0010000000000000001 /* DSH Studio/Sources/App */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = "DSH Studio/Sources/App"; sourceTree = "<group>"; };
+		D5A7F0020000000000000002 /* DSH Studio/Sources/Harness */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = "DSH Studio/Sources/Harness"; sourceTree = "<group>"; };
+		D5A7F0030000000000000003 /* DSH Studio/Sources/Logging */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = "DSH Studio/Sources/Logging"; sourceTree = "<group>"; };
+		D5A7F0040000000000000004 /* DSH Studio/Sources/Runtime */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = "DSH Studio/Sources/Runtime"; sourceTree = "<group>"; };
+		D5A7F0050000000000000005 /* DSH Studio/Tests/HarnessRuntimeTests */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = "DSH Studio/Tests/HarnessRuntimeTests"; sourceTree = "<group>"; };
+		D5A7F0060000000000000006 /* DSH Studio/Sources/App/Settings */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = "DSH Studio/Sources/App/Settings"; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
-		E4C00FE33034CF10007A488E /* Frameworks */ = {
+		5CF717A4B8D8BE232379D735 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
 			files = (
+				8253FB285F88098D08E0806C /* libDeepSeekLogging.a in Frameworks */,
+				38C19E2A729F20BF14CF9A52 /* libDeepSeekHarness.a in Frameworks */,
+				7E25156FD6540F424474B981 /* libDeepSeekRuntime.a in Frameworks */,
 			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BF8071051E1016E410A42867 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				663832909CDC660175A554D0 /* libDeepSeekLogging.a in Frameworks */,
+				B5FDB2702541704DC4427E75 /* libDeepSeekHarness.a in Frameworks */,
+				DCF767977CB8818241A3104C /* libDeepSeekRuntime.a in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		E4C00FDD3034CF10007A488E = {
+		6109BBFD15CA2AAE04DF30D6 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				E4C00FE83034CF10007A488E /* DSH Studio */,
-				E4C00FE73034CF10007A488E /* Products */,
+				22E87BD308FA39271709FCF4 /* DSH Studio.app */,
+				C6B1936914B87F694A17B386 /* HarnessRuntimeTests.xctest */,
+				8D815112A13191890BB1C897 /* libDeepSeekHarness.a */,
+				F909571DEA0A578AE06C4992 /* libDeepSeekLogging.a */,
+				EAD4210FB16AE2BCFCC642F8 /* libDeepSeekRuntime.a */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		8F95C61FD743B4C13FBB4125 = {
+			isa = PBXGroup;
+			children = (
+				D5A7F0010000000000000001 /* DSH Studio/Sources/App */,
+				D5A7F0020000000000000002 /* DSH Studio/Sources/Harness */,
+				D5A7F0030000000000000003 /* DSH Studio/Sources/Logging */,
+				D5A7F0040000000000000004 /* DSH Studio/Sources/Runtime */,
+				D5A7F0050000000000000005 /* DSH Studio/Tests/HarnessRuntimeTests */,
+				D5A7F0060000000000000006 /* DSH Studio/Sources/App/Settings */,
+				6109BBFD15CA2AAE04DF30D6 /* Products */,
+				E4C05BC83034D5F0007A488E /* Recovered References */,
 			);
 			sourceTree = "<group>";
 		};
-		E4C00FE73034CF10007A488E /* Products */ = {
+		E4C05BC83034D5F0007A488E /* Recovered References */ = {
 			isa = PBXGroup;
 			children = (
-				E4C00FE63034CF10007A488E /* DSH Studio.app */,
+				D5A7C0010000000000000001 /* DSH Studio/Assets.xcassets */,
+				D5A7C0030000000000000003 /* DSH Studio/RuntimeManifest */,
 			);
-			name = Products;
+			name = "Recovered References";
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		E4C00FE53034CF10007A488E /* DSH Studio */ = {
+		35BFE544F4858BD4A393E744 /* DeepSeekLogging */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = E4C00FF13034CF12007A488E /* Build configuration list for PBXNativeTarget "DSH Studio" */;
+			buildConfigurationList = CFC904CC15B906100FB7B727 /* Build configuration list for PBXNativeTarget "DeepSeekLogging" */;
 			buildPhases = (
-				E4C00FE23034CF10007A488E /* Sources */,
-				E4C00FE33034CF10007A488E /* Frameworks */,
-				E4C00FE43034CF10007A488E /* Resources */,
+				521D611EBACD1122B0B27E3B /* Sources */,
+				FABDDDAF0F8D8539849F2067 /* Copy Swift Objective-C Interface Header */,
 			);
 			buildRules = (
 			);
+			dependencies = (
+			);
 			fileSystemSynchronizedGroups = (
-				E4C00FE83034CF10007A488E /* DSH Studio */,
+				D5A7F0030000000000000003 /* DSH Studio/Sources/Logging */,
+			);
+			name = DeepSeekLogging;
+			packageProductDependencies = (
+			);
+			productName = DeepSeekLogging;
+			productReference = F909571DEA0A578AE06C4992 /* libDeepSeekLogging.a */;
+			productType = "com.apple.product-type.library.static";
+		};
+		60DF652C5890DCBE0670A4FF /* DSH Studio */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 33079E99B462D379ADB05686 /* Build configuration list for PBXNativeTarget "DSH Studio" */;
+			buildPhases = (
+				D2082AA1957DB0452F105B41 /* Sources */,
+				BF8071051E1016E410A42867 /* Frameworks */,
+				D5A7E0010000000000000001 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				C5B72CE11F68C68F5D17C327 /* PBXTargetDependency */,
+				78B6DB026F879DFF1CBE0F94 /* PBXTargetDependency */,
+				E0E500C182535DE4E6F94836 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				D5A7F0010000000000000001 /* DSH Studio/Sources/App */,
 			);
 			name = "DSH Studio";
+			packageProductDependencies = (
+			);
 			productName = "DSH Studio";
-			productReference = E4C00FE63034CF10007A488E /* DSH Studio.app */;
+			productReference = 22E87BD308FA39271709FCF4 /* DSH Studio.app */;
 			productType = "com.apple.product-type.application";
+		};
+		CD5D7BDEC6816B1F068511D2 /* DeepSeekHarness */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 7A4282AD4E41FDC02E7E2199 /* Build configuration list for PBXNativeTarget "DeepSeekHarness" */;
+			buildPhases = (
+				7ADF139948A33D6765848A11 /* Sources */,
+				02F11785376458D8A66C0FF7 /* Copy Swift Objective-C Interface Header */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				D5A7F0020000000000000002 /* DSH Studio/Sources/Harness */,
+			);
+			name = DeepSeekHarness;
+			packageProductDependencies = (
+			);
+			productName = DeepSeekHarness;
+			productReference = 8D815112A13191890BB1C897 /* libDeepSeekHarness.a */;
+			productType = "com.apple.product-type.library.static";
+		};
+		EC82546E8442379847FECD67 /* HarnessRuntimeTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 4AFE08DAB914295A6B486718 /* Build configuration list for PBXNativeTarget "HarnessRuntimeTests" */;
+			buildPhases = (
+				34B3974B643AE459E94CD56F /* Sources */,
+				5CF717A4B8D8BE232379D735 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				2AD2346C56FC7E69641F6C9B /* PBXTargetDependency */,
+				4ABAF10C2B84FF381157AB99 /* PBXTargetDependency */,
+				6EB0E9BF6BDBB97259719E00 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				D5A7F0050000000000000005 /* DSH Studio/Tests/HarnessRuntimeTests */,
+				D5A7F0060000000000000006 /* DSH Studio/Sources/App/Settings */,
+			);
+			name = HarnessRuntimeTests;
+			packageProductDependencies = (
+			);
+			productName = HarnessRuntimeTests;
+			productReference = C6B1936914B87F694A17B386 /* HarnessRuntimeTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		F672C4FC77F48E7AE5DDB49C /* DeepSeekRuntime */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F2FAA12C14D4E391C2ED81BF /* Build configuration list for PBXNativeTarget "DeepSeekRuntime" */;
+			buildPhases = (
+				835956E95E2D0D24ECD0238B /* Sources */,
+				F8E4AAF6ECA4DF78AABF9522 /* Copy Swift Objective-C Interface Header */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				EE882A756142130C73C060A5 /* PBXTargetDependency */,
+				92F1119F352D5B10B5DA2D29 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				D5A7F0040000000000000004 /* DSH Studio/Sources/Runtime */,
+			);
+			name = DeepSeekRuntime;
+			packageProductDependencies = (
+			);
+			productName = DeepSeekRuntime;
+			productReference = EAD4210FB16AE2BCFCC642F8 /* libDeepSeekRuntime.a */;
+			productType = "com.apple.product-type.library.static";
 		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
-		E4C00FDE3034CF10007A488E /* Project object */ = {
+		428247BE0633B0329CDD0040 /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
-				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 2700;
+				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 2700;
-				TargetAttributes = {
-					E4C00FE53034CF10007A488E = {
-						CreatedOnToolsVersion = 27.0;
-					};
-				};
 			};
-			buildConfigurationList = E4C00FE13034CF10007A488E /* Build configuration list for PBXProject "DSH Studio" */;
+			buildConfigurationList = E91C86DC0CA05BA3436720FD /* Build configuration list for PBXProject "DSH Studio" */;
+			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
-				en,
 				Base,
+				en,
 			);
-			mainGroup = E4C00FDD3034CF10007A488E;
+			mainGroup = 8F95C61FD743B4C13FBB4125;
 			minimizedProjectReferenceProxies = 1;
-			preferredProjectObjectVersion = 77;
-			productRefGroup = E4C00FE73034CF10007A488E /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				E4C00FE53034CF10007A488E /* DSH Studio */,
+				60DF652C5890DCBE0670A4FF /* DSH Studio */,
+				CD5D7BDEC6816B1F068511D2 /* DeepSeekHarness */,
+				35BFE544F4858BD4A393E744 /* DeepSeekLogging */,
+				F672C4FC77F48E7AE5DDB49C /* DeepSeekRuntime */,
+				EC82546E8442379847FECD67 /* HarnessRuntimeTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		E4C00FE43034CF10007A488E /* Resources */ = {
+		D5A7E0010000000000000001 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
 			files = (
+				D5A7B0010000000000000001 /* DSH Studio/Assets.xcassets in Resources */,
+				D5A7B0030000000000000003 /* DSH Studio/RuntimeManifest in Resources */,
 			);
+			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
 
-/* Begin PBXSourcesBuildPhase section */
-		E4C00FE23034CF10007A488E /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
+/* Begin PBXShellScriptBuildPhase section */
+		02F11785376458D8A66C0FF7 /* Copy Swift Objective-C Interface Header */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
 			files = (
 			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(DERIVED_SOURCES_DIR)/$(SWIFT_OBJC_INTERFACE_HEADER_NAME)",
+			);
+			name = "Copy Swift Objective-C Interface Header";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(BUILT_PRODUCTS_DIR)/include/$(PRODUCT_MODULE_NAME)/$(SWIFT_OBJC_INTERFACE_HEADER_NAME)",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "ditto \"${SCRIPT_INPUT_FILE_0}\" \"${SCRIPT_OUTPUT_FILE_0}\"\n";
+		};
+		F8E4AAF6ECA4DF78AABF9522 /* Copy Swift Objective-C Interface Header */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(DERIVED_SOURCES_DIR)/$(SWIFT_OBJC_INTERFACE_HEADER_NAME)",
+			);
+			name = "Copy Swift Objective-C Interface Header";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(BUILT_PRODUCTS_DIR)/include/$(PRODUCT_MODULE_NAME)/$(SWIFT_OBJC_INTERFACE_HEADER_NAME)",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "ditto \"${SCRIPT_INPUT_FILE_0}\" \"${SCRIPT_OUTPUT_FILE_0}\"\n";
+		};
+		FABDDDAF0F8D8539849F2067 /* Copy Swift Objective-C Interface Header */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(DERIVED_SOURCES_DIR)/$(SWIFT_OBJC_INTERFACE_HEADER_NAME)",
+			);
+			name = "Copy Swift Objective-C Interface Header";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(BUILT_PRODUCTS_DIR)/include/$(PRODUCT_MODULE_NAME)/$(SWIFT_OBJC_INTERFACE_HEADER_NAME)",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "ditto \"${SCRIPT_INPUT_FILE_0}\" \"${SCRIPT_OUTPUT_FILE_0}\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		34B3974B643AE459E94CD56F /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		521D611EBACD1122B0B27E3B /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7ADF139948A33D6765848A11 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		835956E95E2D0D24ECD0238B /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D2082AA1957DB0452F105B41 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXTargetDependency section */
+		2AD2346C56FC7E69641F6C9B /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 35BFE544F4858BD4A393E744 /* DeepSeekLogging */;
+			targetProxy = 07BF579818E3AF53E46B4EE1 /* PBXContainerItemProxy */;
+		};
+		4ABAF10C2B84FF381157AB99 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = CD5D7BDEC6816B1F068511D2 /* DeepSeekHarness */;
+			targetProxy = 1DD42129E4F620094C385642 /* PBXContainerItemProxy */;
+		};
+		6EB0E9BF6BDBB97259719E00 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = F672C4FC77F48E7AE5DDB49C /* DeepSeekRuntime */;
+			targetProxy = F7BE9A9CDFF6CC7FAC1CE8B8 /* PBXContainerItemProxy */;
+		};
+		78B6DB026F879DFF1CBE0F94 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = CD5D7BDEC6816B1F068511D2 /* DeepSeekHarness */;
+			targetProxy = F53415312ED68AC1FEFA9B1D /* PBXContainerItemProxy */;
+		};
+		92F1119F352D5B10B5DA2D29 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = CD5D7BDEC6816B1F068511D2 /* DeepSeekHarness */;
+			targetProxy = E775F9313B96BE6B4D8277F6 /* PBXContainerItemProxy */;
+		};
+		C5B72CE11F68C68F5D17C327 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 35BFE544F4858BD4A393E744 /* DeepSeekLogging */;
+			targetProxy = 38A394EC36B1BFEEA88C0F40 /* PBXContainerItemProxy */;
+		};
+		E0E500C182535DE4E6F94836 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = F672C4FC77F48E7AE5DDB49C /* DeepSeekRuntime */;
+			targetProxy = 1D80FD3DB0544955E8867BFB /* PBXContainerItemProxy */;
+		};
+		EE882A756142130C73C060A5 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 35BFE544F4858BD4A393E744 /* DeepSeekLogging */;
+			targetProxy = EC98D1FAAE7ED3BDCB72A846 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
 /* Begin XCBuildConfiguration section */
-		E4C00FEF3034CF12007A488E /* Debug configuration for PBXProject "DSH Studio" */ = {
+		011B62678F41DFEB309DAB88 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				COMBINE_HIDPI_IMAGES = YES;
+				DEAD_CODE_STRIPPING = YES;
+				DEFINES_MODULE = YES;
+				ENABLE_MODULE_VERIFIER = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MODULE_VERIFIER_SUPPORTED_LANGUAGE_STANDARDS = "gnu11 gnu++14";
+				PRODUCT_MODULE_NAME = DeepSeekRuntime;
+				PRODUCT_NAME = DeepSeekRuntime;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+			};
+			name = Debug;
+		};
+		0E62AA5A8B9EB84DC3758191 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGNING_REQUIRED = NO;
+				CODE_SIGN_IDENTITY = "-";
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				DEFINES_MODULE = YES;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_MODULE_VERIFIER = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "DSH Studio/Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 0.1.0;
+				MODULE_VERIFIER_SUPPORTED_LANGUAGE_STANDARDS = "gnu11 gnu++14";
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-ObjC",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "SteveTan.DSH-Studio";
+				PRODUCT_MODULE_NAME = DSHStudio;
+				PRODUCT_NAME = "DSH Studio";
+				SDKROOT = macosx;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+			};
+			name = Debug;
+		};
+		2930E1B19E53FEE949BD90C6 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				COMBINE_HIDPI_IMAGES = YES;
+				DEAD_CODE_STRIPPING = YES;
+				DEFINES_MODULE = YES;
+				ENABLE_MODULE_VERIFIER = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MODULE_VERIFIER_SUPPORTED_LANGUAGE_STANDARDS = "gnu11 gnu++14";
+				PRODUCT_MODULE_NAME = DeepSeekHarness;
+				PRODUCT_NAME = DeepSeekHarness;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+			};
+			name = Debug;
+		};
+		3E464EBE2EFF3EEA56C16759 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
-				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
 				CLANG_ENABLE_MODULES = YES;
 				CLANG_ENABLE_OBJC_ARC = YES;
 				CLANG_ENABLE_OBJC_WEAK = YES;
@@ -149,17 +568,173 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = NO;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.9;
+			};
+			name = Release;
+		};
+		6345714D195B58482C0EFFD3 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				DEAD_CODE_STRIPPING = YES;
+				DEFINES_MODULE = YES;
+				ENABLE_MODULE_VERIFIER = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MODULE_VERIFIER_SUPPORTED_LANGUAGE_STANDARDS = "gnu11 gnu++14";
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-ObjC",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "SteveTan.DSH-Studio.Tests";
+				PRODUCT_MODULE_NAME = HarnessRuntimeTests;
+				PRODUCT_NAME = HarnessRuntimeTests;
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+		77C0A1355DC5E017F1AB7D23 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				COMBINE_HIDPI_IMAGES = YES;
+				DEAD_CODE_STRIPPING = YES;
+				DEFINES_MODULE = YES;
+				ENABLE_MODULE_VERIFIER = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MODULE_VERIFIER_SUPPORTED_LANGUAGE_STANDARDS = "gnu11 gnu++14";
+				PRODUCT_MODULE_NAME = DeepSeekLogging;
+				PRODUCT_NAME = DeepSeekLogging;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+			};
+			name = Release;
+		};
+		833D51460B7F05E33C104567 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				COMBINE_HIDPI_IMAGES = YES;
+				DEAD_CODE_STRIPPING = YES;
+				DEFINES_MODULE = YES;
+				ENABLE_MODULE_VERIFIER = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MODULE_VERIFIER_SUPPORTED_LANGUAGE_STANDARDS = "gnu11 gnu++14";
+				PRODUCT_MODULE_NAME = DeepSeekHarness;
+				PRODUCT_NAME = DeepSeekHarness;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+			};
+			name = Release;
+		};
+		D145D873DB48089904920009 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				DEAD_CODE_STRIPPING = YES;
+				DEFINES_MODULE = YES;
+				ENABLE_MODULE_VERIFIER = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MODULE_VERIFIER_SUPPORTED_LANGUAGE_STANDARDS = "gnu11 gnu++14";
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-ObjC",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "SteveTan.DSH-Studio.Tests";
+				PRODUCT_MODULE_NAME = HarnessRuntimeTests;
+				PRODUCT_NAME = HarnessRuntimeTests;
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		D5FC8496E1598E87B792C202 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
-				GCC_C_LANGUAGE_STANDARD = gnu17;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_OPTIMIZATION_LEVEL = 0;
 				GCC_PREPROCESSOR_DEFINITIONS = (
-					"DEBUG=1",
 					"$(inherited)",
+					"DEBUG=1",
 				);
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
 				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
@@ -167,153 +742,150 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
-				MACOSX_DEPLOYMENT_TARGET = 27.0;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
-				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.9;
 			};
 			name = Debug;
 		};
-		E4C00FF03034CF12007A488E /* Release configuration for PBXProject "DSH Studio" */ = {
+		D656EF582EAA964CC9D1D6CF /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ALWAYS_SEARCH_USER_PATHS = NO;
-				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
-				CLANG_ANALYZER_NONNULL = YES;
-				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
-				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
-				CLANG_ENABLE_MODULES = YES;
-				CLANG_ENABLE_OBJC_ARC = YES;
-				CLANG_ENABLE_OBJC_WEAK = YES;
-				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
-				CLANG_WARN_BOOL_CONVERSION = YES;
-				CLANG_WARN_COMMA = YES;
-				CLANG_WARN_CONSTANT_CONVERSION = YES;
-				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
-				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
-				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
-				CLANG_WARN_EMPTY_BODY = YES;
-				CLANG_WARN_ENUM_CONVERSION = YES;
-				CLANG_WARN_INFINITE_RECURSION = YES;
-				CLANG_WARN_INT_CONVERSION = YES;
-				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
-				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
-				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
-				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
-				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
-				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
-				CLANG_WARN_STRICT_PROTOTYPES = YES;
-				CLANG_WARN_SUSPICIOUS_MOVE = YES;
-				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
-				CLANG_WARN_UNREACHABLE_CODE = YES;
-				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
-				COPY_PHASE_STRIP = NO;
-				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				ENABLE_NS_ASSERTIONS = NO;
-				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
-				GCC_C_LANGUAGE_STANDARD = gnu17;
-				GCC_NO_COMMON_BLOCKS = YES;
-				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
-				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
-				GCC_WARN_UNDECLARED_SELECTOR = YES;
-				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
-				GCC_WARN_UNUSED_FUNCTION = YES;
-				GCC_WARN_UNUSED_VARIABLE = YES;
-				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
-				MACOSX_DEPLOYMENT_TARGET = 27.0;
-				MTL_ENABLE_DEBUG_INFO = NO;
-				MTL_FAST_MATH = YES;
+				COMBINE_HIDPI_IMAGES = YES;
+				DEAD_CODE_STRIPPING = YES;
+				DEFINES_MODULE = YES;
+				ENABLE_MODULE_VERIFIER = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MODULE_VERIFIER_SUPPORTED_LANGUAGE_STANDARDS = "gnu11 gnu++14";
+				PRODUCT_MODULE_NAME = DeepSeekLogging;
+				PRODUCT_NAME = DeepSeekLogging;
 				SDKROOT = macosx;
-				SWIFT_COMPILATION_MODE = wholemodule;
+				SKIP_INSTALL = YES;
+			};
+			name = Debug;
+		};
+		F18C66EB0FE92A716AB50776 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGNING_REQUIRED = NO;
+				CODE_SIGN_IDENTITY = "-";
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				DEFINES_MODULE = YES;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_MODULE_VERIFIER = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "DSH Studio/Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 0.1.0;
+				MODULE_VERIFIER_SUPPORTED_LANGUAGE_STANDARDS = "gnu11 gnu++14";
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-ObjC",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "SteveTan.DSH-Studio";
+				PRODUCT_MODULE_NAME = DSHStudio;
+				PRODUCT_NAME = "DSH Studio";
+				SDKROOT = macosx;
+				SWIFT_EMIT_LOC_STRINGS = YES;
 			};
 			name = Release;
 		};
-		E4C00FF23034CF12007A488E /* Debug configuration for PBXNativeTarget "DSH Studio" */ = {
+		F513E44B3F8C391007519DA6 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
-				ENABLE_APP_SANDBOX = YES;
-				ENABLE_PREVIEWS = YES;
-				ENABLE_USER_SELECTED_FILES = readonly;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				DEAD_CODE_STRIPPING = YES;
+				DEFINES_MODULE = YES;
+				ENABLE_MODULE_VERIFIER = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "SteveTan.DSH-Studio";
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				REGISTER_APP_GROUPS = YES;
-				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
-			};
-			name = Debug;
-		};
-		E4C00FF33034CF12007A488E /* Release configuration for PBXNativeTarget "DSH Studio" */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_STYLE = Automatic;
-				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
-				ENABLE_APP_SANDBOX = YES;
-				ENABLE_PREVIEWS = YES;
-				ENABLE_USER_SELECTED_FILES = readonly;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/../Frameworks",
-				);
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "SteveTan.DSH-Studio";
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				REGISTER_APP_GROUPS = YES;
-				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MODULE_VERIFIER_SUPPORTED_LANGUAGE_STANDARDS = "gnu11 gnu++14";
+				PRODUCT_MODULE_NAME = DeepSeekRuntime;
+				PRODUCT_NAME = DeepSeekRuntime;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
 			};
 			name = Release;
 		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		E4C00FE13034CF10007A488E /* Build configuration list for PBXProject "DSH Studio" */ = {
+		33079E99B462D379ADB05686 /* Build configuration list for PBXNativeTarget "DSH Studio" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				E4C00FEF3034CF12007A488E /* Debug configuration for PBXProject "DSH Studio" */,
-				E4C00FF03034CF12007A488E /* Release configuration for PBXProject "DSH Studio" */,
+				0E62AA5A8B9EB84DC3758191 /* Debug */,
+				F18C66EB0FE92A716AB50776 /* Release */,
 			);
-			defaultConfigurationName = Release;
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
 		};
-		E4C00FF13034CF12007A488E /* Build configuration list for PBXNativeTarget "DSH Studio" */ = {
+		4AFE08DAB914295A6B486718 /* Build configuration list for PBXNativeTarget "HarnessRuntimeTests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				E4C00FF23034CF12007A488E /* Debug configuration for PBXNativeTarget "DSH Studio" */,
-				E4C00FF33034CF12007A488E /* Release configuration for PBXNativeTarget "DSH Studio" */,
+				D145D873DB48089904920009 /* Debug */,
+				6345714D195B58482C0EFFD3 /* Release */,
 			);
-			defaultConfigurationName = Release;
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		7A4282AD4E41FDC02E7E2199 /* Build configuration list for PBXNativeTarget "DeepSeekHarness" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				2930E1B19E53FEE949BD90C6 /* Debug */,
+				833D51460B7F05E33C104567 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		CFC904CC15B906100FB7B727 /* Build configuration list for PBXNativeTarget "DeepSeekLogging" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D656EF582EAA964CC9D1D6CF /* Debug */,
+				77C0A1355DC5E017F1AB7D23 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		E91C86DC0CA05BA3436720FD /* Build configuration list for PBXProject "DSH Studio" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D5FC8496E1598E87B792C202 /* Debug */,
+				3E464EBE2EFF3EEA56C16759 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		F2FAA12C14D4E391C2ED81BF /* Build configuration list for PBXNativeTarget "DeepSeekRuntime" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				011B62678F41DFEB309DAB88 /* Debug */,
+				F513E44B3F8C391007519DA6 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
 		};
 /* End XCConfigurationList section */
 	};
-	rootObject = E4C00FDE3034CF10007A488E /* Project object */;
-	validationLevel = 1;
+	rootObject = 428247BE0633B0329CDD0040 /* Project object */;
 }

@@ -1,0 +1,18 @@
+# Xcode build output
+DerivedData/
+build/
+.build/
+.swiftpm/
+
+# Xcode user and local state
+*.xcuserstate
+xcuserdata/
+*.xcscmblueprint
+*.xccheckout
+
+# macOS metadata
+.DS_Store
+
+# Local source artwork kept outside the repository
+/鲸鱼娘/
+/鲸鱼娘.png
