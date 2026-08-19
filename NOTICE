@@ -1,0 +1,46 @@
+DSH Studio Notices
+==================
+
+DSH Studio is an unofficial third-party macOS client and native shell for
+DeepSeek Harness. It is not an official DeepSeek application and is not
+affiliated with, sponsored by, or endorsed by DeepSeek.
+
+License boundary
+----------------
+
+Original DSH Studio source code is licensed under the MIT License in LICENSE.
+This project-level license does not relicense artwork, third-party software,
+or third-party dependencies.
+
+Whale Girl artwork
+------------------
+
+The source artwork in `鲸鱼娘.png` and the derived app icon images under
+`DSH Studio/Assets.xcassets/AppIcon.appiconset/` are separate artwork and are
+not covered by the DSH Studio MIT License.
+
+The artwork was created by a community artist and was publicly identified as
+being available under the Creative Commons Attribution-NonCommercial-ShareAlike
+4.0 International license (CC BY-NC-SA 4.0). DSH Studio uses the artwork with
+permission from the original creator.
+
+License: https://creativecommons.org/licenses/by-nc-sa/4.0/
+Legal code: https://creativecommons.org/licenses/by-nc-sa/4.0/legalcode
+
+The artwork is an independent DSH Studio project mark. It is not the official
+DeepSeek whale logo, does not contain DeepSeek brand text, and must not be used
+to imply official affiliation, authorization, sponsorship, or endorsement.
+
+DeepSeek Harness and npm dependencies
+-------------------------------------
+
+DSH Studio provisions the DeepSeek Harness runtime from upstream npm packages,
+including `@deepseek-ai/dsh`, rather than relicensing or copying the upstream
+project into this source tree. DeepSeek Harness and all npm dependencies remain
+separate works under the licenses and notices supplied with their respective
+distributions. The runtime lockfile records the resolved package versions and
+license metadata; those licenses include MIT, Apache-2.0, BSD, ISC, and 0BSD.
+
+No third-party dependency is included under the DSH Studio MIT License. Users
+redistributing a provisioned runtime must preserve the applicable upstream
+license notices.
