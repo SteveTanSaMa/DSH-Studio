@@ -58,6 +58,17 @@ public enum HarnessLayoutWebBridge {
           min-width: 0 !important;
         }
 
+        /* Skin chrome uses fixed z-index:0 layers. Give the conversation pane
+           its own higher stacking context so message surfaces and their hover
+           content remain visible across WebKit's composited layers. Keep this
+           scoped to the skin and do not promote #root, whose stacking context
+           would trap fixed settings dialogs. */
+        body[data-dsh-maid-atelier]
+          :is([data-pane="conversation"], [class*="centerCol"]) {
+          position: relative !important;
+          z-index: 1 !important;
+        }
+
         /* Keep each workspace group in the same width budget as the session
            list. A theme can make this box percentage-sized, while WebKit's
            scrollbar seat is 8px wide; subtract that seat explicitly so the

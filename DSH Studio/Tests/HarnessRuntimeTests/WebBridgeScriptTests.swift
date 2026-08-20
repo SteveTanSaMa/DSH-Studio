@@ -59,6 +59,16 @@ final class WebBridgeScriptTests: XCTestCase {
         XCTAssertTrue(source.contains("max-width: none !important"))
     }
 
+    func testMaidAtelierConversationPaneIsAboveSkinChrome() {
+        let source = HarnessLayoutWebBridge.source
+
+        XCTAssertTrue(source.contains("body[data-dsh-maid-atelier]"))
+        XCTAssertTrue(source.contains(":is([data-pane=\"conversation\"], [class*=\"centerCol\"])"))
+        XCTAssertTrue(source.contains("position: relative !important"))
+        XCTAssertTrue(source.contains("z-index: 1 !important"))
+        XCTAssertFalse(source.contains("body[data-dsh-maid-atelier] [id=\"root\"]"))
+    }
+
     func testWorkspaceGroupsUseAvailableListWidthAroundScrollbar() {
         let source = HarnessLayoutWebBridge.source
 
