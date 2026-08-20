@@ -47,7 +47,7 @@ The Web UI is the locally running DeepSeek Harness application. DSH Studio does 
 - macOS 15 or later.
 - Apple Silicon or Intel Mac supported by the selected Node.js Runtime archive.
 - Xcode with a macOS 15 SDK for building from source.
-- Network access on the first launch, and whenever the Runtime is updated.
+- Network access on the first launch, and whenever the verified Runtime is updated.
 - A DeepSeek API configuration supplied by the user through DeepSeek Harness.
 
 Node.js, Harness, and pnpm do not need to be installed separately on the host Mac.
@@ -62,7 +62,11 @@ cd DSH-Studio
 open "DSH Studio.xcodeproj"
 ```
 
-In Xcode, select the `DSH Studio` scheme and run the macOS application. The first launch downloads and configures the verified local Runtime before showing the Harness Web UI.
+In Xcode, select the `DSH Studio` scheme and run the macOS application. A
+distribution build must bundle `RuntimeManifest/runtime-release.json`; the
+first launch then downloads the matching immutable Runtime artifact before
+showing the Harness Web UI. Debug builds without a catalog retain the pinned
+npm setup path only for local development.
 
 Run the test suite from the repository root with:
 
@@ -78,13 +82,19 @@ For an Intel build, use the appropriate `x86_64` destination available on the de
 
 ## Runtime Setup
 
-The Runtime is downloaded on demand into the user's Application Support directory:
+The verified Runtime artifact is downloaded on demand into the user's
+Application Support directory:
 
 ```text
 ~/Library/Application Support/DSH Studio/Runtime
 ```
 
-The current pinned release contains:
+The app does not resolve npm `latest` or run npm on the user's Mac. The Runtime
+Builder resolves the latest published Harness and pnpm versions, creates a
+complete dependency snapshot, runs smoke tests, and publishes an immutable
+artifact. The app receives only the resulting release catalog and artifact.
+
+The current development snapshot contains:
 
 | Component | Version | Source |
 | --- | --- | --- |
@@ -92,28 +102,35 @@ The current pinned release contains:
 | DeepSeek Harness | `@deepseek-ai/dsh@0.1.0-rc.6` | `registry.npmjs.org` |
 | pnpm | `11.7.0` | `registry.npmjs.org` |
 
-The installation process is intentionally explicit:
+The Runtime Builder process is intentionally explicit:
 
-1. DSH Studio downloads the official Node.js archive over HTTPS and verifies its SHA-256 checksum.
-2. It creates an isolated Runtime package manifest and validates the checked-in `package-lock.json`.
-3. The npm CLI included with Node.js runs `npm ci` against the locked dependency graph.
-4. Harness and the Runtime-owned pnpm package are validated before the Runtime is published.
-5. Harness processes receive the Runtime's Node and pnpm paths before inherited user paths.
+1. `Scripts/build-runtime.sh` resolves `@deepseek-ai/dsh@latest` and `pnpm@latest` from `registry.npmjs.org`.
+2. It downloads a fixed Node.js version, creates a lockfile, and runs `npm ci --ignore-scripts` in the isolated build directory.
+3. Harness, pnpm, native dependencies, and the local `host.describe` smoke test are validated.
+4. The script emits an architecture-specific tarball, manifest, SHA-256 file, and artifact metadata.
+5. `Scripts/generate-runtime-catalog.sh` combines the arm64 and x86_64 metadata into the catalog bundled by the app.
+
+The user-facing installation process is separate:
+
+1. DSH Studio downloads the catalog-selected GitHub Release artifact over HTTPS and verifies its SHA-256 checksum.
+2. It validates the tar listing, extracts into a staging directory, and checks the Runtime manifest and executable versions.
+3. Harness and the Runtime-owned pnpm package are validated before the Runtime is published.
+4. Harness processes receive the Runtime's Node and pnpm paths before inherited user paths.
 
 The Harness plugin and profile commands invoke `pnpm` by name. DSH Studio therefore uses the pnpm shim installed inside the Runtime and does not depend on Homebrew, Corepack, or another application's pnpm installation.
 
-The Runtime is published only after its executable, package versions, native dependencies, checksums, and manifest have been verified. An interrupted or incomplete installation is not treated as usable.
+The Runtime is published only after its executable, package versions, native dependencies, checksums, and manifest have been verified. An interrupted or incomplete installation is not treated as usable. The previous complete installation is retained as a single rollback copy.
 
 ## Runtime Updates And Rollback
 
 The installed Runtime can be inspected and maintained from the Runtime section of the application settings:
 
-- **Check** compares the installed manifest with the app's pinned release.
-- **Update** stops the local Harness process, stages a fresh verified Runtime, and keeps the previous installation as a rollback copy.
+- **Check** compares the installed manifest with the catalog release bundled by the app.
+- **Update** stops the local Harness process, downloads and stages the catalog-selected verified Runtime, and keeps the previous installation as a rollback copy.
 - **Rollback** restores the previous verified installation.
 - If an updated Runtime cannot start or become healthy, DSH Studio automatically stops it and attempts to restore the previous installation.
 
-Runtime releases are pinned rather than resolved from a mutable `latest` tag. This keeps installs reproducible and makes checksum verification and rollback meaningful.
+Runtime Builder inputs may follow npm `latest`, but each published artifact is pinned by its generated manifest and SHA-256. User installs and updates always use that immutable snapshot, which keeps checksum verification and rollback meaningful.
 
 ## API Keys And Privacy
 
@@ -134,16 +151,17 @@ These locations can be changed in the application settings. DSH Studio does not 
 
 - Harness is explicitly started on `127.0.0.1`, not `0.0.0.0`.
 - The WebView's main Harness page is restricted to the local loopback URL.
-- Runtime package metadata is checked against the official npm registry host and pinned package integrity values.
-- Runtime downloads use fixed official Node.js URLs rather than remote installation scripts.
-- Runtime installation uses `npm ci --ignore-scripts` and validates the resulting native dependencies before publication.
+- Runtime package metadata is checked against the official npm registry host and pinned package integrity values during the Builder step.
+- Runtime artifacts are downloaded from the fixed DSH Studio GitHub Release URL in the bundled catalog.
+- The user-facing app does not execute npm, pnpm installation, or remote installation scripts.
+- Runtime Builder uses `npm ci --ignore-scripts` and validates the resulting native dependencies before publication.
 - The native shell does not add a remote service, API relay, advertisement, or user-behavior analytics endpoint.
 
 ## Project Status
 
 DSH Studio is an open-source development project. The upstream DeepSeek Harness Web UI and its command behavior remain the source of truth for Harness functionality. DSH Studio focuses on the macOS shell, local process lifecycle, WebKit integration, Runtime provisioning, and macOS-specific usability.
 
-Upstream Harness changes may require a new pinned Runtime release and corresponding compatibility testing before they are adopted by DSH Studio.
+Upstream Harness changes are adopted by building a new Runtime artifact, passing the smoke tests, generating a new catalog, and packaging that catalog with the next DSH Studio build.
 
 ## Licensing
 

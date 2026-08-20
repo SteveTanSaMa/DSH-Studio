@@ -2,7 +2,7 @@
 //  RuntimeManager.swift
 //  DSH Studio
 //
-//  Created by Steve Tan on 2026/8/19.
+//  Created by Steve Tan on 2026/8/20.
 //
 
 import Combine
@@ -14,22 +14,24 @@ import DeepSeekLogging
 /// Owns the Harness child process and its lifecycle state machine.
 @MainActor
 public final class RuntimeManager: ObservableObject {
-    @Published public private(set) var state: RuntimeState = .idle
-    @Published public private(set) var readyURL: URL?
-    @Published public private(set) var lastError: RuntimeError?
-    @Published public private(set) var nodeVersion: String?
-    @Published public private(set) var harnessVersion: String?
-    @Published public private(set) var restartCount = 0
+    @Published public internal(set) var state: RuntimeState = .idle
+    @Published public internal(set) var readyURL: URL?
+    @Published public internal(set) var lastError: RuntimeError?
+    @Published public internal(set) var nodeVersion: String?
+    @Published public internal(set) var harnessVersion: String?
+    @Published public internal(set) var runtimeVersionStatus: RuntimeVersionStatus?
+    @Published public internal(set) var restartCount = 0
 
-    public private(set) var configuration: RuntimeConfiguration
+    public internal(set) var configuration: RuntimeConfiguration
     public let logs: RuntimeLogStore
     public var restartPolicy: RestartPolicy
 
     private let processFactory: HarnessProcessFactory
     private let healthChecker: HarnessHealthChecking
-    private let provisioner: (any RuntimeProvisioning)?
+    let provisioner: (any RuntimeProvisioning)?
+    let runtimeUpdater: (any RuntimeUpdating)?
     private let validateRuntimeOnStart: Bool
-    private let restartTracker = RestartTracker()
+    let restartTracker = RestartTracker()
     private var process: HarnessProcess?
     private var stagedURL: URL?
     private var startupTask: Task<Void, Never>?
@@ -46,6 +48,11 @@ public final class RuntimeManager: ObservableObject {
         pattern: #"dsh web: (http://127\.0\.0\.1:\d+)"#
     )
 
+    public lazy var runtimeUpdateCoordinator: RuntimeUpdateCoordinator? = {
+        guard let runtimeUpdater else { return nil }
+        return RuntimeUpdateCoordinator(runtime: self, updater: runtimeUpdater)
+    }()
+
     public init(
         configuration: RuntimeConfiguration,
         processFactory: HarnessProcessFactory = SystemHarnessProcessFactory(),
@@ -53,17 +60,22 @@ public final class RuntimeManager: ObservableObject {
         logFileURL: URL? = nil,
         restartPolicy: RestartPolicy = RestartPolicy(),
         validateRuntimeOnStart: Bool = true,
-        provisioner: (any RuntimeProvisioning)? = nil
+        provisioner: (any RuntimeProvisioning)? = nil,
+        updater: (any RuntimeUpdating)? = nil
     ) {
         self.configuration = configuration
         self.processFactory = processFactory
         self.healthChecker = healthChecker
         self.provisioner = provisioner
+        self.runtimeUpdater = updater ?? (provisioner as? any RuntimeUpdating)
         self.restartPolicy = restartPolicy
         self.validateRuntimeOnStart = validateRuntimeOnStart
         self.logs = RuntimeLogStore(logFileURL: logFileURL)
         self.nodeVersion = RuntimeLocator.nodeVersion(nodeExecutable: configuration.nodeExecutable)
         self.harnessVersion = RuntimeLocator.packageJSONVersion(at: configuration.harnessEntry)
+        self.runtimeVersionStatus = self.runtimeUpdater?.versionStatus()
+        adoptInstalledRuntimeIfAvailable()
+        refreshRuntimeVersions()
     }
 
     public func start() {
@@ -79,11 +91,19 @@ public final class RuntimeManager: ObservableObject {
         stdoutBuffer = ""
         stderrBuffer = ""
 
-        if let provisioner,
-           !RuntimeLocator.isComplete(
-               root: provisioner.root,
-               architecture: provisioner.architecture
-           ) {
+        if let runtimeUpdater {
+            let status = runtimeUpdater.versionStatus()
+            runtimeVersionStatus = status
+            if status.kind == .missing || status.kind == .invalid {
+                beginProvisioning(with: runtimeUpdater)
+                return
+            }
+            adoptInstalledRuntimeIfAvailable()
+        } else if let provisioner,
+                  !RuntimeLocator.isComplete(
+                      root: provisioner.root,
+                      architecture: provisioner.architecture
+                  ) {
             beginProvisioning(with: provisioner)
             return
         }
@@ -109,15 +129,7 @@ public final class RuntimeManager: ObservableObject {
 
     private func finishProvisioning(_ result: RuntimeProvisioningResult) {
         guard state == .provisioning else { return }
-        configuration.nodeExecutable = RuntimeLocator.nodeExecutable(
-            root: result.root,
-            architecture: result.architecture
-        )
-        configuration.harnessEntry = RuntimeLocator.harnessEntry(
-            root: result.root,
-            architecture: result.architecture
-        )
-        refreshRuntimeVersions()
+        applyRuntimeResult(result)
         provisioningTask = nil
         beginLaunch()
     }
@@ -181,22 +193,6 @@ public final class RuntimeManager: ObservableObject {
         }
         state = .starting
         armStartupTimeout(generation: generation)
-    }
-
-    private func refreshRuntimeVersions() {
-        nodeVersion = RuntimeLocator.nodeVersion(nodeExecutable: configuration.nodeExecutable)
-        harnessVersion = RuntimeLocator.packageJSONVersion(at: configuration.harnessEntry)
-    }
-
-    public func retry() {
-        guard state == .failed || state == .crashed else { return }
-        restartTracker.reset()
-        restartCount = 0
-        start()
-    }
-
-    public func updateStartupTimeout(_ timeout: TimeInterval) {
-        configuration.startupTimeout = timeout
     }
 
     public func stop() async {

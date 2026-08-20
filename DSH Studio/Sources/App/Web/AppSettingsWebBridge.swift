@@ -2,7 +2,7 @@
 //  AppSettingsWebBridge.swift
 //  DSH Studio
 //
-//  Created by Steve Tan on 2026/8/19.
+//  Created by Steve Tan on 2026/8/20.
 //
 
 import Foundation
@@ -27,11 +27,14 @@ enum AppSettingsWebBridge {
         workspacePath: "",
         chatContentMaxWidth: 1200,
         dshHomePath: "",
-        runtimeState: "正在读取",
-        runtimeAvailable: false,
         runtimeError: null,
         harnessVersion: null,
         nodeVersion: null,
+        runtimeVersionStatus: "正在检查",
+        runtimeInstalledVersion: null,
+        runtimeAvailableVersion: null,
+        runtimeUpdateAvailable: false,
+        runtimeRollbackAvailable: false,
       };
       let currentNotice = null;
       let block = null;
@@ -141,6 +144,13 @@ enum AppSettingsWebBridge {
         .dsh-studio-app-settings-button:hover:not(:disabled) {
           background: var(--dsw-alias-interactive-bg-hover);
         }
+        .dsh-studio-app-settings-actions {
+          display: flex;
+          flex: none;
+          flex-wrap: wrap;
+          justify-content: flex-end;
+          gap: 6px;
+        }
         .dsh-studio-app-settings-button:focus-visible,
         .dsh-studio-app-settings-number:focus-visible {
           outline: 1px solid var(--dsw-alias-state-business-primary);
@@ -173,10 +183,10 @@ enum AppSettingsWebBridge {
         }
         .dsh-studio-app-settings-status[hidden] { display: none; }
         .dsh-studio-app-settings-status[data-kind="error"] { color: var(--dsw-alias-state-error-primary); }
-        .dsh-studio-app-settings-runtime-error { color: var(--dsw-alias-state-error-primary); }
         @media (max-width: 720px) {
           .dsh-studio-app-settings-row-text { padding-right: 16px; }
           .dsh-studio-app-settings-value { max-width: 42%; }
+          .dsh-studio-app-settings-actions { max-width: 50%; }
         }
       `;
       document.head.appendChild(style);
@@ -218,13 +228,6 @@ enum AppSettingsWebBridge {
           </div>
           <div class="dsh-studio-app-settings-row">
             <div class="dsh-studio-app-settings-row-text">
-              <div class="dsh-studio-app-settings-title">Runtime 状态</div>
-              <div class="dsh-studio-app-settings-detail" data-app-field="runtime-error"></div>
-            </div>
-            <span class="dsh-studio-app-settings-value" data-app-field="runtime-state"></span>
-          </div>
-          <div class="dsh-studio-app-settings-row">
-            <div class="dsh-studio-app-settings-row-text">
               <div class="dsh-studio-app-settings-title">Harness 版本</div>
               <div class="dsh-studio-app-settings-detail">当前使用的 Harness 版本</div>
             </div>
@@ -236,6 +239,24 @@ enum AppSettingsWebBridge {
               <div class="dsh-studio-app-settings-detail">当前使用的 Node.js 版本</div>
             </div>
             <span class="dsh-studio-app-settings-value" data-app-field="node-version"></span>
+          </div>
+          <div class="dsh-studio-app-settings-row">
+            <div class="dsh-studio-app-settings-row-text">
+              <div class="dsh-studio-app-settings-title">Runtime 版本</div>
+              <div class="dsh-studio-app-settings-detail" data-app-field="runtime-version-detail"></div>
+            </div>
+            <span class="dsh-studio-app-settings-value" data-app-field="runtime-version-status"></span>
+          </div>
+          <div class="dsh-studio-app-settings-row">
+            <div class="dsh-studio-app-settings-row-text">
+              <div class="dsh-studio-app-settings-title">Runtime 更新</div>
+              <div class="dsh-studio-app-settings-detail">检查并安装 DSH Studio 已验证的 Runtime 版本</div>
+            </div>
+            <div class="dsh-studio-app-settings-actions">
+              <button type="button" class="dsh-studio-app-settings-button" data-app-action="runtimeCheck">检查更新</button>
+              <button type="button" class="dsh-studio-app-settings-button" data-app-action="runtimeUpdate">更新</button>
+              <button type="button" class="dsh-studio-app-settings-button" data-app-action="runtimeRollback">回滚</button>
+            </div>
           </div>
           <div class="dsh-studio-app-settings-row last-row">
             <div class="dsh-studio-app-settings-row-text">
@@ -262,6 +283,9 @@ enum AppSettingsWebBridge {
           if (action === "workspace") send("appSettings.chooseWorkspace");
           if (action === "dshHome") send("appSettings.chooseDSHHome");
           if (action === "logs") send("appSettings.openLogs");
+          if (action === "runtimeCheck") send("appSettings.runtimeCheck");
+          if (action === "runtimeUpdate") send("appSettings.runtimeUpdate");
+          if (action === "runtimeRollback") send("appSettings.runtimeRollback");
           scheduleEnsure();
         });
         return element;
@@ -276,21 +300,27 @@ enum AppSettingsWebBridge {
         lastRenderedSignature = signature;
         const busy = pending.size > 0;
         text(block, '[data-app-field="workspace"]', currentState.workspacePath);
-        text(block, '[data-app-field="runtime-state"]', currentState.runtimeState || "未知");
-        text(block, '[data-app-field="runtime-error"]', currentState.runtimeError, "当前 Harness Runtime 状态");
         text(block, '[data-app-field="harness-version"]', currentState.harnessVersion || "未知");
         text(block, '[data-app-field="node-version"]', currentState.nodeVersion || "未知");
         text(block, '[data-app-field="dsh-home"]', currentState.dshHomePath);
-        const runtimeState = block.querySelector('[data-app-field="runtime-state"]');
-        if (runtimeState) runtimeState.classList.toggle("dsh-studio-app-settings-runtime-error", !currentState.runtimeAvailable && !!currentState.runtimeError);
-        const runtimeError = block.querySelector('[data-app-field="runtime-error"]');
-        if (runtimeError) runtimeError.classList.toggle("dsh-studio-app-settings-runtime-error", !!currentState.runtimeError);
+        text(block, '[data-app-field="runtime-version-status"]', currentState.runtimeVersionStatus || "未知");
+        text(
+          block,
+          '[data-app-field="runtime-version-detail"]',
+          currentState.runtimeInstalledVersion
+            ? `当前 ${currentState.runtimeInstalledVersion}，目标 ${currentState.runtimeAvailableVersion || "未知"}`
+            : `目标 ${currentState.runtimeAvailableVersion || "未知"}`
+        );
         const chatWidth = block.querySelector('input[data-app-key="chatContentMaxWidth"]');
         if (chatWidth) {
           chatWidth.value = String(currentState.chatContentMaxWidth ?? 1200);
           chatWidth.disabled = busy;
         }
         block.querySelectorAll("[data-app-action]").forEach(button => { button.disabled = busy; });
+        const updateButton = block.querySelector('[data-app-action="runtimeUpdate"]');
+        const rollbackButton = block.querySelector('[data-app-action="runtimeRollback"]');
+        if (updateButton) updateButton.disabled = busy || !currentState.runtimeUpdateAvailable;
+        if (rollbackButton) rollbackButton.disabled = busy || !currentState.runtimeRollbackAvailable;
         const status = block.querySelector('[data-app-field="status"]');
         if (status) {
           const notice = currentNotice || (currentState.runtimeError ? { kind: "error", message: currentState.runtimeError } : null);
@@ -356,9 +386,12 @@ struct AppSettingsWebState: Codable, Equatable, Sendable {
     let workspacePath: String
     let chatContentMaxWidth: Double
     let dshHomePath: String
-    let runtimeState: String
-    let runtimeAvailable: Bool
     let runtimeError: String?
     let harnessVersion: String?
     let nodeVersion: String?
+    let runtimeVersionStatus: String
+    let runtimeInstalledVersion: String?
+    let runtimeAvailableVersion: String?
+    let runtimeUpdateAvailable: Bool
+    let runtimeRollbackAvailable: Bool
 }

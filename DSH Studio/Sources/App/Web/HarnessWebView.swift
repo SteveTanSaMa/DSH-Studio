@@ -2,12 +2,13 @@
 //  HarnessWebView.swift
 //  DSH Studio
 //
-//  Created by Steve Tan on 2026/8/19.
+//  Created by Steve Tan on 2026/8/20.
 //
 
 import AppKit
 import Combine
 import DeepSeekHarness
+import DeepSeekLogging
 import DeepSeekRuntime
 import SwiftUI
 import WebKit
@@ -296,11 +297,75 @@ struct HarnessWebView: NSViewRepresentable {
                         webView: webView
                     )
                 }
+            case "appSettings.runtimeCheck":
+                guard let coordinator = model.runtime.runtimeUpdateCoordinator else {
+                    sendAppSettingsReply(
+                        requestID: requestID,
+                        errorCode: "runtime-update-unavailable",
+                        errorMessage: "当前 Runtime 不支持在线更新",
+                        webView: webView
+                    )
+                    return
+                }
+                _ = coordinator.checkVersion()
+                sendAppSettingsReply(requestID: requestID, webView: webView)
+            case "appSettings.runtimeUpdate":
+                await performRuntimeUpdate(requestID: requestID, webView: webView)
+            case "appSettings.runtimeRollback":
+                await performRuntimeRollback(requestID: requestID, webView: webView)
             default:
                 sendAppSettingsReply(
                     requestID: requestID,
                     errorCode: "unknown-app-settings-message",
                     errorMessage: "未知的设置请求",
+                    webView: webView
+                )
+            }
+        }
+
+        @MainActor
+        private func performRuntimeUpdate(requestID: String?, webView: WKWebView) async {
+            guard let coordinator = model.runtime.runtimeUpdateCoordinator else {
+                sendAppSettingsReply(
+                    requestID: requestID,
+                    errorCode: "runtime-update-unavailable",
+                    errorMessage: "当前 Runtime 不支持在线更新",
+                    webView: webView
+                )
+                return
+            }
+            do {
+                try await coordinator.update()
+                sendAppSettingsReply(requestID: requestID, webView: webView)
+            } catch {
+                sendAppSettingsReply(
+                    requestID: requestID,
+                    errorCode: "runtime-update-failed",
+                    errorMessage: LogRedactor.redact(error.localizedDescription),
+                    webView: webView
+                )
+            }
+        }
+
+        @MainActor
+        private func performRuntimeRollback(requestID: String?, webView: WKWebView) async {
+            guard let coordinator = model.runtime.runtimeUpdateCoordinator else {
+                sendAppSettingsReply(
+                    requestID: requestID,
+                    errorCode: "runtime-update-unavailable",
+                    errorMessage: "当前 Runtime 不支持在线更新",
+                    webView: webView
+                )
+                return
+            }
+            do {
+                try await coordinator.rollback()
+                sendAppSettingsReply(requestID: requestID, webView: webView)
+            } catch {
+                sendAppSettingsReply(
+                    requestID: requestID,
+                    errorCode: "runtime-rollback-failed",
+                    errorMessage: LogRedactor.redact(error.localizedDescription),
                     webView: webView
                 )
             }
@@ -431,15 +496,19 @@ struct HarnessWebView: NSViewRepresentable {
         @MainActor
         private func appSettingsState() -> AppSettingsWebState {
             let currentRuntime = model.runtime
+            let versionStatus = currentRuntime.runtimeVersionStatus
             return AppSettingsWebState(
                 workspacePath: model.settings.workspaceURL.path,
                 chatContentMaxWidth: model.settings.chatContentMaxWidth,
                 dshHomePath: model.settings.dshHomeURL.path,
-                runtimeState: currentRuntime.state.displayName,
-                runtimeAvailable: currentRuntime.state == .ready && currentRuntime.readyURL != nil,
                 runtimeError: currentRuntime.lastError?.uiDescription,
                 harnessVersion: currentRuntime.harnessVersion,
-                nodeVersion: currentRuntime.nodeVersion
+                nodeVersion: currentRuntime.nodeVersion,
+                runtimeVersionStatus: versionStatus?.displayName ?? "正在检查",
+                runtimeInstalledVersion: versionStatus?.installed?.versionLabel,
+                runtimeAvailableVersion: versionStatus?.available.versionLabel,
+                runtimeUpdateAvailable: versionStatus?.updateAvailable ?? false,
+                runtimeRollbackAvailable: versionStatus?.rollbackAvailable ?? false
             )
         }
 

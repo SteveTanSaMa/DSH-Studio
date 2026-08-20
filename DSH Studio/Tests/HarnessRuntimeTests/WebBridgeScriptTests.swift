@@ -49,6 +49,29 @@ final class WebBridgeScriptTests: XCTestCase {
         XCTAssertFalse(source.contains("transform: translateX"))
     }
 
+    func testAssistantProseUsesNativeContentWidth() {
+        let source = HarnessLayoutWebBridge.source
+
+        XCTAssertTrue(source.contains("[data-chat-flow-kind=\"assistant-step\"]"))
+        XCTAssertTrue(source.contains("[class*=\"_body\"]"))
+        XCTAssertTrue(source.contains("[class*=\"_markdown\"]"))
+        XCTAssertTrue(source.contains("width: 100% !important"))
+        XCTAssertTrue(source.contains("max-width: none !important"))
+    }
+
+    func testWorkspaceGroupsUseAvailableListWidthAroundScrollbar() {
+        let source = HarnessLayoutWebBridge.source
+
+        XCTAssertTrue(source.contains("[class*=\"_groupSection\"]"))
+        XCTAssertTrue(source.contains("[class*=\"_groupSection\"] > *"))
+        XCTAssertTrue(source.contains("[class*=\"_groupSection\"] [role=\"treeitem\"]"))
+        XCTAssertTrue(source.contains("[class*=\"_sessionOverflowButton\"]"))
+        XCTAssertTrue(source.contains("width: calc(100% - var(--dsh-session-list-scrollbar-width, 8px)) !important"))
+        XCTAssertTrue(source.contains("width: 100% !important"))
+        XCTAssertTrue(source.contains("max-width: 100% !important"))
+        XCTAssertTrue(source.contains("box-sizing: border-box !important"))
+    }
+
     func testSessionExportScriptInterceptsOnlyHarnessDownloadFeedback() {
         let source = SessionLogExportWebBridge.interceptDialogScript
 

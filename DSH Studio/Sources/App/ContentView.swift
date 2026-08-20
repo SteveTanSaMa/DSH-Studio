@@ -2,7 +2,7 @@
 //  ContentView.swift
 //  DSH Studio
 //
-//  Created by Steve Tan on 2026/8/19.
+//  Created by Steve Tan on 2026/8/20.
 //
 
 import DeepSeekRuntime
@@ -18,8 +18,8 @@ struct ContentView: View {
         // this prevents navigation from racing the local server startup.
         ZStack {
             switch model.runtime.state {
-            case .idle, .provisioning, .launching, .starting:
-                ProgressView(model.runtime.state == .provisioning ? "正在准备 DSH Studio 运行时..." : "正在启动 DSH Studio...")
+            case .idle, .provisioning, .updating, .rollingBack, .launching, .starting:
+                ProgressView(progressMessage)
                     .controlSize(.large)
                     .padding()
             case .ready:
@@ -69,5 +69,18 @@ struct ContentView: View {
             }
         }
         .padding()
+    }
+
+    private var progressMessage: String {
+        switch model.runtime.state {
+        case .provisioning:
+            return "正在准备 DSH Studio 运行时..."
+        case .updating:
+            return "正在更新 DSH Studio 运行时..."
+        case .rollingBack:
+            return "正在恢复 DSH Studio 运行时..."
+        default:
+            return "正在启动 DSH Studio..."
+        }
     }
 }

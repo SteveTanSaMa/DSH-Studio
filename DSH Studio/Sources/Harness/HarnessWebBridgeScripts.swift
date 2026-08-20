@@ -2,7 +2,7 @@
 //  HarnessWebBridgeScripts.swift
 //  DSH Studio
 //
-//  Created by Steve Tan on 2026/8/19.
+//  Created by Steve Tan on 2026/8/20.
 //
 
 import Foundation
@@ -42,6 +42,44 @@ public enum HarnessLayoutWebBridge {
           width: auto !important;
           padding-left: var(--deepseek-studio-hero-card-left-inset, var(--dsh-composer-side-clearance)) !important;
           padding-right: var(--deepseek-studio-hero-card-right-inset, var(--dsh-composer-side-clearance)) !important;
+        }
+
+        /* Assistant prose has its own root/body/Markdown subtree. Keep every
+           level on the transcript axis so an upstream or theme-specific
+           readable-width cap cannot leave the final answer at the old width. */
+        [data-chat-flow-kind="assistant-step"],
+        [data-chat-flow-kind="assistant-step"] > [class*="_root"],
+        [data-chat-flow-kind="assistant-step"] > [class*="_root"] > [class*="_body"],
+        [data-chat-flow-kind="assistant-step"] [class*="_markdown"] {
+          align-self: stretch !important;
+          box-sizing: border-box !important;
+          width: 100% !important;
+          max-width: none !important;
+          min-width: 0 !important;
+        }
+
+        /* Keep each workspace group in the same width budget as the session
+           list. A theme can make this box percentage-sized, while WebKit's
+           scrollbar seat is 8px wide; subtract that seat explicitly so the
+           group border cannot jump past the sidebar edge at the overflow
+           threshold. */
+        [class*="_groupSection"] {
+          box-sizing: border-box !important;
+          width: calc(100% - var(--dsh-session-list-scrollbar-width, 8px)) !important;
+          min-width: 0 !important;
+          max-width: calc(100% - var(--dsh-session-list-scrollbar-width, 8px)) !important;
+        }
+        [class*="_groupSection"] > *,
+        [class*="_groupSection"] [role="treeitem"] {
+          box-sizing: border-box !important;
+          width: 100% !important;
+          min-width: 0 !important;
+          max-width: 100% !important;
+        }
+        [class*="_groupSection"] [class*="_sessionOverflowButton"] {
+          box-sizing: border-box !important;
+          width: 100% !important;
+          max-width: 100% !important;
         }
 
         /* The App uses a hidden title bar, so both sidebar modes need native

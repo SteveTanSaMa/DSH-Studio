@@ -13,6 +13,8 @@ public struct RuntimeConfiguration: Sendable, Equatable {
 
     public var nodeExecutable: URL
     public var harnessEntry: URL
+    /// The Runtime-owned pnpm shim used by Harness profile/plugin commands.
+    public var pnpmExecutable: URL?
     public var dshHome: URL
     public var workspace: URL
     public let host: String
@@ -29,6 +31,7 @@ public struct RuntimeConfiguration: Sendable, Equatable {
         harnessEntry: URL,
         dshHome: URL,
         workspace: URL,
+        pnpmExecutable: URL? = nil,
         port: String = "0",
         startupTimeout: TimeInterval = 90,
         gracefulTimeout: TimeInterval = 6,
@@ -39,6 +42,7 @@ public struct RuntimeConfiguration: Sendable, Equatable {
     ) {
         self.nodeExecutable = nodeExecutable
         self.harnessEntry = harnessEntry
+        self.pnpmExecutable = pnpmExecutable
         self.dshHome = dshHome
         self.workspace = workspace
         self.host = Self.loopbackHost

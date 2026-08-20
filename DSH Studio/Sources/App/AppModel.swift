@@ -110,12 +110,16 @@ extension RuntimeManager {
             nodeExecutable: RuntimeLocator.nodeExecutable(root: root),
             harnessEntry: RuntimeLocator.harnessEntry(root: root),
             dshHome: dshHome,
-            workspace: workspace
+            workspace: workspace,
+            pnpmExecutable: RuntimeLocator.pnpmExecutable(root: root)
+        )
+        let release = RuntimeReleaseCatalog.load(
+            architecture: RuntimeLocator.architectureDirectory()
         )
         let provisioner: (any RuntimeProvisioning)? =
             RuntimeLocator.usesDevelopmentOverride() || RuntimeLocator.isBundledRuntimeRoot(root)
             ? nil
-            : RuntimeProvisioner(root: root)
+            : RuntimeProvisioner(root: root, release: release)
         return RuntimeManager(
             configuration: configuration,
             logFileURL: logURL,

@@ -2,7 +2,7 @@
 //  RuntimeProvisionerTests.swift
 //  DSH Studio
 //
-//  Created by Steve Tan on 2026/8/19.
+//  Created by Steve Tan on 2026/8/20.
 //
 
 import Foundation
@@ -30,6 +30,21 @@ final class RuntimeProvisionerTests: XCTestCase {
         }
     }
 
+    func testPackageLockRequiresPinnedPnpm() throws {
+        let lock = try packageLockData()
+        let unpinned = Data(
+            String(decoding: lock, as: UTF8.self)
+                .replacingOccurrences(of: "\"pnpm\": \"\(RuntimeRelease.pnpmVersion)\"", with: "\"pnpm\": \"11.6.0\"")
+                .utf8
+        )
+
+        XCTAssertThrowsError(try RuntimePackageLockValidator.validate(data: unpinned)) { error in
+            guard case .invalidPackageLock = error as? RuntimeProvisioningError else {
+                return XCTFail("expected an invalid pnpm lock error, got \(error)")
+            }
+        }
+    }
+
     func testDownloaderRejectsUntrustedNodeHostBeforeTransport() async {
         let downloader = URLSessionRuntimeAssetDownloader()
         let destination = FileManager.default.temporaryDirectory
@@ -43,7 +58,7 @@ final class RuntimeProvisionerTests: XCTestCase {
         } catch let error as RuntimeProvisioningError {
             XCTAssertEqual(
                 error,
-                .downloadFailed("Runtime 下载地址不是受信任的 Node.js 官方地址")
+                .downloadFailed("Runtime 下载地址不是受信任的官方地址")
             )
         } catch {
             XCTFail("unexpected error: \(error)")
@@ -108,6 +123,86 @@ final class RuntimeProvisionerTests: XCTestCase {
         XCTAssertEqual(downloader.downloadCount, 1)
     }
 
+    func testVersionStatusDetectsCurrentAndRetainsRollbackAfterUpdate() async throws {
+        let parent = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: parent) }
+        let root = parent.appendingPathComponent("Runtime", isDirectory: true)
+        try makeInstalledFixture(
+            root: root,
+            architecture: architecture,
+            nodeVersion: "24.18.0",
+            harnessVersion: "0.1.0-rc.5",
+            nodeSHA256: "old-node-sha",
+            harnessIntegrity: "old-harness-integrity"
+        )
+        let commandRunner = FixtureCommandRunner()
+        let provisioner = RuntimeProvisioner(
+            root: root,
+            architecture: architecture,
+            downloader: FixtureDownloader(data: Data("node archive fixture".utf8)),
+            commandRunner: commandRunner,
+            packageLockData: try packageLockData(),
+            nodeArchiveSHA256Override: fixtureSHA256
+        )
+
+        XCTAssertEqual(provisioner.versionStatus().kind, .updateAvailable)
+        XCTAssertFalse(provisioner.versionStatus().rollbackAvailable)
+
+        _ = try await provisioner.update()
+        let updated = provisioner.versionStatus()
+        XCTAssertEqual(updated.kind, .current)
+        XCTAssertTrue(updated.rollbackAvailable)
+        XCTAssertEqual(
+            RuntimeLocator.installationManifest(root: RuntimeLocator.rollbackRoot(root: root))?.harnessVersion,
+            "0.1.0-rc.5"
+        )
+
+        _ = try provisioner.rollback()
+        let rolledBack = provisioner.versionStatus()
+        XCTAssertEqual(rolledBack.kind, .updateAvailable)
+        XCTAssertTrue(rolledBack.rollbackAvailable)
+        XCTAssertEqual(
+            RuntimeLocator.installationManifest(root: root)?.harnessVersion,
+            "0.1.0-rc.5"
+        )
+    }
+
+    func testFailedUpdateLeavesActiveRuntimeUntouched() async throws {
+        let parent = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: parent) }
+        let root = parent.appendingPathComponent("Runtime", isDirectory: true)
+        try makeInstalledFixture(
+            root: root,
+            architecture: architecture,
+            nodeVersion: "24.18.0",
+            harnessVersion: "0.1.0-rc.5",
+            nodeSHA256: "old-node-sha",
+            harnessIntegrity: "old-harness-integrity"
+        )
+        let provisioner = RuntimeProvisioner(
+            root: root,
+            architecture: architecture,
+            downloader: FixtureDownloader(data: Data("wrong archive".utf8)),
+            packageLockData: try packageLockData(),
+            nodeArchiveSHA256Override: fixtureSHA256
+        )
+
+        do {
+            _ = try await provisioner.update()
+            XCTFail("expected a checksum failure")
+        } catch let error as RuntimeProvisioningError {
+            guard case .checksumMismatch = error else {
+                return XCTFail("expected checksum mismatch, got \(error)")
+            }
+        }
+
+        XCTAssertEqual(
+            RuntimeLocator.installationManifest(root: root)?.harnessVersion,
+            "0.1.0-rc.5"
+        )
+        XCTAssertFalse(FileManager.default.fileExists(atPath: RuntimeLocator.rollbackRoot(root: root).path))
+    }
+
     func testCancellationCleansStagingWithoutPublishingRuntime() async throws {
         let parent = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: parent) }
@@ -136,7 +231,8 @@ final class RuntimeProvisionerTests: XCTestCase {
     }
 
     private func packageLockData() throws -> Data {
-        let integrity = RuntimeRelease.harnessPackageIntegrity
+        let harnessIntegrity = RuntimeRelease.harnessPackageIntegrity
+        let pnpmIntegrity = RuntimeRelease.pnpmPackageIntegrity
         let json = """
         {
           "name": "deepseek-harness-macos-runtime",
@@ -148,13 +244,19 @@ final class RuntimeProvisionerTests: XCTestCase {
               "name": "deepseek-harness-macos-runtime",
               "version": "0.0.1",
               "dependencies": {
-                "@deepseek-ai/dsh": "0.1.0-rc.6"
+                "@deepseek-ai/dsh": "0.1.0-rc.6",
+                "pnpm": "\(RuntimeRelease.pnpmVersion)"
               }
             },
             "node_modules/@deepseek-ai/dsh": {
               "version": "0.1.0-rc.6",
               "resolved": "https://registry.npmjs.org/@deepseek-ai/dsh/-/dsh-0.1.0-rc.6.tgz",
-              "integrity": "\(integrity)"
+              "integrity": "\(harnessIntegrity)"
+            },
+            "node_modules/pnpm": {
+              "version": "\(RuntimeRelease.pnpmVersion)",
+              "resolved": "https://registry.npmjs.org/pnpm/-/pnpm-\(RuntimeRelease.pnpmVersion).tgz",
+              "integrity": "\(pnpmIntegrity)"
             }
           }
         }
@@ -167,9 +269,66 @@ final class RuntimeProvisionerTests: XCTestCase {
         try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
         return url
     }
+
+    private func makeInstalledFixture(
+        root: URL,
+        architecture: String,
+        nodeVersion: String,
+        harnessVersion: String,
+        nodeSHA256: String,
+        harnessIntegrity: String
+    ) throws {
+        let fileManager = FileManager.default
+        let node = RuntimeLocator.nodeExecutable(root: root, architecture: architecture)
+        try fileManager.createDirectory(at: node.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("#!/bin/sh\necho v\(nodeVersion)\n".utf8).write(to: node)
+        try fileManager.setAttributes([.posixPermissions: NSNumber(value: 0o755)], ofItemAtPath: node.path)
+
+        let entry = RuntimeLocator.harnessEntry(
+            root: root,
+            architecture: architecture,
+            harnessVersion: harnessVersion
+        )
+        try fileManager.createDirectory(at: entry.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("#!/usr/bin/env node\n".utf8).write(to: entry)
+        let package = entry
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("package.json")
+        try Data("{\"name\":\"@deepseek-ai/dsh\",\"version\":\"\(harnessVersion)\"}".utf8)
+            .write(to: package)
+
+        let pnpmPackage = RuntimeLocator.pnpmPackageJSON(
+            root: root,
+            architecture: architecture,
+            harnessVersion: harnessVersion
+        )
+        try fileManager.createDirectory(at: pnpmPackage.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("{\"name\":\"pnpm\",\"version\":\"\(RuntimeRelease.pnpmVersion)\"}".utf8)
+            .write(to: pnpmPackage)
+        let pnpmShim = RuntimeLocator.pnpmExecutable(
+            root: root,
+            architecture: architecture,
+            harnessVersion: harnessVersion
+        )
+        try fileManager.createDirectory(at: pnpmShim.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("#!/bin/sh\nexit 0\n".utf8).write(to: pnpmShim)
+        try fileManager.setAttributes([.posixPermissions: NSNumber(value: 0o755)], ofItemAtPath: pnpmShim.path)
+
+        let manifest = RuntimeInstallationManifest(
+            architecture: architecture,
+            nodeVersion: nodeVersion,
+            harnessVersion: harnessVersion,
+            nodeSHA256: nodeSHA256,
+            harnessPackageIntegrity: harnessIntegrity
+        )
+        let data = try JSONEncoder().encode(manifest)
+        try fileManager.createDirectory(at: root, withIntermediateDirectories: true)
+        try data.write(to: RuntimeLocator.runtimeManifestURL(root: root), options: .atomic)
+    }
 }
 
-private struct FixtureDownloader: RuntimeAssetDownloading {
+struct FixtureDownloader: RuntimeAssetDownloading {
     let data: Data
     private let counter = Counter()
 
@@ -219,6 +378,17 @@ private final class FixtureCommandRunner: RuntimeCommandRunning, @unchecked Send
             try Data("#!/usr/bin/env node\n".utf8).write(to: entry)
             let packageJSON = "{\"name\":\"@deepseek-ai/dsh\",\"version\":\"0.1.0-rc.6\"}"
             try Data(packageJSON.utf8).write(to: harnessPackage.appendingPathComponent("package.json"))
+
+            let pnpmPackage = currentDirectory
+                .appendingPathComponent("node_modules/pnpm", isDirectory: true)
+            try fileManager.createDirectory(at: pnpmPackage, withIntermediateDirectories: true)
+            try Data("{\"name\":\"pnpm\",\"version\":\"\(RuntimeRelease.pnpmVersion)\"}".utf8)
+                .write(to: pnpmPackage.appendingPathComponent("package.json"))
+            let pnpmShim = currentDirectory
+                .appendingPathComponent("node_modules/.bin/pnpm", isDirectory: false)
+            try fileManager.createDirectory(at: pnpmShim.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try Data("#!/bin/sh\nexit 0\n".utf8).write(to: pnpmShim)
+            try fileManager.setAttributes([.posixPermissions: NSNumber(value: 0o755)], ofItemAtPath: pnpmShim.path)
 
             let nativeDirectory = currentDirectory
                 .appendingPathComponent("node_modules/node-pty/prebuilds/darwin-arm64", isDirectory: true)

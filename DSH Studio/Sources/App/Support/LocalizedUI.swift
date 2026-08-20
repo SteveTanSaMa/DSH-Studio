@@ -2,7 +2,7 @@
 //  LocalizedUI.swift
 //  DSH Studio
 //
-//  Created by Steve Tan on 2026/8/19.
+//  Created by Steve Tan on 2026/8/20.
 //
 
 import DeepSeekRuntime
@@ -15,6 +15,8 @@ extension RuntimeState {
         switch self {
         case .idle: return "未启动"
         case .provisioning: return "正在准备运行时"
+        case .updating: return "正在更新运行时"
+        case .rollingBack: return "正在回滚运行时"
         case .launching: return "正在启动"
         case .starting: return "正在连接"
         case .ready: return "已就绪"

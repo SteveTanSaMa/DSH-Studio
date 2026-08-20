@@ -15,3 +15,7 @@ xcuserdata/
 
 # Local source artwork kept outside the repository
 /鲸鱼娘/
+
+# Runtime Builder output
+/RuntimeArtifacts/
+.runtime-builder/

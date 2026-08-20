@@ -65,6 +65,13 @@ public final class SystemHarnessProcess: HarnessProcess {
         for (key, value) in configuration.environment {
             environment[key] = value
         }
+        // Apply the Runtime path after configuration overrides so a caller
+        // cannot accidentally hide the bundled pnpm shim with a custom PATH.
+        environment["PATH"] = Self.runtimePath(
+            nodeExecutable: configuration.nodeExecutable,
+            pnpmExecutable: configuration.pnpmExecutable,
+            inheritedPath: environment["PATH"]
+        )
         process.environment = environment
 
         let stdout = Pipe()
@@ -109,6 +116,25 @@ public final class SystemHarnessProcess: HarnessProcess {
         let identifier = process.processIdentifier
         guard identifier > 0 else { return }
         kill(identifier, SIGKILL)
+    }
+
+    /// Returns the child-process PATH with Runtime-owned tools first.
+    /// Harness invokes pnpm by name, so this ordering is part of the Runtime
+    /// installation contract rather than a convenience for the shell.
+    static func runtimePath(
+        nodeExecutable: URL,
+        pnpmExecutable: URL?,
+        inheritedPath: String?
+    ) -> String {
+        var entries: [String] = []
+        if let pnpmExecutable {
+            entries.append(pnpmExecutable.deletingLastPathComponent().path)
+        }
+        entries.append(nodeExecutable.deletingLastPathComponent().path)
+        if let inheritedPath, !inheritedPath.isEmpty {
+            entries.append(inheritedPath)
+        }
+        return entries.joined(separator: ":")
     }
 }
 

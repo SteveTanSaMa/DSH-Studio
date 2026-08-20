@@ -23,4 +23,17 @@ final class RuntimeConfigurationTests: XCTestCase {
         XCTAssertEqual(configuration.arguments[3], "127.0.0.1")
         XCTAssertFalse(configuration.arguments.contains("0.0.0.0"))
     }
+
+    func testRuntimePathPrioritizesBundledPnpmAndNode() {
+        let path = SystemHarnessProcess.runtimePath(
+            nodeExecutable: URL(fileURLWithPath: "/runtime/node/bin/node"),
+            pnpmExecutable: URL(fileURLWithPath: "/runtime/harness/node_modules/.bin/pnpm"),
+            inheritedPath: "/opt/homebrew/bin:/usr/bin"
+        )
+
+        XCTAssertEqual(
+            path,
+            "/runtime/harness/node_modules/.bin:/runtime/node/bin:/opt/homebrew/bin:/usr/bin"
+        )
+    }
 }

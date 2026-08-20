@@ -64,30 +64,85 @@ public enum RuntimeLocator {
         root.appendingPathComponent("manifest.json", isDirectory: false)
     }
 
+    /// The single retained previous installation used by the rollback path.
+    public static func rollbackRoot(root: URL) -> URL {
+        root.deletingLastPathComponent()
+            .appendingPathComponent("\(root.lastPathComponent).backup", isDirectory: true)
+    }
+
+    public static func installationManifest(root: URL) -> RuntimeInstallationManifest? {
+        guard let data = try? Data(contentsOf: runtimeManifestURL(root: root)) else {
+            return nil
+        }
+        return try? JSONDecoder().decode(RuntimeInstallationManifest.self, from: data)
+    }
+
     public static func isComplete(
         root: URL,
         architecture: String = architectureDirectory(),
         fileManager: FileManager = .default,
         expectedNodeVersion: String = RuntimeRelease.nodeVersion,
         expectedHarnessVersion: String = harnessVersion,
-        expectedNodeSHA256: String? = nil
+        expectedPnpmVersion: String = RuntimeRelease.pnpmVersion,
+        expectedNodeSHA256: String? = nil,
+        expectedRelease: RuntimeReleaseDescriptor? = nil
     ) -> Bool {
         // The manifest is the publication marker. Validate it before trusting
         // the executable and dependency tree below the Runtime root.
-        guard let data = try? Data(contentsOf: runtimeManifestURL(root: root)),
-              let manifest = try? JSONDecoder().decode(RuntimeInstallationManifest.self, from: data),
+        guard let manifest = installationManifest(root: root),
               manifest.schemaVersion == RuntimeInstallationManifest.currentSchemaVersion,
               manifest.architecture == architecture,
-              manifest.nodeVersion == expectedNodeVersion,
-              manifest.harnessVersion == expectedHarnessVersion,
-              manifest.nodeSHA256 == (expectedNodeSHA256 ?? RuntimeRelease.nodeArchiveSHA256(architecture: architecture)),
-              manifest.harnessPackageIntegrity == RuntimeRelease.harnessPackageIntegrity,
+              !manifest.nodeSHA256.isEmpty,
+              !manifest.harnessPackageIntegrity.isEmpty,
+              !manifest.pnpmPackageIntegrity.isEmpty,
               fileManager.isExecutableFile(atPath: nodeExecutable(root: root, architecture: architecture).path),
-              fileManager.fileExists(atPath: harnessEntry(root: root, architecture: architecture).path) else {
+              fileManager.fileExists(atPath: harnessEntry(root: root, architecture: architecture, harnessVersion: expectedHarnessVersion).path),
+              fileManager.isExecutableFile(atPath: pnpmExecutable(root: root, architecture: architecture, harnessVersion: expectedHarnessVersion).path),
+              nodeVersion(nodeExecutable: nodeExecutable(root: root, architecture: architecture)) == expectedNodeVersion,
+              packageJSONVersion(at: harnessEntry(root: root, architecture: architecture, harnessVersion: expectedHarnessVersion)) == expectedHarnessVersion,
+              packageJSONVersion(atPackageURL: pnpmPackageJSON(root: root, architecture: architecture, harnessVersion: expectedHarnessVersion)) == expectedPnpmVersion else {
             return false
         }
-        return nodeVersion(nodeExecutable: nodeExecutable(root: root, architecture: architecture)) == expectedNodeVersion
-            && packageJSONVersion(at: harnessEntry(root: root, architecture: architecture)) == expectedHarnessVersion
+        if let expectedRelease {
+            let expectedNodeSHA256 = expectedNodeSHA256 ?? expectedRelease.nodeArchiveSHA256
+            return manifest.architecture == expectedRelease.architecture
+                && manifest.runtimeVersion == expectedRelease.runtimeVersion
+                && manifest.nodeVersion == expectedRelease.nodeVersion
+                && manifest.harnessVersion == expectedRelease.harnessVersion
+                && manifest.pnpmVersion == expectedRelease.pnpmVersion
+                && manifest.nodeSHA256 == expectedNodeSHA256
+                && manifest.harnessPackageIntegrity == expectedRelease.harnessPackageIntegrity
+                && manifest.pnpmPackageIntegrity == expectedRelease.pnpmPackageIntegrity
+        }
+        return manifest.runtimeVersion == RuntimeRelease.runtimeVersion
+            && manifest.nodeSHA256 == (expectedNodeSHA256 ?? RuntimeRelease.nodeArchiveSHA256(architecture: architecture))
+            && manifest.harnessPackageIntegrity == RuntimeRelease.harnessPackageIntegrity
+            && manifest.pnpmVersion == expectedPnpmVersion
+            && manifest.pnpmPackageIntegrity == RuntimeRelease.pnpmPackageIntegrity
+    }
+
+    /// Validates a complete installation without requiring it to be the current
+    /// app release. This is what makes an older backup eligible for rollback.
+    public static func isCompleteInstallation(
+        root: URL,
+        architecture: String = architectureDirectory(),
+        fileManager: FileManager = .default
+    ) -> Bool {
+        guard let manifest = installationManifest(root: root),
+              manifest.schemaVersion == RuntimeInstallationManifest.currentSchemaVersion,
+              manifest.architecture == architecture,
+              !manifest.nodeSHA256.isEmpty,
+              !manifest.harnessPackageIntegrity.isEmpty,
+              !manifest.pnpmPackageIntegrity.isEmpty,
+              fileManager.isExecutableFile(atPath: nodeExecutable(root: root, architecture: architecture).path),
+              fileManager.fileExists(atPath: harnessEntry(root: root, architecture: architecture, harnessVersion: manifest.harnessVersion).path),
+              fileManager.isExecutableFile(atPath: pnpmExecutable(root: root, architecture: architecture, harnessVersion: manifest.harnessVersion).path),
+              nodeVersion(nodeExecutable: nodeExecutable(root: root, architecture: architecture)) == manifest.nodeVersion,
+              packageJSONVersion(at: harnessEntry(root: root, architecture: architecture, harnessVersion: manifest.harnessVersion)) == manifest.harnessVersion,
+              packageJSONVersion(atPackageURL: pnpmPackageJSON(root: root, architecture: architecture, harnessVersion: manifest.harnessVersion)) == manifest.pnpmVersion else {
+            return false
+        }
+        return true
     }
 
     public static func architectureDirectory() -> String {
@@ -111,16 +166,50 @@ public enum RuntimeLocator {
 
     public static func harnessEntry(
         root: URL,
-        architecture: String = architectureDirectory()
+        architecture: String = architectureDirectory(),
+        harnessVersion: String = RuntimeLocator.harnessVersion
+    ) -> URL {
+        harnessRoot(root: root, architecture: architecture, harnessVersion: harnessVersion)
+            .appendingPathComponent("node_modules", isDirectory: true)
+            .appendingPathComponent(dshPackageName, isDirectory: true)
+            .appendingPathComponent("lib", isDirectory: true)
+            .appendingPathComponent("bin.js")
+    }
+
+    public static func harnessRoot(
+        root: URL,
+        architecture: String = architectureDirectory(),
+        harnessVersion: String = RuntimeLocator.harnessVersion
     ) -> URL {
         root
             .appendingPathComponent("harness", isDirectory: true)
             .appendingPathComponent(architecture, isDirectory: true)
             .appendingPathComponent(harnessVersion, isDirectory: true)
+    }
+
+    /// The pnpm shim installed by npm for the isolated Harness dependency tree.
+    /// Keeping this path inside the Runtime prevents plugin management from
+    /// depending on a user's Homebrew, Corepack, or other external pnpm.
+    public static func pnpmExecutable(
+        root: URL,
+        architecture: String = architectureDirectory(),
+        harnessVersion: String = RuntimeLocator.harnessVersion
+    ) -> URL {
+        harnessRoot(root: root, architecture: architecture, harnessVersion: harnessVersion)
             .appendingPathComponent("node_modules", isDirectory: true)
-            .appendingPathComponent(dshPackageName, isDirectory: true)
-            .appendingPathComponent("lib", isDirectory: true)
-            .appendingPathComponent("bin.js")
+            .appendingPathComponent(".bin", isDirectory: true)
+            .appendingPathComponent("pnpm")
+    }
+
+    public static func pnpmPackageJSON(
+        root: URL,
+        architecture: String = architectureDirectory(),
+        harnessVersion: String = RuntimeLocator.harnessVersion
+    ) -> URL {
+        harnessRoot(root: root, architecture: architecture, harnessVersion: harnessVersion)
+            .appendingPathComponent("node_modules", isDirectory: true)
+            .appendingPathComponent("pnpm", isDirectory: true)
+            .appendingPathComponent("package.json")
     }
 
     public static func applicationSupportDirectory(
@@ -188,6 +277,13 @@ public enum RuntimeLocator {
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .appendingPathComponent("package.json")
+        return packageJSONVersion(atPackageURL: packageURL)
+    }
+
+    /// Reads a package.json URL directly. This is separate from the legacy
+    /// entry-point helper because pnpm is validated from its package metadata
+    /// while its npm-created shim lives in node_modules/.bin.
+    public static func packageJSONVersion(atPackageURL packageURL: URL) -> String? {
         guard let data = try? Data(contentsOf: packageURL),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let version = json["version"] as? String else {
