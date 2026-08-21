@@ -69,6 +69,9 @@ STAGE_DIR="$WORK_DIR/runtime"
 NODE_ROOT="$STAGE_DIR/node/$ARCHITECTURE"
 HARNESS_VERSION="${HARNESS_VERSION:-}"
 PNPM_VERSION="${PNPM_VERSION:-}"
+DATA_FORMAT_ID="${DSH_RUNTIME_DATA_FORMAT_ID:-}"
+DATA_FORMAT_COMPATIBLE_WITH="${DSH_RUNTIME_DATA_FORMAT_COMPATIBLE_WITH:-}"
+DATA_FORMAT_MIGRATION="${DSH_RUNTIME_DATA_FORMAT_MIGRATION:-}"
 
 mkdir -p "$STAGE_DIR"
 
@@ -172,6 +175,9 @@ export DSH_RUNTIME_HARNESS_VERSION="$HARNESS_VERSION"
 export DSH_RUNTIME_PNPM_VERSION="$PNPM_VERSION"
 export DSH_RUNTIME_NODE_SHA256="$ACTUAL_NODE_SHA256"
 export DSH_RUNTIME_REGISTRY="$REGISTRY"
+export DSH_RUNTIME_DATA_FORMAT_ID="$DATA_FORMAT_ID"
+export DSH_RUNTIME_DATA_FORMAT_COMPATIBLE_WITH="$DATA_FORMAT_COMPATIBLE_WITH"
+export DSH_RUNTIME_DATA_FORMAT_MIGRATION="$DATA_FORMAT_MIGRATION"
 
 "$NODE_EXECUTABLE" - "$HARNESS_ROOT/package-lock.json" "$STAGE_DIR/manifest.json" <<'NODE'
 const fs = require("fs");
@@ -184,6 +190,11 @@ const harness = packages["node_modules/@deepseek-ai/dsh"];
 const pnpm = packages["node_modules/pnpm"];
 const expectedHarness = process.env.DSH_RUNTIME_HARNESS_VERSION;
 const expectedPnpm = process.env.DSH_RUNTIME_PNPM_VERSION;
+const dataFormatID = process.env.DSH_RUNTIME_DATA_FORMAT_ID;
+const compatibleWith = (process.env.DSH_RUNTIME_DATA_FORMAT_COMPATIBLE_WITH || "")
+  .split(",")
+  .map((value) => value.trim())
+  .filter(Boolean);
 if (lock.lockfileVersion !== 3 ||
     dependencies["@deepseek-ai/dsh"] !== expectedHarness ||
     dependencies.pnpm !== expectedPnpm ||
@@ -201,7 +212,12 @@ const manifest = {
   nodeSHA256: process.env.DSH_RUNTIME_NODE_SHA256,
   harnessPackageIntegrity: harness.integrity,
   pnpmPackageIntegrity: pnpm.integrity,
-  registry: process.env.DSH_RUNTIME_REGISTRY
+  registry: process.env.DSH_RUNTIME_REGISTRY,
+  dataFormat: dataFormatID ? {
+    id: dataFormatID,
+    compatibleWith,
+    migration: process.env.DSH_RUNTIME_DATA_FORMAT_MIGRATION || null
+  } : null
 };
 fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
 NODE
@@ -234,6 +250,7 @@ const metadata = {
   nodeArchiveSHA256: manifest.nodeSHA256,
   harnessPackageIntegrity: manifest.harnessPackageIntegrity,
   pnpmPackageIntegrity: manifest.pnpmPackageIntegrity,
+  dataFormat: manifest.dataFormat,
   artifact: artifactName,
   sha256: process.env.DSH_RUNTIME_ARTIFACT_SHA256,
   url: `${artifactBaseURL}/${artifactName}`,

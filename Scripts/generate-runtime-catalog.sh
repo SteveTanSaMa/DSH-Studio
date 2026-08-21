@@ -28,13 +28,30 @@ node - "$RUNTIME_VERSION" "$OUTPUT_PATH" "$@" <<'NODE'
 const fs = require("fs");
 const [runtimeVersion, outputPath, ...metadataPaths] = process.argv.slice(2);
 
+if (!/^[A-Za-z0-9._-]+$/.test(runtimeVersion)) {
+  throw new Error("runtime version contains unsupported characters");
+}
+
 const releases = metadataPaths.map((metadataPath) => {
   const metadata = JSON.parse(fs.readFileSync(metadataPath, "utf8"));
   if (metadata.runtimeVersion !== runtimeVersion) {
     throw new Error(`runtime version mismatch in ${metadataPath}`);
   }
-  if (!metadata.url || !metadata.sha256 || !metadata.architecture) {
+  if (!metadata.url || !metadata.sha256 || !metadata.architecture ||
+      !metadata.nodeVersion || !metadata.harnessVersion || !metadata.pnpmVersion ||
+      !metadata.nodeArchiveSHA256 || !metadata.harnessPackageIntegrity ||
+      !metadata.pnpmPackageIntegrity) {
     throw new Error(`incomplete artifact metadata in ${metadataPath}`);
+  }
+  if (!/^[0-9a-fA-F]{64}$/.test(metadata.sha256) ||
+      !/^[0-9a-fA-F]{64}$/.test(metadata.nodeArchiveSHA256)) {
+    throw new Error(`invalid checksum in ${metadataPath}`);
+  }
+  if (metadata.dataFormat &&
+      (!metadata.dataFormat.id ||
+       !Array.isArray(metadata.dataFormat.compatibleWith) ||
+       metadata.dataFormat.compatibleWith.some((value) => typeof value !== "string" || !value.trim()))) {
+    throw new Error(`invalid data format declaration in ${metadataPath}`);
   }
   return {
     runtimeVersion: metadata.runtimeVersion,
@@ -45,6 +62,7 @@ const releases = metadataPaths.map((metadataPath) => {
     nodeArchiveSHA256: metadata.nodeArchiveSHA256,
     harnessPackageIntegrity: metadata.harnessPackageIntegrity,
     pnpmPackageIntegrity: metadata.pnpmPackageIntegrity,
+    dataFormat: metadata.dataFormat || null,
     artifact: {
       runtimeVersion: metadata.runtimeVersion,
       architecture: metadata.architecture,
@@ -53,6 +71,19 @@ const releases = metadataPaths.map((metadataPath) => {
     }
   };
 });
+
+const contract = (release) => JSON.stringify({
+  nodeVersion: release.nodeVersion,
+  harnessVersion: release.harnessVersion,
+  pnpmVersion: release.pnpmVersion,
+  nodeArchiveSHA256: release.nodeArchiveSHA256,
+  harnessPackageIntegrity: release.harnessPackageIntegrity,
+  pnpmPackageIntegrity: release.pnpmPackageIntegrity,
+  dataFormat: release.dataFormat
+});
+if (releases.some((release) => contract(release) !== contract(releases[0]))) {
+  throw new Error("architecture metadata does not share one Runtime contract");
+}
 
 const architectures = new Set(releases.map((release) => release.architecture));
 if (architectures.size !== releases.length || !architectures.has("darwin-arm64") || !architectures.has("darwin-x64")) {

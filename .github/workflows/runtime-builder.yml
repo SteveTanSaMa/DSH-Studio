@@ -7,9 +7,30 @@ on:
         description: "Immutable Runtime version, for example 2026.08.20.1"
         required: true
         type: string
+      harness_version:
+        description: "Exact @deepseek-ai/dsh version to package"
+        required: false
+        type: string
+      pnpm_version:
+        description: "Exact pnpm version to package"
+        required: false
+        type: string
+      runtime_data_format_id:
+        description: "Harness data format ID, for example sqlite-v2"
+        required: false
+        type: string
+      runtime_data_format_compatible_with:
+        description: "Comma-separated compatible prior format IDs"
+        required: false
+        type: string
+      runtime_data_format_migration:
+        description: "Explicit migration identifier, or leave blank"
+        required: false
+        type: string
   push:
     tags:
       - "runtime-*"
+      - "!runtime-catalog"
 
 permissions:
   contents: read
@@ -30,13 +51,28 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Build and smoke-test Runtime
+        env:
+          RUNTIME_DATA_FORMAT_ID: ${{ inputs.runtime_data_format_id || vars.RUNTIME_DATA_FORMAT_ID }}
+          RUNTIME_DATA_FORMAT_COMPATIBLE_WITH: ${{ inputs.runtime_data_format_compatible_with || vars.RUNTIME_DATA_FORMAT_COMPATIBLE_WITH }}
+          RUNTIME_DATA_FORMAT_MIGRATION: ${{ inputs.runtime_data_format_migration || vars.RUNTIME_DATA_FORMAT_MIGRATION }}
+          RUNTIME_HARNESS_VERSION: ${{ inputs.harness_version || vars.RUNTIME_HARNESS_VERSION }}
+          RUNTIME_PNPM_VERSION: ${{ inputs.pnpm_version || vars.RUNTIME_PNPM_VERSION }}
         run: |
+          if [ -z "${RUNTIME_DATA_FORMAT_ID:-}" ]; then
+            echo "RUNTIME_DATA_FORMAT_ID is required; publish a machine-readable data contract" >&2
+            exit 1
+          fi
           runtime_version="${{ inputs.runtime_version }}"
           if [ -z "$runtime_version" ]; then
             runtime_version="${GITHUB_REF_NAME#runtime-}"
           fi
           RUNTIME_VERSION="$runtime_version" \
           ARCHITECTURE="${{ matrix.architecture }}" \
+          HARNESS_VERSION="$RUNTIME_HARNESS_VERSION" \
+          PNPM_VERSION="$RUNTIME_PNPM_VERSION" \
+          DSH_RUNTIME_DATA_FORMAT_ID="$RUNTIME_DATA_FORMAT_ID" \
+          DSH_RUNTIME_DATA_FORMAT_COMPATIBLE_WITH="${RUNTIME_DATA_FORMAT_COMPATIBLE_WITH:-}" \
+          DSH_RUNTIME_DATA_FORMAT_MIGRATION="${RUNTIME_DATA_FORMAT_MIGRATION:-}" \
           OUTPUT_DIR="${{ github.workspace }}/RuntimeArtifacts" \
             ./Scripts/build-runtime.sh
 
@@ -48,7 +84,9 @@ jobs:
           if-no-files-found: error
 
   publish:
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/runtime-')
+    if: >-
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/runtime-'))
+      || github.event_name == 'workflow_dispatch'
     needs: build
     runs-on: ubuntu-latest
     permissions:
@@ -67,16 +105,35 @@ jobs:
       - name: Publish immutable Runtime release
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ github.ref_name }}
+          RUNTIME_CATALOG_KEY_ID: runtime-catalog-v1
+          RUNTIME_CATALOG_PRIVATE_KEY_BASE64: ${{ secrets.RUNTIME_CATALOG_PRIVATE_KEY_BASE64 }}
         run: |
-          runtime_version="${RELEASE_TAG#runtime-}"
+          runtime_version="${{ inputs.runtime_version }}"
+          if [ -z "$runtime_version" ]; then
+            runtime_version="${GITHUB_REF_NAME#runtime-}"
+          fi
+          release_tag="runtime-${runtime_version}"
           ./Scripts/generate-runtime-catalog.sh \
             "$runtime_version" \
             RuntimeArtifacts/runtime-release.json \
             RuntimeArtifacts/artifact-*.json
-          gh release create "$RELEASE_TAG" \
+          ./Scripts/sign-runtime-catalog.sh \
+            RuntimeArtifacts/runtime-release.json \
+            RuntimeArtifacts/runtime-catalog.signed.json
+          gh release create "$release_tag" \
             --repo "$GITHUB_REPOSITORY" \
-            --title "Runtime $RELEASE_TAG" \
+            --target "$GITHUB_SHA" \
+            --title "Runtime $release_tag" \
             --generate-notes
-          gh release upload "$RELEASE_TAG" RuntimeArtifacts/* \
+          gh release upload "$release_tag" RuntimeArtifacts/* \
             --repo "$GITHUB_REPOSITORY"
+          if ! gh release view runtime-catalog --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create runtime-catalog \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "Runtime catalog" \
+              --notes "Signed Runtime catalog for DSH Studio automatic discovery."
+          fi
+          gh release upload runtime-catalog \
+            RuntimeArtifacts/runtime-catalog.signed.json \
+            --repo "$GITHUB_REPOSITORY" \
+            --clobber
