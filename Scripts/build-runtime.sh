@@ -49,6 +49,11 @@ require_command shasum
 require_command tar
 require_command npm
 
+# The current Harness dependency graph can exceed Node's default ~2 GiB V8
+# heap during npm install. Keep the limit configurable for smaller runners,
+# while giving CI enough headroom for the official Runtime build.
+export NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=6144}"
+
 WORK_DIR="${WORK_DIR:-}"
 REMOVE_WORK_DIR=0
 if [ -z "$WORK_DIR" ]; then
