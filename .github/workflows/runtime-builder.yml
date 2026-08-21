@@ -44,7 +44,10 @@ jobs:
           - architecture: darwin-arm64
             runner: macos-14
           - architecture: darwin-x64
-            runner: macos-13
+            # The Intel macOS runner can remain queued indefinitely. macos-14
+            # is currently available as Apple Silicon; build-runtime.sh
+            # executes the downloaded x64 Node under Rosetta for this target.
+            runner: macos-14
     runs-on: ${{ matrix.runner }}
     steps:
       - name: Check out source
