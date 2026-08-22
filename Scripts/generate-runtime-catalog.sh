@@ -76,7 +76,6 @@ const contract = (release) => JSON.stringify({
   nodeVersion: release.nodeVersion,
   harnessVersion: release.harnessVersion,
   pnpmVersion: release.pnpmVersion,
-  nodeArchiveSHA256: release.nodeArchiveSHA256,
   harnessPackageIntegrity: release.harnessPackageIntegrity,
   pnpmPackageIntegrity: release.pnpmPackageIntegrity,
   dataFormat: release.dataFormat
