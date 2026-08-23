@@ -24,6 +24,9 @@ extension AppSettingsWebBridge {
         harnessVersion: null,
         latestHarnessVersion: null,
         runtimeUpdateAvailable: false,
+        turnCompletionNotification: "whenNotFocused",
+        permissionNotificationsEnabled: true,
+        questionNotificationsEnabled: true,
       };
       let currentNotice = null;
       let block = null;
@@ -45,6 +48,19 @@ extension AppSettingsWebBridge {
           diagnosticsDetail: "用于排查 Runtime、Harness 和数据文件问题",
           copyDiagnostics: "复制诊断信息",
           openLogs: "打开日志文件夹",
+          notifications: "通知",
+          turnCompletionNotification: "轮次完成通知",
+          turnCompletionNotificationDetail: "设置 Harness 完成一轮后何时提醒你",
+          turnCompletionNever: "从不",
+          turnCompletionAlways: "始终",
+          turnCompletionWhenNotFocused: "仅在未聚焦时",
+          permissionNotifications: "权限通知",
+          permissionNotificationsDetail: "需要你授权后才能继续时提醒你",
+          questionNotifications: "问题通知",
+          questionNotificationsDetail: "需要你输入后才能继续时提醒你",
+          turnCompletionNotificationAria: "轮次完成通知",
+          permissionNotificationsAria: "权限通知",
+          questionNotificationsAria: "问题通知",
           chatContentWidthAria: "对话内容宽度",
           unknown: "未知",
           notInstalled: "未安装",
@@ -61,6 +77,19 @@ extension AppSettingsWebBridge {
           diagnosticsDetail: "For troubleshooting Runtime, Harness, and data files",
           copyDiagnostics: "Copy diagnostics",
           openLogs: "Open log folder",
+          notifications: "Notifications",
+          turnCompletionNotification: "Turn completion notification",
+          turnCompletionNotificationDetail: "Choose when to be notified after Harness completes a turn",
+          turnCompletionNever: "Never",
+          turnCompletionAlways: "Always",
+          turnCompletionWhenNotFocused: "When not focused",
+          permissionNotifications: "Permission notification",
+          permissionNotificationsDetail: "Notify when your authorization is needed to continue",
+          questionNotifications: "Question notification",
+          questionNotificationsDetail: "Notify when your input is needed to continue",
+          turnCompletionNotificationAria: "Turn completion notification",
+          permissionNotificationsAria: "Permission notification",
+          questionNotificationsAria: "Question notification",
           chatContentWidthAria: "Chat content width",
           unknown: "Unknown",
           notInstalled: "Not installed",
@@ -122,6 +151,13 @@ extension AppSettingsWebBridge {
           min-width: 0;
           padding: 16px 0;
           border-bottom: 1px solid var(--dsw-alias-border-l2);
+        }
+        .dsh-studio-app-settings-group-title {
+          padding: 20px 0 4px;
+          color: var(--dsw-alias-label-secondary);
+          font-size: 13px;
+          font-weight: 500;
+          line-height: 20px;
         }
         .dsh-studio-app-settings-row.last-row {
           border-bottom: none;
@@ -211,6 +247,32 @@ extension AppSettingsWebBridge {
         .dsh-studio-app-settings-number::placeholder {
           color: var(--dsw-alias-label-tertiary);
           opacity: 1;
+        }
+        .dsh-studio-app-settings-select {
+          min-width: 144px;
+          height: 32px;
+          flex: none;
+          padding: 0 8px;
+          border: 1px solid var(--dsw-alias-border-l2);
+          border-radius: 8px;
+          background: var(--dsw-alias-bg-layer-1);
+          color: var(--dsw-alias-label-primary);
+          font: inherit;
+          font-size: 14px;
+        }
+        .dsh-studio-app-settings-toggle {
+          display: inline-flex;
+          flex: none;
+          align-items: center;
+          justify-content: center;
+          width: 36px;
+          height: 32px;
+        }
+        .dsh-studio-app-settings-toggle input {
+          width: 16px;
+          height: 16px;
+          margin: 0;
+          accent-color: var(--dsw-alias-state-business-primary);
         }
         .dsh-studio-app-settings-version-actions {
           display: flex;

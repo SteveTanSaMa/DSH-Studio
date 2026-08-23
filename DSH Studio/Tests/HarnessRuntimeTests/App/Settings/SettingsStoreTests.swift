@@ -64,4 +64,43 @@ final class SettingsStoreTests: XCTestCase {
 
         XCTAssertEqual(store.chatContentMaxWidth, SettingsStore.chatContentMaxWidthDefault)
     }
+
+    @MainActor
+    func testNotificationSettingsUseDefaultsAndPersist() {
+        let suiteName = "DeepSeekStudio.SettingsStoreTests.notifications.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let store = SettingsStore(defaults: defaults)
+        XCTAssertEqual(
+            store.turnCompletionNotification,
+            SettingsStore.turnCompletionNotificationDefault
+        )
+        XCTAssertTrue(store.permissionNotificationsEnabled)
+        XCTAssertTrue(store.questionNotificationsEnabled)
+
+        store.turnCompletionNotification = .always
+        store.permissionNotificationsEnabled = false
+        store.questionNotificationsEnabled = false
+
+        let reloaded = SettingsStore(defaults: defaults)
+        XCTAssertEqual(reloaded.turnCompletionNotification, .always)
+        XCTAssertFalse(reloaded.permissionNotificationsEnabled)
+        XCTAssertFalse(reloaded.questionNotificationsEnabled)
+    }
+
+    @MainActor
+    func testInvalidPersistedTurnCompletionNotificationFallsBackToDefault() {
+        let suiteName = "DeepSeekStudio.SettingsStoreTests.invalidNotifications.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        defaults.set("unsupported", forKey: SettingsStore.turnCompletionNotificationKey)
+        let store = SettingsStore(defaults: defaults)
+
+        XCTAssertEqual(
+            store.turnCompletionNotification,
+            SettingsStore.turnCompletionNotificationDefault
+        )
+    }
 }

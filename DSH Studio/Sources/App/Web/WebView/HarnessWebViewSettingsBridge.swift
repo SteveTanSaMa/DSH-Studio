@@ -154,6 +154,31 @@ extension HarnessWebView.Coordinator: WKScriptMessageHandler {
                     )
                 }
                 model.settings.chatContentMaxWidth = SettingsStore.normalizedChatContentMaxWidth(width)
+            case "turnCompletionNotification":
+                guard let rawValue = value as? String,
+                      let preference = TurnCompletionNotificationPreference(rawValue: rawValue) else {
+                    throw AppSettingsBridgeError(
+                        code: "invalid-app-setting",
+                        message: "任务完成通知设置值无效"
+                    )
+                }
+                model.settings.turnCompletionNotification = preference
+            case "permissionNotificationsEnabled":
+                guard let enabled = value as? NSNumber else {
+                    throw AppSettingsBridgeError(
+                        code: "invalid-app-setting",
+                        message: "权限通知设置值无效"
+                    )
+                }
+                model.settings.permissionNotificationsEnabled = enabled.boolValue
+            case "questionNotificationsEnabled":
+                guard let enabled = value as? NSNumber else {
+                    throw AppSettingsBridgeError(
+                        code: "invalid-app-setting",
+                        message: "问题通知设置值无效"
+                    )
+                }
+                model.settings.questionNotificationsEnabled = enabled.boolValue
             default:
                 throw AppSettingsBridgeError(code: "unknown-app-setting", message: "不支持的应用设置：\(key)")
             }
@@ -203,7 +228,10 @@ extension HarnessWebView.Coordinator: WKScriptMessageHandler {
                 runtimeError: currentRuntime.lastError?.uiDescription,
                 harnessVersion: currentRuntime.harnessVersion,
                 latestHarnessVersion: model.latestSignedHarnessVersion,
-                runtimeUpdateAvailable: model.hasVerifiedRuntimeUpdate
+                runtimeUpdateAvailable: model.hasVerifiedRuntimeUpdate,
+                turnCompletionNotification: model.settings.turnCompletionNotification.rawValue,
+                permissionNotificationsEnabled: model.settings.permissionNotificationsEnabled,
+                questionNotificationsEnabled: model.settings.questionNotificationsEnabled
             )
         }
 

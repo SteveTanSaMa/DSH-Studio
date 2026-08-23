@@ -13,4 +13,7 @@ struct AppSettingsWebState: Codable, Equatable, Sendable {
     let harnessVersion: String?
     let latestHarnessVersion: String?
     let runtimeUpdateAvailable: Bool
+    let turnCompletionNotification: String
+    let permissionNotificationsEnabled: Bool
+    let questionNotificationsEnabled: Bool
 }

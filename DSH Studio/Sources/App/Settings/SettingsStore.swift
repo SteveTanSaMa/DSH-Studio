@@ -16,6 +16,12 @@ final class SettingsStore: ObservableObject {
     static let chatContentMaxWidthDefault = 1000.0
     static let chatContentMaxWidthRange = 748.0...2400.0
     static let chatContentMaxWidthStep = 16.0
+    static let turnCompletionNotificationKey = "turnCompletionNotification"
+    static let turnCompletionNotificationDefault = TurnCompletionNotificationPreference.whenNotFocused
+    static let permissionNotificationsEnabledKey = "permissionNotificationsEnabled"
+    static let permissionNotificationsEnabledDefault = true
+    static let questionNotificationsEnabledKey = "questionNotificationsEnabled"
+    static let questionNotificationsEnabledDefault = true
 
     private let defaults: UserDefaults
 
@@ -35,6 +41,24 @@ final class SettingsStore: ObservableObject {
         }
     }
 
+    @Published var turnCompletionNotification: TurnCompletionNotificationPreference {
+        didSet {
+            defaults.set(turnCompletionNotification.rawValue, forKey: Self.turnCompletionNotificationKey)
+        }
+    }
+
+    @Published var permissionNotificationsEnabled: Bool {
+        didSet {
+            defaults.set(permissionNotificationsEnabled, forKey: Self.permissionNotificationsEnabledKey)
+        }
+    }
+
+    @Published var questionNotificationsEnabled: Bool {
+        didSet {
+            defaults.set(questionNotificationsEnabled, forKey: Self.questionNotificationsEnabledKey)
+        }
+    }
+
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         workspaceURL = RuntimeLocator.defaultWorkspace()
@@ -45,11 +69,30 @@ final class SettingsStore: ObservableObject {
                 .appendingPathComponent("DSH_HOME", isDirectory: true)
         let storedWidth = (defaults.object(forKey: Self.chatContentMaxWidthKey) as? NSNumber)?.doubleValue
         chatContentMaxWidth = Self.normalizedChatContentMaxWidth(storedWidth)
+        turnCompletionNotification = Self.normalizedTurnCompletionNotification(
+            defaults.string(forKey: Self.turnCompletionNotificationKey)
+        )
+        permissionNotificationsEnabled = defaults.object(
+            forKey: Self.permissionNotificationsEnabledKey
+        ) as? Bool ?? Self.permissionNotificationsEnabledDefault
+        questionNotificationsEnabled = defaults.object(
+            forKey: Self.questionNotificationsEnabledKey
+        ) as? Bool ?? Self.questionNotificationsEnabledDefault
     }
 
     static func normalizedChatContentMaxWidth(_ value: Double?) -> Double {
         // Clamp persisted or WebView-provided values before they affect CSS.
         guard let value, value.isFinite else { return chatContentMaxWidthDefault }
         return min(max(value, chatContentMaxWidthRange.lowerBound), chatContentMaxWidthRange.upperBound)
+    }
+
+    static func normalizedTurnCompletionNotification(
+        _ value: String?
+    ) -> TurnCompletionNotificationPreference {
+        guard let value,
+              let preference = TurnCompletionNotificationPreference(rawValue: value) else {
+            return turnCompletionNotificationDefault
+        }
+        return preference
     }
 }

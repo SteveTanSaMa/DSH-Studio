@@ -91,6 +91,7 @@
 		D5A7F0040000000000000004 /* DSH Studio/Sources/Runtime */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = "DSH Studio/Sources/Runtime"; sourceTree = "<group>"; };
 		D5A7F0050000000000000005 /* DSH Studio/Tests/HarnessRuntimeTests */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = "DSH Studio/Tests/HarnessRuntimeTests"; sourceTree = "<group>"; };
 		D5A7F0060000000000000006 /* DSH Studio/Sources/App/Settings */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = "DSH Studio/Sources/App/Settings"; sourceTree = "<group>"; };
+		D5A7F0070000000000000007 /* DSH Studio/Sources/App/Notifications */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = "DSH Studio/Sources/App/Notifications"; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -138,6 +139,7 @@
 				D5A7F0040000000000000004 /* DSH Studio/Sources/Runtime */,
 				D5A7F0050000000000000005 /* DSH Studio/Tests/HarnessRuntimeTests */,
 				D5A7F0060000000000000006 /* DSH Studio/Sources/App/Settings */,
+				D5A7F0070000000000000007 /* DSH Studio/Sources/App/Notifications */,
 				6109BBFD15CA2AAE04DF30D6 /* Products */,
 				E4C05BC83034D5F0007A488E /* Recovered References */,
 			);
@@ -238,6 +240,7 @@
 			fileSystemSynchronizedGroups = (
 				D5A7F0050000000000000005 /* DSH Studio/Tests/HarnessRuntimeTests */,
 				D5A7F0060000000000000006 /* DSH Studio/Sources/App/Settings */,
+				D5A7F0070000000000000007 /* DSH Studio/Sources/App/Notifications */,
 			);
 			name = HarnessRuntimeTests;
 			packageProductDependencies = (
