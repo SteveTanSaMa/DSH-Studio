@@ -16,6 +16,9 @@ public enum RuntimeError: Error, Equatable, Sendable {
     case nodeVersionMismatch(expected: String, actual: String)
     case harnessVersionMismatch(expected: String, actual: String)
     case dshHomeFailure(String)
+    case dataCompatibilityUnknown
+    case dataIncompatible
+    case dataMigrationRequired
     case workspaceFailure(String)
     case processLaunchFailed(String)
     case readyTimeout(TimeInterval)
@@ -36,6 +39,12 @@ public enum RuntimeError: Error, Equatable, Sendable {
             return "Harness version mismatch: expected \(expected), found \(actual)"
         case .dshHomeFailure(let detail):
             return "DSH_HOME failure: \(detail)"
+        case .dataCompatibilityUnknown:
+            return "Runtime data compatibility is unknown"
+        case .dataIncompatible:
+            return "Runtime data format is incompatible"
+        case .dataMigrationRequired:
+            return "Runtime data migration is required"
         case .workspaceFailure(let detail):
             return "Workspace failure: \(detail)"
         case .processLaunchFailed(let detail):

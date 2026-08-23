@@ -20,11 +20,13 @@ public final class RuntimeManager: ObservableObject {
     @Published public internal(set) var nodeVersion: String?
     @Published public internal(set) var harnessVersion: String?
     @Published public internal(set) var runtimeVersionStatus: RuntimeVersionStatus?
+    @Published public internal(set) var activeDataProfile: RuntimeDataProfile?
     @Published public internal(set) var restartCount = 0
 
     public internal(set) var configuration: RuntimeConfiguration
     public let logs: RuntimeLogStore
     public var restartPolicy: RestartPolicy
+    public let dataProfileStore: RuntimeDataProfileStore?
 
     private let processFactory: HarnessProcessFactory
     private let healthChecker: HarnessHealthChecking
@@ -44,6 +46,7 @@ public final class RuntimeManager: ObservableObject {
     private var stdoutBuffer = ""
     private var stderrBuffer = ""
     private var lastStderrLines: [String] = []
+    var dataHomeWasEmptyBeforeLaunch: Bool?
     private let readyPattern = try! NSRegularExpression(
         pattern: #"dsh web: (http://127\.0\.0\.1:\d+)"#
     )
@@ -61,7 +64,8 @@ public final class RuntimeManager: ObservableObject {
         restartPolicy: RestartPolicy = RestartPolicy(),
         validateRuntimeOnStart: Bool = true,
         provisioner: (any RuntimeProvisioning)? = nil,
-        updater: (any RuntimeUpdating)? = nil
+        updater: (any RuntimeUpdating)? = nil,
+        dataProfileStore: RuntimeDataProfileStore? = nil
     ) {
         self.configuration = configuration
         self.processFactory = processFactory
@@ -71,11 +75,14 @@ public final class RuntimeManager: ObservableObject {
         self.restartPolicy = restartPolicy
         self.validateRuntimeOnStart = validateRuntimeOnStart
         self.logs = RuntimeLogStore(logFileURL: logFileURL)
+        self.dataProfileStore = dataProfileStore
+        self.activeDataProfile = nil
         self.nodeVersion = RuntimeLocator.nodeVersion(nodeExecutable: configuration.nodeExecutable)
         self.harnessVersion = RuntimeLocator.packageJSONVersion(at: configuration.harnessEntry)
         self.runtimeVersionStatus = self.runtimeUpdater?.versionStatus()
         adoptInstalledRuntimeIfAvailable()
-        refreshRuntimeVersions()
+        loadSelectedDataProfile()
+        refreshRuntimeMetadata()
     }
 
     public func start() {
@@ -90,6 +97,7 @@ public final class RuntimeManager: ObservableObject {
         processExited = false
         stdoutBuffer = ""
         stderrBuffer = ""
+        dataHomeWasEmptyBeforeLaunch = nil
 
         if let runtimeUpdater {
             let status = runtimeUpdater.versionStatus()
@@ -99,6 +107,7 @@ public final class RuntimeManager: ObservableObject {
                 return
             }
             adoptInstalledRuntimeIfAvailable()
+            loadSelectedDataProfile()
         } else if let provisioner,
                   !RuntimeLocator.isComplete(
                       root: provisioner.root,
@@ -130,6 +139,7 @@ public final class RuntimeManager: ObservableObject {
     private func finishProvisioning(_ result: RuntimeProvisioningResult) {
         guard state == .provisioning else { return }
         applyRuntimeResult(result)
+        loadSelectedDataProfile()
         provisioningTask = nil
         beginLaunch()
     }
@@ -144,6 +154,7 @@ public final class RuntimeManager: ObservableObject {
         state = .launching
         processGeneration += 1
         let generation = processGeneration
+        dataHomeWasEmptyBeforeLaunch = dataProfileStore?.isDataHomeEmpty(configuration.dshHome)
 
         logs.log(component: "App", level: "info", message: "app launch")
         logs.log(component: "Runtime", level: "info", message: "node path \(configuration.nodeExecutable.path)")
@@ -153,6 +164,7 @@ public final class RuntimeManager: ObservableObject {
         if validateRuntimeOnStart {
             guard validateRuntime() else { return }
         }
+        guard validateDataProfileForCurrentRuntime() else { return }
         guard prepareDirectories() else { return }
         cleanStaleProcessIfNeeded()
 
@@ -424,6 +436,10 @@ public final class RuntimeManager: ObservableObject {
             restartCount = 0
             readyURL = url
             state = .ready
+            guard activateSelectedDataProfileIfPossible() else {
+                fail(.runtimeProvisioningFailed("无法保存 Runtime 数据环境状态"))
+                return
+            }
             logs.log(component: "Harness", level: "info", message: "health check ok")
             logs.log(component: "Runtime", level: "info", message: "state ready")
         } else {
@@ -483,7 +499,7 @@ public final class RuntimeManager: ObservableObject {
         }
     }
 
-    private func fail(_ error: RuntimeError) {
+    func fail(_ error: RuntimeError) {
         startupTask?.cancel()
         startupTask = nil
         lastError = error

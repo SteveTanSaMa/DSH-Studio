@@ -9,6 +9,32 @@ import Foundation
 
 /// Version inspection, publication, and rollback operations for RuntimeProvisioner.
 extension RuntimeProvisioner {
+    func hasImmutableRuntimeVersionConflict(
+        with candidateRelease: RuntimeReleaseDescriptor
+    ) -> Bool {
+        var roots = [
+            root,
+            RuntimeLocator.candidateRoot(root: root, runtimeVersion: candidateRelease.runtimeVersion)
+        ]
+        if root.lastPathComponent == "Runtime",
+           let versionedRoot = RuntimeLocator.versionedRuntimeRoot(
+               supportDirectory: root.deletingLastPathComponent(),
+               runtimeVersion: candidateRelease.runtimeVersion
+           ) {
+            roots.append(versionedRoot)
+        }
+        for candidateRoot in roots {
+            guard let installed = RuntimeLocator.installationManifest(root: candidateRoot),
+                  installed.runtimeVersion == candidateRelease.runtimeVersion else {
+                continue
+            }
+            if !installed.matches(candidateRelease) {
+                return true
+            }
+        }
+        return false
+    }
+
     public func versionStatus() -> RuntimeVersionStatus {
         let installed = RuntimeLocator.installationManifest(root: root)
         let current = RuntimeLocator.isComplete(
@@ -21,28 +47,66 @@ extension RuntimeProvisioner {
             expectedRelease: release
         )
         let rootExists = fileManager.fileExists(atPath: root.path)
+        let candidateRoot = RuntimeLocator.candidateRoot(
+            root: root,
+            runtimeVersion: release.runtimeVersion
+        )
+        let prepared = RuntimeLocator.installationManifest(root: candidateRoot)
+        let candidateIsComplete = prepared?.matches(release) == true
+            && RuntimeLocator.isCompleteInstallation(
+                root: candidateRoot,
+                architecture: architecture,
+                fileManager: fileManager
+            )
+        let installedIsComplete = installed.map { _ in
+            RuntimeLocator.isCompleteInstallation(
+                root: root,
+                architecture: architecture,
+                fileManager: fileManager
+            )
+        } ?? false
+        let installedIsOlder = installed.map {
+            RuntimeVersionOrdering.compare($0.runtimeVersion, release.runtimeVersion) == .orderedAscending
+        } ?? false
+        let activeVersionConflict = installed?.runtimeVersion == release.runtimeVersion
+            && installed?.matches(release) == false
+        let versionConflict = hasImmutableRuntimeVersionConflict(with: release)
         let kind: RuntimeVersionStatusKind
-        if current {
+        if activeVersionConflict {
+            kind = .invalid
+        } else if versionConflict {
+            // A conflicting candidate must not make a healthy active Runtime
+            // unlaunchable. Update operations still reject it before any
+            // download or activation, but the current Runtime remains usable.
+            kind = .updateBlocked
+        } else if candidateIsComplete && installedIsComplete && !current && installedIsOlder {
+            kind = .updatePrepared
+        } else if current {
             kind = .current
-        } else if let installed,
-                  RuntimeLocator.isCompleteInstallation(
-                      root: root,
-                      architecture: architecture,
-                      fileManager: fileManager
-                  ),
-                  installed.architecture == architecture {
-            kind = .updateAvailable
+        } else if let installed, installedIsComplete, installed.architecture == architecture {
+            switch RuntimeVersionOrdering.compare(installed.runtimeVersion, release.runtimeVersion) {
+            case .orderedAscending:
+                kind = .updateAvailable
+            case .orderedSame:
+                kind = .invalid
+            case .orderedDescending:
+                kind = .newerInstalled
+            }
         } else if installed == nil && !rootExists {
             kind = .missing
         } else {
             kind = .invalid
         }
+        let rollbackRoot = versionedRollbackRoot() ?? RuntimeLocator.rollbackRoot(root: root)
         return RuntimeVersionStatus(
             kind: kind,
             installed: installed,
             available: release,
+            prepared: candidateIsComplete ? prepared : nil,
+            activeProfileID: dataProfileID,
+            activeDataFormatID: dataProfileStore?.dataFormatID(forProfileID: dataProfileID),
             rollbackAvailable: RuntimeLocator.isCompleteInstallation(
-                root: RuntimeLocator.rollbackRoot(root: root),
+                root: rollbackRoot,
                 architecture: architecture,
                 fileManager: fileManager
             )
@@ -50,6 +114,18 @@ extension RuntimeProvisioner {
     }
 
     public func rollback() throws -> RuntimeProvisioningResult {
+        if let versioned = versionedRollbackRoot() {
+            guard RuntimeLocator.isCompleteInstallation(
+                root: versioned,
+                architecture: architecture,
+                fileManager: fileManager
+            ) else {
+                throw RuntimeProvisioningError.rollbackUnavailable
+            }
+            root = versioned
+            return try existingResult()
+        }
+
         let backup = RuntimeLocator.rollbackRoot(root: root)
         guard RuntimeLocator.isCompleteInstallation(
             root: backup,
@@ -139,5 +215,47 @@ extension RuntimeProvisioner {
         } catch {
             throw RuntimeProvisioningError.installationFailed(error.localizedDescription)
         }
+    }
+
+    func publish(staging: URL, to destination: URL) throws {
+        guard destination.standardizedFileURL != root.standardizedFileURL else {
+            try publish(staging: staging)
+            return
+        }
+        do {
+            let parent = destination.deletingLastPathComponent()
+            try fileManager.createDirectory(at: parent, withIntermediateDirectories: true)
+            if fileManager.fileExists(atPath: destination.path) {
+                try fileManager.removeItem(at: destination)
+            }
+            try fileManager.moveItem(at: staging, to: destination)
+        } catch {
+            throw RuntimeProvisioningError.installationFailed(error.localizedDescription)
+        }
+    }
+
+    var versionedSupportDirectory: URL? {
+        guard root.deletingLastPathComponent().lastPathComponent == "Runtimes" else {
+            return nil
+        }
+        return root.deletingLastPathComponent().deletingLastPathComponent()
+    }
+
+    private func versionedRollbackRoot() -> URL? {
+        guard let supportDirectory = versionedSupportDirectory,
+              let state = dataProfileStore?.activeState() else {
+            return nil
+        }
+
+        let currentVersion = RuntimeLocator.installationManifest(root: root)?.runtimeVersion
+        let targetVersion = currentVersion == state.runtimeVersion
+            ? state.previousRuntimeVersion
+            : state.runtimeVersion
+        guard let targetVersion,
+              targetVersion != currentVersion else { return nil }
+        return RuntimeLocator.versionedRuntimeRoot(
+            supportDirectory: supportDirectory,
+            runtimeVersion: targetVersion
+        )
     }
 }

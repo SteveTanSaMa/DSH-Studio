@@ -29,7 +29,7 @@ public enum HarnessLayoutWebBridge {
         /* Give the conversation room to grow with the host window while
            retaining a readable lower bound and an App-configurable upper bound. */
         [data-phase][class*="_root"] {
-          --dsh-chat-content-width: clamp(748px, calc(100% - 96px), var(--deepseek-studio-chat-max-width, 1200px)) !important;
+          --dsh-chat-content-width: clamp(748px, calc(100% - 96px), var(--deepseek-studio-chat-max-width, 1000px)) !important;
         }
 
         /* Keep the controls on Harness's own flex row. The live insets below
@@ -67,6 +67,75 @@ public enum HarnessLayoutWebBridge {
           :is([data-pane="conversation"], [class*="centerCol"]) {
           position: relative !important;
           z-index: 1 !important;
+        }
+
+        /* Tooltips are fixed-position descendants, but WebKit still honors
+           paint clipping on the skin frame and its sidebar column. Release
+           those two boundaries so a rail tooltip can cross into the message
+           area instead of being cut at the column edge. */
+        body[data-dsh-maid-atelier] [class*="_frame"],
+        body[data-dsh-maid-atelier]
+          :is([data-pane="sidebar"], [class*="sidebarCol"]) {
+          overflow: visible !important;
+        }
+
+        /* Rail tooltips are mounted next to their anchors. Release the
+           sidebar's clipping chain so the two controls in the logo and
+           workspace header can paint their hover surfaces outside the local
+           36px cells. */
+        body[data-dsh-maid-atelier]
+          :is([data-pane="sidebar"], [class*="sidebarCol"])
+          > div,
+        body[data-dsh-maid-atelier]
+          :is([data-pane="sidebar"], [class*="sidebarCol"])
+          [class*="_regionArea"],
+        body[data-dsh-maid-atelier]
+          :is([data-pane="sidebar"], [class*="sidebarCol"])
+          [class*="_sectionHeader"],
+        body[data-dsh-maid-atelier]
+          :is([data-pane="sidebar"], [class*="sidebarCol"])
+          [class*="_headerActions"],
+        body[data-dsh-maid-atelier]
+          :is([data-pane="sidebar"], [class*="sidebarCol"])
+          [class*="_logoRow"] {
+          overflow: visible !important;
+        }
+
+        /* Keep the add-workspace and collapse buttons above the skin frame
+           even when their own component creates a local stacking context. */
+        body[data-dsh-maid-atelier]
+          :is([data-pane="sidebar"], [class*="sidebarCol"])
+          :is(
+            [class*="_headerActions"] [class*="_iconButton"],
+            [class*="_logoRow"] [class*="_toggle"]
+          ) {
+          position: relative !important;
+          z-index: 6 !important;
+          overflow: visible !important;
+        }
+
+        /* The skin gives the two rail branches their own z-index:2 stacking
+           contexts. Promote only those branches so their z-index:1200
+           tooltips can clear the skin's z-index:4 frame line. */
+        body[data-dsh-maid-atelier]
+          :is([data-pane="sidebar"], [class*="sidebarCol"])
+          > div
+          > :is([class*="_regionArea"], [class*="_logoRow"]) {
+          position: relative !important;
+          z-index: 1200 !important;
+        }
+
+        body[data-dsh-maid-atelier]
+          :is([data-pane="sidebar"], [class*="sidebarCol"])
+          > div:has([role="tooltip"]) {
+          z-index: 1200 !important;
+        }
+
+        body[data-dsh-maid-atelier]
+          :is([data-pane="sidebar"], [class*="sidebarCol"])
+          [role="tooltip"] {
+          position: fixed !important;
+          z-index: 1200 !important;
         }
 
         /* Keep each workspace group in the same width budget as the session

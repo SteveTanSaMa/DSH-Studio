@@ -28,6 +28,27 @@ extension RuntimeState {
     }
 }
 
+extension RuntimeVersionStatus {
+    var harnessDisplayName: String {
+        switch kind {
+        case .missing:
+            return "尚未安装"
+        case .invalid:
+            return "需要修复或更新"
+        case .current:
+            return "已是最新版本"
+        case .newerInstalled:
+            return "已安装更新版本"
+        case .updateAvailable:
+            return "发现新版本"
+        case .updatePrepared:
+            return "新版本已下载并验证"
+        case .updateBlocked:
+            return "更新暂不可用"
+        }
+    }
+}
+
 extension RuntimeError {
     var uiDescription: String {
         switch self {
@@ -43,6 +64,12 @@ extension RuntimeError {
             return "Harness 版本不匹配：期望 \(LogRedactor.redact(expected))，实际 \(LogRedactor.redact(actual))"
         case .dshHomeFailure(let detail):
             return "Harness 数据目录错误：\(LogRedactor.redact(detail))"
+        case .dataCompatibilityUnknown:
+            return "无法确认当前数据与 Runtime 是否兼容"
+        case .dataIncompatible:
+            return "当前数据与 Runtime 格式不兼容"
+        case .dataMigrationRequired:
+            return "当前数据需要迁移后才能使用此 Runtime"
         case .workspaceFailure(let detail):
             return "工作区错误：\(LogRedactor.redact(detail))"
         case .processLaunchFailed(let detail):

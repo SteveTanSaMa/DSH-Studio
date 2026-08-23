@@ -13,7 +13,10 @@ import Foundation
 extension RuntimeProvisioner {
     /// Compatibility path for local development builds that have not yet
     /// received a published artifact catalog.
-    func installLegacy(force: Bool) async throws -> RuntimeProvisioningResult {
+    func installLegacy(
+        force: Bool,
+        destinationRoot: URL? = nil
+    ) async throws -> RuntimeProvisioningResult {
         // Work happens in an isolated staging directory and is published only
         // after checksum, Node, npm, Harness, and native dependency checks.
         guard RuntimeRelease.nodeArchiveURL(
@@ -22,8 +25,9 @@ extension RuntimeProvisioner {
         ) != nil else {
             throw RuntimeProvisioningError.unsupportedArchitecture(architecture)
         }
-        if !force && RuntimeLocator.isComplete(
-            root: root,
+        let destination = destinationRoot ?? root
+        if !force && destination == root && RuntimeLocator.isComplete(
+            root: destination,
             architecture: architecture,
             fileManager: fileManager,
             expectedNodeVersion: release.nodeVersion,
@@ -35,22 +39,23 @@ extension RuntimeProvisioner {
             return try existingResult()
         }
 
-        let packageLockData = try loadPackageLockData()
-        do {
-            try RuntimePackageLockValidator.validate(
-                data: packageLockData,
-                expectedHarnessVersion: release.harnessVersion,
-                expectedHarnessIntegrity: release.harnessPackageIntegrity,
-                expectedPnpmVersion: release.pnpmVersion,
-                expectedPnpmIntegrity: release.pnpmPackageIntegrity
-            )
-        } catch let error as RuntimeProvisioningError {
-            throw error
-        } catch {
-            throw RuntimeProvisioningError.invalidPackageLock(error.localizedDescription)
+        if let packageLockData = packageLockDataOverride {
+            do {
+                try RuntimePackageLockValidator.validate(
+                    data: packageLockData,
+                    expectedHarnessVersion: release.harnessVersion,
+                    expectedHarnessIntegrity: release.harnessPackageIntegrity,
+                    expectedPnpmVersion: release.pnpmVersion,
+                    expectedPnpmIntegrity: release.pnpmPackageIntegrity
+                )
+            } catch let error as RuntimeProvisioningError {
+                throw error
+            } catch {
+                throw RuntimeProvisioningError.invalidPackageLock(error.localizedDescription)
+            }
         }
 
-        let parent = root.deletingLastPathComponent()
+        let parent = destination.deletingLastPathComponent()
         let staging = parent.appendingPathComponent(".Runtime-\(UUID().uuidString)", isDirectory: true)
         try createDirectory(parent)
         try createDirectory(staging)
@@ -107,23 +112,26 @@ extension RuntimeProvisioner {
             pnpmVersion: release.pnpmVersion
         )
             .write(to: harnessRoot.appendingPathComponent("package.json"), options: .atomic)
-        try packageLockData.write(to: harnessRoot.appendingPathComponent("package-lock.json"), options: .atomic)
+        if let packageLockData = packageLockDataOverride {
+            try packageLockData.write(to: harnessRoot.appendingPathComponent("package-lock.json"), options: .atomic)
+        }
 
         let npmCLI = nodeRoot.appendingPathComponent("lib/node_modules/npm/bin/npm-cli.js")
         guard fileManager.fileExists(atPath: npmCLI.path) else {
             throw RuntimeProvisioningError.runtimeValidationFailed("官方 Node 发行包缺少 npm")
         }
+        let npmArguments = [
+            npmCLI.path,
+            packageLockDataOverride == nil ? "install" : "ci",
+            "--ignore-scripts",
+            "--include=optional",
+            "--no-audit",
+            "--no-fund",
+            "--registry", RuntimeRelease.npmRegistryURL.absoluteString
+        ]
         let npmResult = try commandRunner.run(
             executable: nodeExecutable,
-            arguments: [
-                npmCLI.path,
-                "ci",
-                "--ignore-scripts",
-                "--include=optional",
-                "--no-audit",
-                "--no-fund",
-                "--registry", RuntimeRelease.npmRegistryURL.absoluteString
-            ],
+            arguments: npmArguments,
             currentDirectory: harnessRoot,
             environment: commandEnvironment(nodeRoot: nodeRoot)
         )
@@ -165,16 +173,20 @@ extension RuntimeProvisioner {
             pnpmVersion: release.pnpmVersion,
             nodeSHA256: release.nodeArchiveSHA256,
             harnessPackageIntegrity: release.harnessPackageIntegrity,
-            pnpmPackageIntegrity: release.pnpmPackageIntegrity
+            pnpmPackageIntegrity: release.pnpmPackageIntegrity,
+            dataFormat: release.dataFormat
         )
         let manifestData = try JSONEncoder().encode(manifest)
         try manifestData.write(to: RuntimeLocator.runtimeManifestURL(root: staging), options: .atomic)
         try fileManager.removeItem(at: archive)
-        try publish(staging: staging)
-        return RuntimeProvisioningResult(root: root, architecture: architecture, manifest: manifest)
+        try publish(staging: staging, to: destination)
+        return RuntimeProvisioningResult(root: destination, architecture: architecture, manifest: manifest)
     }
 
-    func installArtifact(force: Bool) async throws -> RuntimeProvisioningResult {
+    func installArtifact(
+        force: Bool,
+        destinationRoot: URL? = nil
+    ) async throws -> RuntimeProvisioningResult {
         guard let artifact = release.artifact,
               artifact.architecture == architecture,
               artifact.runtimeVersion == release.runtimeVersion,
@@ -187,9 +199,11 @@ extension RuntimeProvisioner {
               artifact.sha256.allSatisfy(\.isHexDigit) else {
             throw RuntimeProvisioningError.runtimeValidationFailed("Runtime artifact 描述不完整")
         }
+        let destination = destinationRoot ?? root
         if !force,
+           destination == root,
            RuntimeLocator.isComplete(
-               root: root,
+               root: destination,
                architecture: architecture,
                fileManager: fileManager,
                expectedNodeVersion: release.nodeVersion,
@@ -201,7 +215,7 @@ extension RuntimeProvisioner {
             return try existingResult()
         }
 
-        let parent = root.deletingLastPathComponent()
+        let parent = destination.deletingLastPathComponent()
         let staging = parent.appendingPathComponent(".Runtime-\(UUID().uuidString)", isDirectory: true)
         try createDirectory(parent)
         try createDirectory(staging)
@@ -249,8 +263,8 @@ extension RuntimeProvisioner {
         }
         try validateInstalledRuntime(root: staging, manifest: manifest)
         try fileManager.removeItem(at: archive)
-        try publish(staging: staging)
-        return RuntimeProvisioningResult(root: root, architecture: architecture, manifest: manifest)
+        try publish(staging: staging, to: destination)
+        return RuntimeProvisioningResult(root: destination, architecture: architecture, manifest: manifest)
     }
 
     private func validateInstalledRuntime(

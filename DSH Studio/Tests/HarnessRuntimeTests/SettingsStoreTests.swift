@@ -9,29 +9,24 @@ import XCTest
 
 @testable import DeepSeekRuntime
 
-/// Verifies persistence boundaries and CSS width normalization.
+/// Verifies app-owned settings persistence and CSS width normalization.
 final class SettingsStoreTests: XCTestCase {
     @MainActor
-    func testInjectedDefaultsRemainTheOnlyWriteTarget() {
+    func testWorkspaceAndDataHomeUseFixedAppOwnedLocations() {
         let suiteName = "DeepSeekStudio.SettingsStoreTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defer { defaults.removePersistentDomain(forName: suiteName) }
 
+        defaults.set("/tmp/legacy-workspace", forKey: "workspacePath")
+        defaults.set("/tmp/legacy-data", forKey: "dshHomePath")
         let store = SettingsStore(defaults: defaults)
-        let workspace = URL(fileURLWithPath: "/tmp/deepseek-studio-test-workspace", isDirectory: true)
-        store.workspaceURL = workspace
-        let dshHome = URL(fileURLWithPath: "/tmp/deepseek-studio-test-data", isDirectory: true)
-        store.dshHomeURL = dshHome
-        store.chatContentMaxWidth = 1360
 
-        XCTAssertEqual(defaults.string(forKey: "workspacePath"), workspace.path)
-        XCTAssertEqual(defaults.string(forKey: SettingsStore.dshHomeKey), dshHome.path)
-        XCTAssertEqual(defaults.double(forKey: SettingsStore.chatContentMaxWidthKey), 1360)
+        XCTAssertEqual(store.workspaceURL, RuntimeLocator.defaultWorkspace())
+        XCTAssertEqual(store.dshHomeURL, RuntimeLocator.defaultDSHHome())
+        XCTAssertEqual(defaults.string(forKey: "workspacePath"), "/tmp/legacy-workspace")
+        XCTAssertEqual(defaults.string(forKey: "dshHomePath"), "/tmp/legacy-data")
         XCTAssertNil(defaults.object(forKey: "maxWidth"))
         XCTAssertNil(defaults.object(forKey: "automaticRestart"))
-
-        let reloaded = SettingsStore(defaults: defaults)
-        XCTAssertEqual(reloaded.dshHomeURL, dshHome)
     }
 
     @MainActor

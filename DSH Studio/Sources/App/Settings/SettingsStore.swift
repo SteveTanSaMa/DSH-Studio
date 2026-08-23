@@ -12,25 +12,17 @@ import Foundation
 @MainActor
 /// Persists only app-owned settings; Harness's own settings stay in Harness.
 final class SettingsStore: ObservableObject {
-    static let dshHomeKey = "dshHomePath"
     static let chatContentMaxWidthKey = "chatContentMaxWidth"
-    static let chatContentMaxWidthDefault = 1200.0
+    static let chatContentMaxWidthDefault = 1000.0
     static let chatContentMaxWidthRange = 748.0...2400.0
     static let chatContentMaxWidthStep = 16.0
 
     private let defaults: UserDefaults
 
-    @Published var workspaceURL: URL {
-        didSet {
-            defaults.set(workspaceURL.path, forKey: "workspacePath")
-        }
-    }
-
-    @Published var dshHomeURL: URL {
-        didSet {
-            defaults.set(dshHomeURL.path, forKey: Self.dshHomeKey)
-        }
-    }
+    /// Workspace and Harness data locations are app-owned fixed locations.
+    /// Older custom path values in UserDefaults are intentionally ignored.
+    let workspaceURL: URL
+    let dshHomeURL: URL
 
     @Published var chatContentMaxWidth: Double {
         didSet {
@@ -45,16 +37,10 @@ final class SettingsStore: ObservableObject {
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        // Paths are stored as strings for UserDefaults compatibility and are
-        // converted back to directory URLs at the boundary.
-        let savedWorkspace = defaults.string(forKey: "workspacePath")
-            .map { URL(fileURLWithPath: $0, isDirectory: true) }
-        workspaceURL = savedWorkspace ?? RuntimeLocator.defaultWorkspace()
+        workspaceURL = RuntimeLocator.defaultWorkspace()
             ?? RuntimeLocator.applicationSupportDirectory()!
                 .appendingPathComponent("Workspace", isDirectory: true)
-        let savedDSHHome = defaults.string(forKey: Self.dshHomeKey)
-            .map { URL(fileURLWithPath: $0, isDirectory: true) }
-        dshHomeURL = savedDSHHome ?? RuntimeLocator.defaultDSHHome()
+        dshHomeURL = RuntimeLocator.defaultDSHHome()
             ?? RuntimeLocator.applicationSupportDirectory()!
                 .appendingPathComponent("DSH_HOME", isDirectory: true)
         let storedWidth = (defaults.object(forKey: Self.chatContentMaxWidthKey) as? NSNumber)?.doubleValue

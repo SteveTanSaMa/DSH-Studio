@@ -13,7 +13,6 @@
 		8253FB285F88098D08E0806C /* libDeepSeekLogging.a in Frameworks */ = {isa = PBXBuildFile; fileRef = F909571DEA0A578AE06C4992 /* libDeepSeekLogging.a */; };
 		B5FDB2702541704DC4427E75 /* libDeepSeekHarness.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 8D815112A13191890BB1C897 /* libDeepSeekHarness.a */; };
 		D5A7B0010000000000000001 /* DSH Studio/Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = D5A7C0010000000000000001 /* DSH Studio/Assets.xcassets */; };
-		D5A7B0030000000000000003 /* DSH Studio/RuntimeManifest in Resources */ = {isa = PBXBuildFile; fileRef = D5A7C0030000000000000003 /* DSH Studio/RuntimeManifest */; };
 		DCF767977CB8818241A3104C /* libDeepSeekRuntime.a in Frameworks */ = {isa = PBXBuildFile; fileRef = EAD4210FB16AE2BCFCC642F8 /* libDeepSeekRuntime.a */; };
 /* End PBXBuildFile section */
 
@@ -81,7 +80,6 @@
 		8D815112A13191890BB1C897 /* libDeepSeekHarness.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libDeepSeekHarness.a; sourceTree = BUILT_PRODUCTS_DIR; };
 		C6B1936914B87F694A17B386 /* HarnessRuntimeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HarnessRuntimeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		D5A7C0010000000000000001 /* DSH Studio/Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "DSH Studio/Assets.xcassets"; sourceTree = SOURCE_ROOT; };
-		D5A7C0030000000000000003 /* DSH Studio/RuntimeManifest */ = {isa = PBXFileReference; lastKnownFileType = folder; path = "DSH Studio/RuntimeManifest"; sourceTree = SOURCE_ROOT; };
 		EAD4210FB16AE2BCFCC642F8 /* libDeepSeekRuntime.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libDeepSeekRuntime.a; sourceTree = BUILT_PRODUCTS_DIR; };
 		F909571DEA0A578AE06C4992 /* libDeepSeekLogging.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libDeepSeekLogging.a; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -149,7 +147,6 @@
 			isa = PBXGroup;
 			children = (
 				D5A7C0010000000000000001 /* DSH Studio/Assets.xcassets */,
-				D5A7C0030000000000000003 /* DSH Studio/RuntimeManifest */,
 			);
 			name = "Recovered References";
 			sourceTree = "<group>";
@@ -309,7 +306,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				D5A7B0010000000000000001 /* DSH Studio/Assets.xcassets in Resources */,
-				D5A7B0030000000000000003 /* DSH Studio/RuntimeManifest in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -510,6 +506,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = "SteveTan.DSH-Studio";
 				PRODUCT_MODULE_NAME = DSHStudio;
 				PRODUCT_NAME = "DSH Studio";
+				RUNTIME_CATALOG_PUBLIC_KEY = "gsY/vYpMdj+WKFXiR6HdnyHNooc03+NOuXeU1q3c3Oo=";
 				"PROVISIONING_PROFILE_SPECIFIER[sdk=macosx*]" = "";
 				SDKROOT = macosx;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -808,6 +805,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = "SteveTan.DSH-Studio";
 				PRODUCT_MODULE_NAME = DSHStudio;
 				PRODUCT_NAME = "DSH Studio";
+				RUNTIME_CATALOG_PUBLIC_KEY = "gsY/vYpMdj+WKFXiR6HdnyHNooc03+NOuXeU1q3c3Oo=";
 				"PROVISIONING_PROFILE_SPECIFIER[sdk=macosx*]" = "";
 				SDKROOT = macosx;
 				SWIFT_EMIT_LOC_STRINGS = YES;

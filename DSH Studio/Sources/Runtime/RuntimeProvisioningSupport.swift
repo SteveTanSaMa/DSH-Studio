@@ -42,6 +42,7 @@ public struct RuntimeReleaseDescriptor: Codable, Equatable, Sendable {
     public let harnessPackageIntegrity: String
     public let pnpmPackageIntegrity: String
     public let artifact: RuntimeArtifactDescriptor?
+    public let dataFormat: RuntimeDataFormatDescriptor?
 
     public init(
         architecture: String,
@@ -52,7 +53,8 @@ public struct RuntimeReleaseDescriptor: Codable, Equatable, Sendable {
         harnessPackageIntegrity: String,
         pnpmPackageIntegrity: String,
         runtimeVersion: String = RuntimeRelease.runtimeVersion,
-        artifact: RuntimeArtifactDescriptor? = nil
+        artifact: RuntimeArtifactDescriptor? = nil,
+        dataFormat: RuntimeDataFormatDescriptor? = nil
     ) {
         self.runtimeVersion = runtimeVersion
         self.architecture = architecture
@@ -63,6 +65,7 @@ public struct RuntimeReleaseDescriptor: Codable, Equatable, Sendable {
         self.harnessPackageIntegrity = harnessPackageIntegrity
         self.pnpmPackageIntegrity = pnpmPackageIntegrity
         self.artifact = artifact
+        self.dataFormat = dataFormat
     }
 
     public var versionLabel: String {
@@ -86,6 +89,7 @@ public struct RuntimeInstallationManifest: Codable, Equatable, Sendable {
     public let nodeSHA256: String
     public let harnessPackageIntegrity: String
     public let pnpmPackageIntegrity: String
+    public let dataFormat: RuntimeDataFormatDescriptor?
 
     public init(
         schemaVersion: Int = currentSchemaVersion,
@@ -96,7 +100,8 @@ public struct RuntimeInstallationManifest: Codable, Equatable, Sendable {
         pnpmVersion: String = RuntimeRelease.pnpmVersion,
         nodeSHA256: String,
         harnessPackageIntegrity: String,
-        pnpmPackageIntegrity: String = RuntimeRelease.pnpmPackageIntegrity
+        pnpmPackageIntegrity: String = RuntimeRelease.pnpmPackageIntegrity,
+        dataFormat: RuntimeDataFormatDescriptor? = nil
     ) {
         self.schemaVersion = schemaVersion
         self.runtimeVersion = runtimeVersion
@@ -107,6 +112,7 @@ public struct RuntimeInstallationManifest: Codable, Equatable, Sendable {
         self.nodeSHA256 = nodeSHA256
         self.harnessPackageIntegrity = harnessPackageIntegrity
         self.pnpmPackageIntegrity = pnpmPackageIntegrity
+        self.dataFormat = dataFormat
     }
 
     public var versionLabel: String {
@@ -123,6 +129,27 @@ public struct RuntimeInstallationManifest: Codable, Equatable, Sendable {
             && nodeSHA256 == release.nodeArchiveSHA256
             && harnessPackageIntegrity == release.harnessPackageIntegrity
             && pnpmPackageIntegrity == release.pnpmPackageIntegrity
+            && dataFormat == release.dataFormat
+    }
+}
+
+public extension RuntimeReleaseDescriptor {
+    /// Reconstructs the currently installed Runtime contract when no catalog
+    /// is available. The artifact remains nil because an installed manifest
+    /// proves what can be launched, not what may be downloaded next.
+    init(manifest: RuntimeInstallationManifest) {
+        self.init(
+            architecture: manifest.architecture,
+            nodeVersion: manifest.nodeVersion,
+            harnessVersion: manifest.harnessVersion,
+            pnpmVersion: manifest.pnpmVersion,
+            nodeArchiveSHA256: manifest.nodeSHA256,
+            harnessPackageIntegrity: manifest.harnessPackageIntegrity,
+            pnpmPackageIntegrity: manifest.pnpmPackageIntegrity,
+            runtimeVersion: manifest.runtimeVersion,
+            artifact: nil,
+            dataFormat: manifest.dataFormat
+        )
     }
 }
 
@@ -130,7 +157,10 @@ public enum RuntimeVersionStatusKind: String, Codable, Equatable, Sendable {
     case missing
     case invalid
     case current
+    case newerInstalled
     case updateAvailable
+    case updatePrepared
+    case updateBlocked
 }
 
 /// The result of comparing the installed Runtime with the app's pinned release.
@@ -138,22 +168,57 @@ public struct RuntimeVersionStatus: Codable, Equatable, Sendable {
     public let kind: RuntimeVersionStatusKind
     public let installed: RuntimeInstallationManifest?
     public let available: RuntimeReleaseDescriptor
+    public let prepared: RuntimeInstallationManifest?
+    public let activeProfileID: String?
+    public let activeDataFormatID: String?
     public let rollbackAvailable: Bool
 
     public init(
         kind: RuntimeVersionStatusKind,
         installed: RuntimeInstallationManifest?,
         available: RuntimeReleaseDescriptor,
+        prepared: RuntimeInstallationManifest? = nil,
+        activeProfileID: String? = nil,
+        activeDataFormatID: String? = nil,
         rollbackAvailable: Bool
     ) {
         self.kind = kind
         self.installed = installed
         self.available = available
+        self.prepared = prepared
+        self.activeProfileID = activeProfileID
+        self.activeDataFormatID = activeDataFormatID
         self.rollbackAvailable = rollbackAvailable
     }
 
     public var updateAvailable: Bool {
-        kind != .current
+        kind == .updateAvailable || kind == .updatePrepared
+    }
+
+    public var updatePrepared: Bool {
+        kind == .updatePrepared
+    }
+
+    /// Compares the candidate release with the data contract recorded by the
+    /// selected data profile. The installed Runtime's own declaration is not
+    /// used as a proxy for an unknown profile, because it does not prove what
+    /// is actually stored in that profile.
+    public var dataCompatibility: RuntimeDataCompatibility {
+        guard let dataFormat = available.dataFormat,
+              activeProfileID != nil else {
+            return .unknown
+        }
+        // The installed Runtime describes what it expects, not what is
+        // actually stored in an unregistered data home. Reusing that
+        // declaration here would turn an unknown profile into a false
+        // compatibility success.
+        return dataFormat.compatibility(with: activeDataFormatID)
+    }
+
+    /// A declared data contract is required before an update may reuse the
+    /// currently active data home.
+    public var canReuseInstalledData: Bool {
+        dataCompatibility == .compatible
     }
 
     public var displayName: String {
@@ -164,8 +229,32 @@ public struct RuntimeVersionStatus: Codable, Equatable, Sendable {
             return "Runtime 需要修复或更新"
         case .current:
             return "Runtime 已是最新版本"
+        case .newerInstalled:
+            return "已安装更高版本 Runtime"
         case .updateAvailable:
-            return "发现 Runtime 更新"
+            switch dataCompatibility {
+            case .compatible:
+                return "发现 Runtime 更新"
+            case .incompatible:
+                return "发现 Runtime 更新，但数据格式不兼容"
+            case .requiresMigration:
+                return "发现 Runtime 更新，需要数据迁移"
+            case .unknown:
+                return "发现 Runtime 更新，需要确认数据兼容性"
+            }
+        case .updatePrepared:
+            switch dataCompatibility {
+            case .compatible:
+                return "Runtime 更新已下载并验证"
+            case .incompatible:
+                return "Runtime 更新已准备，但数据格式不兼容"
+            case .requiresMigration:
+                return "Runtime 更新已准备，但需要数据迁移"
+            case .unknown:
+                return "Runtime 更新已准备，需要确认数据兼容性"
+            }
+        case .updateBlocked:
+            return "Runtime 更新版本内容冲突，需要修复"
         }
     }
 }
@@ -194,6 +283,9 @@ public enum RuntimeProvisioningError: Error, Equatable, LocalizedError, Sendable
     case installationFailed(String)
     case runtimeValidationFailed(String)
     case runtimeArtifactUnavailable
+    case dataCompatibilityUnknown
+    case dataIncompatible
+    case dataMigrationRequired
     case rollbackUnavailable
     case rollbackFailed(String)
 
@@ -217,6 +309,12 @@ public enum RuntimeProvisioningError: Error, Equatable, LocalizedError, Sendable
             return "Runtime 安装结果无效：\(detail)"
         case .runtimeArtifactUnavailable:
             return "当前 App 未包含可验证的 Runtime artifact"
+        case .dataCompatibilityUnknown:
+            return "无法确认新 Runtime 与当前数据是否兼容，已阻止自动接管"
+        case .dataIncompatible:
+            return "新 Runtime 与当前数据格式不兼容，已阻止自动接管"
+        case .dataMigrationRequired:
+            return "新 Runtime 需要数据迁移，已阻止自动接管"
         case .rollbackUnavailable:
             return "没有可用的 Runtime 回滚版本"
         case .rollbackFailed(let detail):
@@ -377,9 +475,38 @@ public protocol RuntimeUpdating: RuntimeProvisioning {
     func rollback() throws -> RuntimeProvisioningResult
 }
 
+/// Two-phase Runtime updates. Preparation may happen while the current
+/// Harness keeps running; activation is the explicit point where the active
+/// Runtime is replaced.
+public protocol RuntimeCandidateUpdating: RuntimeUpdating {
+    func prepareUpdate() async throws -> RuntimeProvisioningResult
+    func activatePreparedUpdate() throws -> RuntimeProvisioningResult
+}
+
+/// Replaces the release selected by an already-running app after a verified
+/// remote catalog has been discovered. This does not install or activate a
+/// Runtime; it only changes the next update target.
+public protocol RuntimeReleaseUpdating: Sendable {
+    var release: RuntimeReleaseDescriptor { get }
+    func setRelease(_ release: RuntimeReleaseDescriptor) throws
+}
+
+/// Lets the Runtime update layer evaluate a release against the data profile
+/// that the app is about to use. The Runtime and data profile remain separate
+/// objects even though the production provisioner needs the selected profile ID
+/// for status reporting.
+public protocol RuntimeDataProfileSelecting: Sendable {
+    var dataProfileID: String? { get }
+    func setDataProfileID(_ id: String?)
+}
+
 public enum RuntimeUpdateError: Error, Equatable, LocalizedError, Sendable {
     case unavailable
     case noUpdateAvailable
+    case runtimeVersionConflict
+    case dataCompatibilityUnknown
+    case dataIncompatible
+    case dataMigrationRequired
     case rollbackUnavailable
     case updateFailed(String)
     case rollbackFailed(String)
@@ -390,6 +517,14 @@ public enum RuntimeUpdateError: Error, Equatable, LocalizedError, Sendable {
             return "当前 Runtime 不支持在线更新"
         case .noUpdateAvailable:
             return "当前 Runtime 已是最新版本"
+        case .runtimeVersionConflict:
+            return "Runtime 更新版本内容冲突，已阻止更新"
+        case .dataCompatibilityUnknown:
+            return "无法确认新 Runtime 与当前数据是否兼容，已阻止自动接管"
+        case .dataIncompatible:
+            return "新 Runtime 与当前数据格式不兼容，已阻止自动接管"
+        case .dataMigrationRequired:
+            return "新 Runtime 需要数据迁移，已阻止自动接管"
         case .rollbackUnavailable:
             return "没有可用的 Runtime 回滚版本"
         case .updateFailed(let detail):

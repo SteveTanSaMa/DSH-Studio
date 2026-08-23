@@ -52,7 +52,7 @@ final class RuntimeReleaseCatalogTests: XCTestCase {
         let mismatchedArtifact = RuntimeArtifactDescriptor(
             runtimeVersion: "2026.08.21.test",
             architecture: architecture,
-            url: URL(string: "https://github.com/SteveTanSaMa/DSH-Studio/releases/download/runtime-\(runtimeVersion)/dsh-runtime-\(runtimeVersion)-\(architecture).tar.gz")!,
+            url: URL(string: "https://github.com/SteveTanSaMa/DSH-Studio-Runtime/releases/download/runtime-\(runtimeVersion)/dsh-runtime-\(runtimeVersion)-\(architecture).tar.gz")!,
             sha256: String(repeating: "b", count: 64)
         )
         let mismatchedRelease = RuntimeReleaseDescriptor(
@@ -67,6 +67,28 @@ final class RuntimeReleaseCatalogTests: XCTestCase {
             artifact: mismatchedArtifact
         )
         let catalog = RuntimeReleaseCatalog(runtimeVersion: runtimeVersion, releases: [mismatchedRelease])
+
+        XCTAssertNil(catalog.release(for: architecture))
+    }
+
+    func testCatalogRejectsUnsafeRuntimeVersion() throws {
+        let release = RuntimeReleaseDescriptor(
+            architecture: architecture,
+            nodeVersion: RuntimeRelease.nodeVersion,
+            harnessVersion: RuntimeRelease.harnessVersion,
+            pnpmVersion: RuntimeRelease.pnpmVersion,
+            nodeArchiveSHA256: String(repeating: "c", count: 64),
+            harnessPackageIntegrity: RuntimeRelease.harnessPackageIntegrity,
+            pnpmPackageIntegrity: RuntimeRelease.pnpmPackageIntegrity,
+            runtimeVersion: "..",
+            artifact: RuntimeArtifactDescriptor(
+                runtimeVersion: "..",
+                architecture: architecture,
+                url: URL(string: "https://github.com/SteveTanSaMa/DSH-Studio-Runtime/releases/download/runtime-../dsh-runtime-..-darwin-arm64.tar.gz")!,
+                sha256: String(repeating: "a", count: 64)
+            )
+        )
+        let catalog = RuntimeReleaseCatalog(runtimeVersion: "..", releases: [release])
 
         XCTAssertNil(catalog.release(for: architecture))
     }
@@ -88,7 +110,7 @@ final class RuntimeReleaseCatalogTests: XCTestCase {
             artifact: RuntimeArtifactDescriptor(
                 runtimeVersion: runtimeVersion,
                 architecture: architecture,
-                url: URL(string: "https://github.com/SteveTanSaMa/DSH-Studio/releases/download/runtime-\(runtimeVersion)/dsh-runtime-\(runtimeVersion)-\(architecture).tar.gz")!,
+                url: URL(string: "https://github.com/SteveTanSaMa/DSH-Studio-Runtime/releases/download/runtime-\(runtimeVersion)/dsh-runtime-\(runtimeVersion)-\(architecture).tar.gz")!,
                 sha256: String(repeating: "a", count: 64)
             )
         )

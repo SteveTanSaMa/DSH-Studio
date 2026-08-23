@@ -64,7 +64,7 @@ public struct URLSessionRuntimeAssetDownloader: RuntimeAssetDownloading, Sendabl
         let components = url.path.split(separator: "/")
         return components.count == 6
             && components[0] == "SteveTanSaMa"
-            && components[1] == "DSH-Studio"
+            && components[1] == "DSH-Studio-Runtime"
             && components[2] == "releases"
             && components[3] == "download"
             && components[4].hasPrefix("runtime-")
@@ -82,6 +82,24 @@ public struct RuntimeCommandResult: Sendable {
         self.status = status
         self.stdout = stdout
         self.stderr = stderr
+    }
+}
+
+private final class RuntimePipeCollector: @unchecked Sendable {
+    private let lock = NSLock()
+    private var collectedData = Data()
+
+    func drain(_ handle: FileHandle) {
+        let data = handle.readDataToEndOfFile()
+        lock.lock()
+        collectedData = data
+        lock.unlock()
+    }
+
+    func data() -> Data {
+        lock.lock()
+        defer { lock.unlock() }
+        return collectedData
     }
 }
 
@@ -103,11 +121,14 @@ public struct SystemRuntimeCommandRunner: RuntimeCommandRunning, Sendable {
         currentDirectory: URL,
         environment: [String: String]
     ) throws -> RuntimeCommandResult {
-        // Both streams are bounded. stdout is needed for tar archive listings;
-        // stderr is retained for failure context without unbounded logs.
+        // Drain both pipes while the process runs. Waiting for exit first can
+        // deadlock when a command such as tar -tzf fills its stdout pipe.
         let process = Process()
         let outputPipe = Pipe()
         let errorPipe = Pipe()
+        let outputCollector = RuntimePipeCollector()
+        let errorCollector = RuntimePipeCollector()
+        let drainGroup = DispatchGroup()
         process.executableURL = executable
         process.arguments = arguments
         process.currentDirectoryURL = currentDirectory
@@ -115,13 +136,24 @@ public struct SystemRuntimeCommandRunner: RuntimeCommandRunning, Sendable {
         process.standardOutput = outputPipe
         process.standardError = errorPipe
         try process.run()
+
+        drainGroup.enter()
+        DispatchQueue.global(qos: .utility).async {
+            outputCollector.drain(outputPipe.fileHandleForReading)
+            drainGroup.leave()
+        }
+        drainGroup.enter()
+        DispatchQueue.global(qos: .utility).async {
+            errorCollector.drain(errorPipe.fileHandleForReading)
+            drainGroup.leave()
+        }
+
         process.waitUntilExit()
-        let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
-        let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
+        drainGroup.wait()
         return RuntimeCommandResult(
             status: process.terminationStatus,
-            stdout: bounded(String(data: outputData, encoding: .utf8) ?? ""),
-            stderr: bounded(String(data: errorData, encoding: .utf8) ?? "")
+            stdout: String(data: outputCollector.data(), encoding: .utf8) ?? "",
+            stderr: bounded(String(data: errorCollector.data(), encoding: .utf8) ?? "")
         )
     }
 
@@ -136,10 +168,16 @@ public struct SystemRuntimeCommandRunner: RuntimeCommandRunning, Sendable {
 /// Application Support. A complete installation is published only after every
 /// file has been verified, so an interrupted first launch cannot be mistaken
 /// for a usable Runtime.
-public final class RuntimeProvisioner: RuntimeUpdating, @unchecked Sendable {
-    public let root: URL
+public final class RuntimeProvisioner: RuntimeCandidateUpdating, RuntimeDataProfileSelecting, RuntimeReleaseUpdating, @unchecked Sendable {
+    public internal(set) var root: URL
     public let architecture: String
-    public let release: RuntimeReleaseDescriptor
+    public private(set) var release: RuntimeReleaseDescriptor
+    public let dataProfileStore: RuntimeDataProfileStore?
+    private var selectedDataProfileID: String?
+
+    public var dataProfileID: String? {
+        selectedDataProfileID ?? dataProfileStore?.activeState()?.profileID
+    }
 
     let fileManager: FileManager
     let bundle: Bundle
@@ -157,7 +195,9 @@ public final class RuntimeProvisioner: RuntimeUpdating, @unchecked Sendable {
         commandRunner: any RuntimeCommandRunning = SystemRuntimeCommandRunner(),
         packageLockData: Data? = nil,
         nodeArchiveSHA256Override: String? = nil,
-        release: RuntimeReleaseDescriptor? = nil
+        release: RuntimeReleaseDescriptor? = nil,
+        dataProfileStore: RuntimeDataProfileStore? = nil,
+        dataProfileID: String? = nil
     ) {
         self.root = root
         self.architecture = architecture
@@ -167,6 +207,8 @@ public final class RuntimeProvisioner: RuntimeUpdating, @unchecked Sendable {
         self.commandRunner = commandRunner
         self.packageLockDataOverride = packageLockData
         self.nodeArchiveSHA256Override = nodeArchiveSHA256Override
+        self.dataProfileStore = dataProfileStore
+        self.selectedDataProfileID = dataProfileID
         let baseRelease = release ?? Self.releaseDescriptor(architecture: architecture)
         if let nodeArchiveSHA256Override {
             self.release = RuntimeReleaseDescriptor(
@@ -178,7 +220,8 @@ public final class RuntimeProvisioner: RuntimeUpdating, @unchecked Sendable {
                 harnessPackageIntegrity: baseRelease.harnessPackageIntegrity,
                 pnpmPackageIntegrity: baseRelease.pnpmPackageIntegrity,
                 runtimeVersion: baseRelease.runtimeVersion,
-                artifact: baseRelease.artifact
+                artifact: baseRelease.artifact,
+                dataFormat: baseRelease.dataFormat
             )
         } else {
             self.release = baseRelease
@@ -186,22 +229,118 @@ public final class RuntimeProvisioner: RuntimeUpdating, @unchecked Sendable {
     }
 
     public func provision() async throws -> RuntimeProvisioningResult {
-        try await install(force: false)
+        guard !hasImmutableRuntimeVersionConflict(with: release) else {
+            throw RuntimeProvisioningError.runtimeValidationFailed(
+                "同一 Runtime 版本的内容不一致，拒绝覆盖已有安装"
+            )
+        }
+        return try await install(force: false)
+    }
+
+    public func setDataProfileID(_ id: String?) {
+        selectedDataProfileID = id
+    }
+
+    public func setRelease(_ release: RuntimeReleaseDescriptor) throws {
+        guard release.architecture == architecture,
+              RuntimeLocator.isSafeRuntimeVersion(release.runtimeVersion) else {
+            throw RuntimeProvisioningError.unsupportedArchitecture(release.architecture)
+        }
+        guard !hasImmutableRuntimeVersionConflict(with: release) else {
+            throw RuntimeProvisioningError.runtimeValidationFailed(
+                "同一 Runtime 版本的内容不一致，拒绝覆盖已有安装"
+            )
+        }
+        // A remote-only first launch starts with the legacy placeholder path
+        // before the catalog has been resolved. Once a verified release is
+        // known, place a missing installation in its versioned directory so
+        // the first provisioned Runtime follows the same layout as bundled
+        // catalog installations.
+        if !fileManager.fileExists(atPath: root.path) {
+            if root.lastPathComponent == "Runtime",
+               let versionedRoot = RuntimeLocator.versionedRuntimeRoot(
+                   supportDirectory: root.deletingLastPathComponent(),
+                   runtimeVersion: release.runtimeVersion
+               ) {
+                root = versionedRoot
+            } else if let supportDirectory = versionedSupportDirectory,
+                      let versionedRoot = RuntimeLocator.versionedRuntimeRoot(
+                          supportDirectory: supportDirectory,
+                          runtimeVersion: release.runtimeVersion
+                      ) {
+                // An active-state pointer may outlive a deleted versioned
+                // directory. Do not install a newer release into the old
+                // version's path.
+                root = versionedRoot
+            }
+        }
+        self.release = release
+    }
+
+    public func prepareUpdate() async throws -> RuntimeProvisioningResult {
+        guard !hasImmutableRuntimeVersionConflict(with: release) else {
+            throw RuntimeProvisioningError.runtimeValidationFailed(
+                "同一 Runtime 版本的内容不一致，拒绝覆盖已有安装"
+            )
+        }
+        let candidate = RuntimeLocator.candidateRoot(root: root, runtimeVersion: release.runtimeVersion)
+        if let manifest = RuntimeLocator.installationManifest(root: candidate),
+           manifest.matches(release),
+           RuntimeLocator.isCompleteInstallation(
+               root: candidate,
+               architecture: architecture,
+               fileManager: fileManager
+           ) {
+            return RuntimeProvisioningResult(root: candidate, architecture: architecture, manifest: manifest)
+        }
+        return try await install(force: true, destinationRoot: candidate)
+    }
+
+    public func activatePreparedUpdate() throws -> RuntimeProvisioningResult {
+        guard !hasImmutableRuntimeVersionConflict(with: release) else {
+            throw RuntimeProvisioningError.runtimeValidationFailed(
+                "同一 Runtime 版本的内容不一致，拒绝覆盖已有安装"
+            )
+        }
+        let candidate = RuntimeLocator.candidateRoot(root: root, runtimeVersion: release.runtimeVersion)
+        guard let manifest = RuntimeLocator.installationManifest(root: candidate),
+              manifest.matches(release),
+              RuntimeLocator.isCompleteInstallation(
+                  root: candidate,
+                  architecture: architecture,
+                  fileManager: fileManager
+              ) else {
+            throw RuntimeProvisioningError.runtimeValidationFailed("没有可激活的已验证 Runtime 更新")
+        }
+        if versionedSupportDirectory != nil,
+           RuntimeLocator.isVersionedRuntimeRoot(root, supportDirectory: versionedSupportDirectory!) {
+            // Versioned installations already live at their final path. The
+            // activation boundary is the RuntimeProvisioner root pointer; the
+            // durable active-state is written only after the new process is healthy.
+            self.root = candidate
+            return try existingResult()
+        }
+        try publish(staging: candidate)
+        return try existingResult()
     }
 
     public func update() async throws -> RuntimeProvisioningResult {
-        try await install(force: true)
+        _ = try await prepareUpdate()
+        return try activatePreparedUpdate()
     }
 
-    private func install(force: Bool) async throws -> RuntimeProvisioningResult {
+    private func install(
+        force: Bool,
+        destinationRoot: URL? = nil
+    ) async throws -> RuntimeProvisioningResult {
         if release.artifact != nil {
-            return try await installArtifact(force: force)
+            return try await installArtifact(force: force, destinationRoot: destinationRoot)
         }
 #if DEBUG
         // The legacy path remains available only for local development while
         // a release artifact is being built. Production apps must ship a
         // catalog entry and never install npm dependencies on the user Mac.
-        return try await installLegacy(force: force)
+        return try await installLegacy(force: force, destinationRoot: destinationRoot)
 #else
         throw RuntimeProvisioningError.runtimeArtifactUnavailable
 #endif
@@ -231,20 +370,6 @@ public final class RuntimeProvisioner: RuntimeUpdating, @unchecked Sendable {
             throw RuntimeProvisioningError.installationFailed("已存在的 Runtime manifest 无法读取")
         }
         return RuntimeProvisioningResult(root: root, architecture: architecture, manifest: manifest)
-    }
-
-    func loadPackageLockData() throws -> Data {
-        if let packageLockDataOverride {
-            return packageLockDataOverride
-        }
-        guard let url = bundle.url(
-            forResource: "package-lock",
-            withExtension: "json",
-            subdirectory: "RuntimeManifest"
-        ), let data = try? Data(contentsOf: url) else {
-            throw RuntimeProvisioningError.packageLockUnavailable
-        }
-        return data
     }
 
     func createDirectory(_ url: URL) throws {

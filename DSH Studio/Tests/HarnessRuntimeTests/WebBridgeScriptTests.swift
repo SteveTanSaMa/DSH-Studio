@@ -69,6 +69,61 @@ final class WebBridgeScriptTests: XCTestCase {
         XCTAssertFalse(source.contains("body[data-dsh-maid-atelier] [id=\"root\"]"))
     }
 
+    func testMaidAtelierSidebarControlsKeepNativeStackingOrder() {
+        let source = HarnessLayoutWebBridge.source
+
+        XCTAssertTrue(source.contains(":is([data-pane=\"sidebar\"], [class*=\"sidebarCol\"])"))
+        XCTAssertFalse(source.contains("z-index: 5 !important"))
+        XCTAssertTrue(source.contains("[class*=\"_frame\"]"))
+        XCTAssertTrue(source.contains("[class*=\"sidebarCol\"]"))
+        XCTAssertTrue(source.contains("overflow: visible !important"))
+        XCTAssertTrue(source.contains("[class*=\"_headerActions\"]"))
+        XCTAssertTrue(source.contains("[class*=\"_logoRow\"]"))
+        XCTAssertTrue(source.contains("[class*=\"_headerActions\"] [class*=\"_iconButton\"]"))
+        XCTAssertTrue(source.contains("[class*=\"_logoRow\"] [class*=\"_toggle\"]"))
+        XCTAssertTrue(source.contains("[role=\"tooltip\"]"))
+        XCTAssertTrue(source.contains("z-index: 6 !important"))
+        XCTAssertTrue(source.contains("z-index: 1200 !important"))
+    }
+
+    func testAppSettingsBridgeKeepsRuntimeDetailsInternal() throws {
+        let sourceURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/App/Web/AppSettingsWebBridge.swift")
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+
+        XCTAssertTrue(source.contains("appSettings.openDataFolder"))
+        XCTAssertTrue(source.contains("appSettings.copyDiagnostics"))
+        XCTAssertTrue(source.contains("appSettings.runtimeUpdate"))
+        XCTAssertTrue(source.contains("latestHarnessVersion"))
+        XCTAssertFalse(source.contains("availableHarnessVersion"))
+        XCTAssertFalse(source.contains("harnessStatus"))
+        XCTAssertTrue(source.contains("placeholder=\"748–2400\""))
+        XCTAssertFalse(source.contains("选择目录"))
+        XCTAssertTrue(source.contains("data-app-i18n=\"dataFolder\">数据文件夹"))
+        XCTAssertTrue(source.contains("data-app-i18n=\"harnessVersion\">Harness版本"))
+        XCTAssertTrue(source.contains("dsh-studio-app-settings-section-divider"))
+        XCTAssertTrue(source.contains("border-bottom: 1px solid var(--dsw-alias-border-l2)"))
+        XCTAssertTrue(source.contains("const messages ="))
+        XCTAssertTrue(source.contains("Chat content width"))
+        XCTAssertTrue(source.contains("document.documentElement?.lang"))
+        XCTAssertTrue(source.contains("attributeFilter: [\"lang\"]"))
+        XCTAssertTrue(source.contains("打开日志文件夹"))
+        XCTAssertTrue(source.contains("dsh-studio-app-settings-version-actions"))
+        XCTAssertFalse(source.contains("当前工作区"))
+        XCTAssertFalse(source.contains("当前数据文件夹"))
+        XCTAssertFalse(source.contains("<div class=\"dsh-studio-app-settings-section-title\">诊断</div>"))
+        XCTAssertFalse(source.contains("appSettings.chooseWorkspace"))
+        XCTAssertFalse(source.contains("appSettings.runtimeCheck"))
+        XCTAssertFalse(source.contains("appSettings.selectDataProfile"))
+        XCTAssertFalse(source.contains("appSettings.runtimeCreateProfile"))
+        XCTAssertFalse(source.contains("runtimeAvailableDataFormatID"))
+        XCTAssertFalse(source.contains("Node 版本"))
+        XCTAssertFalse(source.contains("Runtime 版本"))
+    }
+
     func testWorkspaceGroupsUseAvailableListWidthAroundScrollbar() {
         let source = HarnessLayoutWebBridge.source
 

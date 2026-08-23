@@ -110,7 +110,7 @@ final class RuntimeArtifactProvisionerTests: XCTestCase {
             artifact: RuntimeArtifactDescriptor(
                 runtimeVersion: runtimeVersion,
                 architecture: architecture,
-                url: URL(string: "https://github.com/SteveTanSaMa/DSH-Studio/releases/download/runtime-\(runtimeVersion)/dsh-runtime-\(runtimeVersion)-\(architecture).tar.gz")!,
+                url: URL(string: "https://github.com/SteveTanSaMa/DSH-Studio-Runtime/releases/download/runtime-\(runtimeVersion)/dsh-runtime-\(runtimeVersion)-\(architecture).tar.gz")!,
                 sha256: sha256
             )
         )

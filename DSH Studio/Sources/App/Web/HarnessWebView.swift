@@ -68,6 +68,7 @@ struct HarnessWebView: NSViewRepresentable {
         )
         configuration.userContentController.add(context.coordinator, name: AppSettingsWebBridge.messageHandlerName)
         let webView = WKWebView(frame: .zero, configuration: configuration)
+        webView.isInspectable = true
         webView.navigationDelegate = context.coordinator
         webView.uiDelegate = context.coordinator
         HarnessWebView.register(webView)
@@ -105,8 +106,24 @@ struct HarnessWebView: NSViewRepresentable {
         context.coordinator.webView = webView
         context.coordinator.allowedURL = runtime.readyURL
         context.coordinator.onWebContentTerminated = onWebContentTerminated
-        guard let url = runtime.readyURL, webView.url != url else { return }
+        guard let url = runtime.readyURL else { return }
+        // SwiftUI may call updateNSView for unrelated Runtime/settings changes.
+        // Compare the Harness endpoint instead of the full URL: WebKit can add
+        // a trailing slash or an SPA route after the initial navigation.
+        if sameHarnessEndpoint(webView.url, url) {
+            return
+        }
+        if webView.isLoading {
+            webView.stopLoading()
+        }
         webView.load(URLRequest(url: url))
+    }
+
+    private func sameHarnessEndpoint(_ current: URL?, _ expected: URL) -> Bool {
+        guard let current else { return false }
+        return current.scheme == expected.scheme
+            && current.host == expected.host
+            && current.port == expected.port
     }
 
     /// Owns WebKit delegates and serializes bridge requests on MainActor.
@@ -279,10 +296,6 @@ struct HarnessWebView: NSViewRepresentable {
                         webView: webView
                     )
                 }
-            case "appSettings.chooseWorkspace":
-                await chooseWorkspace(requestID: requestID, webView: webView)
-            case "appSettings.chooseDSHHome":
-                await chooseDSHHome(requestID: requestID, webView: webView)
             case "appSettings.openLogs":
                 if model.openLogs() {
                     sendAppSettingsReply(
@@ -297,22 +310,37 @@ struct HarnessWebView: NSViewRepresentable {
                         webView: webView
                     )
                 }
-            case "appSettings.runtimeCheck":
-                guard let coordinator = model.runtime.runtimeUpdateCoordinator else {
+            case "appSettings.openDataFolder":
+                if model.openDataFolder() {
                     sendAppSettingsReply(
                         requestID: requestID,
-                        errorCode: "runtime-update-unavailable",
-                        errorMessage: "当前 Runtime 不支持在线更新",
                         webView: webView
                     )
-                    return
+                } else {
+                    sendAppSettingsReply(
+                        requestID: requestID,
+                        errorCode: "data-folder-open-failed",
+                        errorMessage: "无法打开数据文件夹",
+                        webView: webView
+                    )
                 }
-                _ = coordinator.checkVersion()
-                sendAppSettingsReply(requestID: requestID, webView: webView)
+            case "appSettings.copyDiagnostics":
+                if model.copyDiagnostics() {
+                    sendAppSettingsReply(
+                        requestID: requestID,
+                        message: "诊断信息已复制",
+                        webView: webView
+                    )
+                } else {
+                    sendAppSettingsReply(
+                        requestID: requestID,
+                        errorCode: "diagnostics-copy-failed",
+                        errorMessage: "无法复制诊断信息",
+                        webView: webView
+                    )
+                }
             case "appSettings.runtimeUpdate":
                 await performRuntimeUpdate(requestID: requestID, webView: webView)
-            case "appSettings.runtimeRollback":
-                await performRuntimeRollback(requestID: requestID, webView: webView)
             default:
                 sendAppSettingsReply(
                     requestID: requestID,
@@ -324,47 +352,17 @@ struct HarnessWebView: NSViewRepresentable {
         }
 
         @MainActor
-        private func performRuntimeUpdate(requestID: String?, webView: WKWebView) async {
-            guard let coordinator = model.runtime.runtimeUpdateCoordinator else {
-                sendAppSettingsReply(
-                    requestID: requestID,
-                    errorCode: "runtime-update-unavailable",
-                    errorMessage: "当前 Runtime 不支持在线更新",
-                    webView: webView
-                )
-                return
-            }
+        private func performRuntimeUpdate(
+            requestID: String?,
+            webView: WKWebView
+        ) async {
             do {
-                try await coordinator.update()
+                try await model.updateRuntime()
                 sendAppSettingsReply(requestID: requestID, webView: webView)
             } catch {
                 sendAppSettingsReply(
                     requestID: requestID,
                     errorCode: "runtime-update-failed",
-                    errorMessage: LogRedactor.redact(error.localizedDescription),
-                    webView: webView
-                )
-            }
-        }
-
-        @MainActor
-        private func performRuntimeRollback(requestID: String?, webView: WKWebView) async {
-            guard let coordinator = model.runtime.runtimeUpdateCoordinator else {
-                sendAppSettingsReply(
-                    requestID: requestID,
-                    errorCode: "runtime-update-unavailable",
-                    errorMessage: "当前 Runtime 不支持在线更新",
-                    webView: webView
-                )
-                return
-            }
-            do {
-                try await coordinator.rollback()
-                sendAppSettingsReply(requestID: requestID, webView: webView)
-            } catch {
-                sendAppSettingsReply(
-                    requestID: requestID,
-                    errorCode: "runtime-rollback-failed",
                     errorMessage: LogRedactor.redact(error.localizedDescription),
                     webView: webView
                 )
@@ -382,80 +380,15 @@ struct HarnessWebView: NSViewRepresentable {
                     throw AppSettingsBridgeError(code: "invalid-app-setting", message: "对话最大宽度设置值无效")
                 }
                 let width = number.doubleValue
-                guard width.isFinite,
-                      SettingsStore.chatContentMaxWidthRange.contains(width) else {
+                guard width.isFinite else {
                     throw AppSettingsBridgeError(
                         code: "invalid-app-setting",
-                        message: "对话最大宽度必须在 748 到 2400 像素之间"
+                        message: "对话最大宽度设置值无效"
                     )
                 }
-                model.settings.chatContentMaxWidth = width
+                model.settings.chatContentMaxWidth = SettingsStore.normalizedChatContentMaxWidth(width)
             default:
                 throw AppSettingsBridgeError(code: "unknown-app-setting", message: "不支持的应用设置：\(key)")
-            }
-        }
-
-        @MainActor
-        private func chooseWorkspace(requestID: String?, webView: WKWebView) async {
-            let selectedURL = await chooseDirectory(
-                initialURL: model.settings.workspaceURL,
-                webView: webView
-            )
-            guard let selectedURL else {
-                sendAppSettingsReply(
-                    requestID: requestID,
-                    cancelled: true,
-                    webView: webView
-                )
-                return
-            }
-
-            await model.changeWorkspaceAndWait(to: selectedURL)
-            sendAppSettingsReply(
-                requestID: requestID,
-                webView: webView
-            )
-        }
-
-        @MainActor
-        private func chooseDSHHome(requestID: String?, webView: WKWebView) async {
-            let selectedURL = await chooseDirectory(
-                initialURL: model.settings.dshHomeURL,
-                webView: webView
-            )
-            guard let selectedURL else {
-                sendAppSettingsReply(
-                    requestID: requestID,
-                    cancelled: true,
-                    webView: webView
-                )
-                return
-            }
-
-            await model.changeDSHHomeAndWait(to: selectedURL)
-            sendAppSettingsReply(
-                requestID: requestID,
-                webView: webView
-            )
-        }
-
-        @MainActor
-        private func chooseDirectory(initialURL: URL, webView: WKWebView) async -> URL? {
-            let panel = NSOpenPanel()
-            panel.canChooseDirectories = true
-            panel.canChooseFiles = false
-            panel.allowsMultipleSelection = false
-            panel.canCreateDirectories = true
-            panel.directoryURL = initialURL
-            return await withCheckedContinuation { continuation in
-                if let window = webView.window {
-                    panel.beginSheetModal(for: window) { response in
-                        continuation.resume(returning: response == .OK ? panel.url : nil)
-                    }
-                } else {
-                    let response = panel.runModal()
-                    continuation.resume(returning: response == .OK ? panel.url : nil)
-                }
             }
         }
 
@@ -496,19 +429,14 @@ struct HarnessWebView: NSViewRepresentable {
         @MainActor
         private func appSettingsState() -> AppSettingsWebState {
             let currentRuntime = model.runtime
-            let versionStatus = currentRuntime.runtimeVersionStatus
             return AppSettingsWebState(
-                workspacePath: model.settings.workspaceURL.path,
+                workspacePath: NSString(string: model.settings.workspaceURL.path).abbreviatingWithTildeInPath,
                 chatContentMaxWidth: model.settings.chatContentMaxWidth,
-                dshHomePath: model.settings.dshHomeURL.path,
+                dshHomePath: NSString(string: model.currentDataHomeURL.path).abbreviatingWithTildeInPath,
                 runtimeError: currentRuntime.lastError?.uiDescription,
                 harnessVersion: currentRuntime.harnessVersion,
-                nodeVersion: currentRuntime.nodeVersion,
-                runtimeVersionStatus: versionStatus?.displayName ?? "正在检查",
-                runtimeInstalledVersion: versionStatus?.installed?.versionLabel,
-                runtimeAvailableVersion: versionStatus?.available.versionLabel,
-                runtimeUpdateAvailable: versionStatus?.updateAvailable ?? false,
-                runtimeRollbackAvailable: versionStatus?.rollbackAvailable ?? false
+                latestHarnessVersion: model.latestSignedHarnessVersion,
+                runtimeUpdateAvailable: model.hasVerifiedRuntimeUpdate
             )
         }
 
