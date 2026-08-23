@@ -97,7 +97,9 @@ final class WebBridgeScriptTests: XCTestCase {
         let source = try [
             "AppSettingsWebBridge.swift",
             "AppSettingsWebBridge+Behavior.swift",
-            "AppSettingsWebBridge+Styles.swift"
+            "AppSettingsWebBridge+Styles.swift",
+            "AppSettingsWebBridge+CSS.swift",
+            "AppSettingsWebBridge+Lifecycle.swift"
         ]
         .map { try String(contentsOf: sourceRoot.appendingPathComponent($0), encoding: .utf8) }
         .joined(separator: "\n")
@@ -118,14 +120,19 @@ final class WebBridgeScriptTests: XCTestCase {
         XCTAssertTrue(source.contains("Chat content width"))
         XCTAssertTrue(source.contains("data-app-i18n=\"notifications\">通知"))
         XCTAssertTrue(source.contains("data-app-i18n=\"turnCompletionNotification\">轮次完成通知"))
-        XCTAssertTrue(source.contains("设置 Harness 完成一轮后何时提醒你"))
-        XCTAssertTrue(source.contains("data-app-i18n=\"permissionNotifications\">权限通知"))
-        XCTAssertTrue(source.contains("需要你授权后才能继续时提醒你"))
-        XCTAssertTrue(source.contains("data-app-i18n=\"questionNotifications\">问题通知"))
-        XCTAssertTrue(source.contains("需要你输入后才能继续时提醒你"))
+        XCTAssertTrue(source.contains("设置 ChatGPT 完成后何时提醒您"))
+        XCTAssertTrue(source.contains("data-app-i18n=\"permissionNotifications\">启用权限通知"))
+        XCTAssertTrue(source.contains("在需要通知权限时显示提醒"))
+        XCTAssertTrue(source.contains("data-app-i18n=\"questionNotifications\">启用问题通知"))
+        XCTAssertTrue(source.contains("需要输入才能继续时显示提醒"))
         XCTAssertTrue(source.contains("turnCompletionNotification"))
         XCTAssertTrue(source.contains("permissionNotificationsEnabled"))
         XCTAssertTrue(source.contains("questionNotificationsEnabled"))
+        XCTAssertTrue(source.contains("role=\"switch\""))
+        XCTAssertTrue(source.contains("aria-haspopup=\"listbox\""))
+        XCTAssertTrue(source.contains("data-app-option=\"whenNotFocused\""))
+        XCTAssertFalse(source.contains("<select"))
+        XCTAssertFalse(source.contains("type=\"checkbox\""))
         XCTAssertTrue(source.contains("whenNotFocused"))
         XCTAssertTrue(source.contains("仅在未聚焦时"))
         XCTAssertTrue(source.contains("document.documentElement?.lang"))
@@ -142,6 +149,7 @@ final class WebBridgeScriptTests: XCTestCase {
         XCTAssertFalse(source.contains("runtimeAvailableDataFormatID"))
         XCTAssertFalse(source.contains("Node 版本"))
         XCTAssertFalse(source.contains("Runtime 版本"))
+
     }
 
     func testWorkspaceGroupsUseAvailableListWidthAroundScrollbar() {

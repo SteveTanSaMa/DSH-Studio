@@ -9,5 +9,5 @@ import Foundation
 /// official Settings > General surface.
 enum AppSettingsWebBridge {
     static let messageHandlerName = "deepseekStudio"
-    static let source = sourcePartOne + sourcePartTwo
+    static let source = sourcePartOne + sourcePartTwo + sourcePartThree
 }

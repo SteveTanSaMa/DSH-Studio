@@ -32,31 +32,37 @@ extension AppSettingsWebBridge {
           <div class="dsh-studio-app-settings-row">
             <div class="dsh-studio-app-settings-row-text">
               <div class="dsh-studio-app-settings-title" data-app-i18n="turnCompletionNotification">轮次完成通知</div>
-              <div class="dsh-studio-app-settings-detail" data-app-i18n="turnCompletionNotificationDetail">设置 Harness 完成一轮后何时提醒你</div>
+              <div class="dsh-studio-app-settings-detail" data-app-i18n="turnCompletionNotificationDetail">设置 ChatGPT 完成后何时提醒您</div>
             </div>
-            <select class="dsh-studio-app-settings-select" data-app-key="turnCompletionNotification" data-app-i18n-aria-label="turnCompletionNotificationAria" aria-label="轮次完成通知">
-              <option value="never" data-app-i18n="turnCompletionNever">从不</option>
-              <option value="always" data-app-i18n="turnCompletionAlways">始终</option>
-              <option value="whenNotFocused" data-app-i18n="turnCompletionWhenNotFocused">仅在未聚焦时</option>
-            </select>
+            <div class="dsh-studio-app-settings-select-wrap">
+              <button type="button" class="dsh-studio-app-settings-select-trigger" data-app-key="turnCompletionNotification" data-app-i18n-aria-label="turnCompletionNotificationAria" aria-label="轮次完成通知" aria-haspopup="listbox" aria-expanded="false">
+                <span data-app-field="turnCompletionNotificationValue"></span>
+                <span class="dsh-studio-app-settings-select-chevron" aria-hidden="true"></span>
+              </button>
+              <div class="dsh-studio-app-settings-select-menu" data-app-field="turnCompletionNotificationMenu" role="listbox" hidden>
+                <button type="button" class="dsh-studio-app-settings-select-option" data-app-option="never" data-app-i18n="turnCompletionNever" role="option">从不</button>
+                <button type="button" class="dsh-studio-app-settings-select-option" data-app-option="always" data-app-i18n="turnCompletionAlways" role="option">始终</button>
+                <button type="button" class="dsh-studio-app-settings-select-option" data-app-option="whenNotFocused" data-app-i18n="turnCompletionWhenNotFocused" role="option">仅在未聚焦时</button>
+              </div>
+            </div>
           </div>
           <div class="dsh-studio-app-settings-row">
             <div class="dsh-studio-app-settings-row-text">
-              <div class="dsh-studio-app-settings-title" data-app-i18n="permissionNotifications">权限通知</div>
-              <div class="dsh-studio-app-settings-detail" data-app-i18n="permissionNotificationsDetail">需要你授权后才能继续时提醒你</div>
+              <div class="dsh-studio-app-settings-title" data-app-i18n="permissionNotifications">启用权限通知</div>
+              <div class="dsh-studio-app-settings-detail" data-app-i18n="permissionNotificationsDetail">在需要通知权限时显示提醒</div>
             </div>
-            <label class="dsh-studio-app-settings-toggle">
-              <input type="checkbox" data-app-key="permissionNotificationsEnabled" data-app-i18n-aria-label="permissionNotificationsAria" aria-label="权限通知" />
-            </label>
+            <button type="button" class="dsh-studio-app-settings-switch" data-app-key="permissionNotificationsEnabled" data-app-i18n-aria-label="permissionNotificationsAria" aria-label="启用权限通知" role="switch" aria-checked="true">
+              <span class="dsh-studio-app-settings-switch-track"><span class="dsh-studio-app-settings-switch-thumb"></span></span>
+            </button>
           </div>
           <div class="dsh-studio-app-settings-row">
             <div class="dsh-studio-app-settings-row-text">
-              <div class="dsh-studio-app-settings-title" data-app-i18n="questionNotifications">问题通知</div>
-              <div class="dsh-studio-app-settings-detail" data-app-i18n="questionNotificationsDetail">需要你输入后才能继续时提醒你</div>
+              <div class="dsh-studio-app-settings-title" data-app-i18n="questionNotifications">启用问题通知</div>
+              <div class="dsh-studio-app-settings-detail" data-app-i18n="questionNotificationsDetail">需要输入才能继续时显示提醒</div>
             </div>
-            <label class="dsh-studio-app-settings-toggle">
-              <input type="checkbox" data-app-key="questionNotificationsEnabled" data-app-i18n-aria-label="questionNotificationsAria" aria-label="问题通知" />
-            </label>
+            <button type="button" class="dsh-studio-app-settings-switch" data-app-key="questionNotificationsEnabled" data-app-i18n-aria-label="questionNotificationsAria" aria-label="启用问题通知" role="switch" aria-checked="true">
+              <span class="dsh-studio-app-settings-switch-track"><span class="dsh-studio-app-settings-switch-thumb"></span></span>
+            </button>
           </div>
           <div class="dsh-studio-app-settings-row">
             <div class="dsh-studio-app-settings-row-text">
@@ -124,19 +130,34 @@ extension AppSettingsWebBridge {
               input.blur();
             }
           });
-          element.addEventListener("change", event => {
-            const control = event.target.closest?.("[data-app-key]");
-            if (!control || control.dataset.appKey === "chatContentMaxWidth") return;
-            if (control.dataset.appKey === "turnCompletionNotification") {
-              send("appSettings.update", { key: control.dataset.appKey, value: control.value });
-            }
-            if (control.dataset.appKey === "permissionNotificationsEnabled" || control.dataset.appKey === "questionNotificationsEnabled") {
-              send("appSettings.update", { key: control.dataset.appKey, value: control.checked });
-            }
-            scheduleEnsure();
-          });
         element.addEventListener("click", event => {
           const button = event.target.closest?.("[data-app-action]");
+          const option = event.target.closest?.("[data-app-option]");
+          const selectTrigger = event.target.closest?.('[data-app-key="turnCompletionNotification"]');
+          const switchControl = event.target.closest?.('[role="switch"]');
+          if (option && !option.disabled) {
+            const menu = option.closest('[data-app-field="turnCompletionNotificationMenu"]');
+            const trigger = element.querySelector('[data-app-key="turnCompletionNotification"]');
+            send("appSettings.update", { key: "turnCompletionNotification", value: option.dataset.appOption });
+            if (menu) menu.hidden = true;
+            if (trigger) trigger.setAttribute("aria-expanded", "false");
+            scheduleEnsure();
+            return;
+          }
+          if (selectTrigger && !selectTrigger.disabled) {
+            const menu = element.querySelector('[data-app-field="turnCompletionNotificationMenu"]');
+            const expanded = selectTrigger.getAttribute("aria-expanded") === "true";
+            if (menu) menu.hidden = expanded;
+            selectTrigger.setAttribute("aria-expanded", String(!expanded));
+            return;
+          }
+          if (switchControl && !switchControl.disabled) {
+            const value = switchControl.getAttribute("aria-checked") !== "true";
+            switchControl.setAttribute("aria-checked", String(value));
+            send("appSettings.update", { key: switchControl.dataset.appKey, value });
+            scheduleEnsure();
+            return;
+          }
           if (!button || button.disabled) return;
           const action = button.dataset.appAction;
           if (action === "openDataFolder") send("appSettings.openDataFolder");
@@ -174,19 +195,33 @@ extension AppSettingsWebBridge {
             : String(currentState.chatContentMaxWidth ?? 1000);
           chatWidth.disabled = busy;
         }
-        const completion = block.querySelector('select[data-app-key="turnCompletionNotification"]');
+        const completionValue = currentState.turnCompletionNotification || "whenNotFocused";
+        const completion = block.querySelector('[data-app-key="turnCompletionNotification"]');
         if (completion) {
-          completion.value = currentState.turnCompletionNotification || "whenNotFocused";
           completion.disabled = busy;
+          completion.setAttribute("aria-expanded", busy ? "false" : completion.getAttribute("aria-expanded") || "false");
         }
-        const permission = block.querySelector('input[data-app-key="permissionNotificationsEnabled"]');
+        const completionLabel = block.querySelector('[data-app-field="turnCompletionNotificationValue"]');
+        if (completionLabel) {
+          const option = block.querySelector(`[data-app-option="${completionValue}"]`);
+          completionLabel.textContent = option ? localized(option.dataset.appI18n, locale) : localized("turnCompletionWhenNotFocused", locale);
+        }
+        const completionMenu = block.querySelector('[data-app-field="turnCompletionNotificationMenu"]');
+        if (completionMenu) {
+          if (busy) completionMenu.hidden = true;
+          completionMenu.querySelectorAll("[data-app-option]").forEach(option => {
+            option.disabled = busy;
+            option.setAttribute("aria-selected", String(option.dataset.appOption === completionValue));
+          });
+        }
+        const permission = block.querySelector('[data-app-key="permissionNotificationsEnabled"]');
         if (permission) {
-          permission.checked = currentState.permissionNotificationsEnabled !== false;
+          permission.setAttribute("aria-checked", String(currentState.permissionNotificationsEnabled !== false));
           permission.disabled = busy;
         }
-        const question = block.querySelector('input[data-app-key="questionNotificationsEnabled"]');
+        const question = block.querySelector('[data-app-key="questionNotificationsEnabled"]');
         if (question) {
-          question.checked = currentState.questionNotificationsEnabled !== false;
+          question.setAttribute("aria-checked", String(currentState.questionNotificationsEnabled !== false));
           question.disabled = busy;
         }
         block.querySelectorAll("[data-app-action]").forEach(button => { button.disabled = busy; });
@@ -203,57 +238,5 @@ extension AppSettingsWebBridge {
         }
       };
 
-      const findOptions = () => document.querySelector(".VOzbGW_options") || document.querySelector('[class*="_options"]');
-
-      const removeBlocks = () => {
-        document.querySelectorAll(".dsh-studio-app-settings").forEach(element => element.remove());
-        block = null;
-        lastRenderedSignature = "";
-      };
-
-      // Harness can recreate the Settings DOM after navigation or tab changes;
-      // this reconciler puts the App-owned rows back when necessary.
-      const ensure = () => {
-        const options = findOptions();
-        const general = options?.querySelector("._WvWnq_section") || options?.querySelector('[class*="_WvWnq_section"]');
-        if (!general) {
-          removeBlocks();
-          return;
-        }
-        const existing = general.querySelector("[data-deepseek-studio-app-settings]");
-        if (existing) {
-          block = existing;
-        } else {
-          removeBlocks();
-          block = createBlock();
-          general.appendChild(block);
-        }
-        render();
-        if (Date.now() - lastStateRequestAt > 30000 && pending.size === 0) {
-          lastStateRequestAt = Date.now();
-          send("appSettings.request");
-        }
-      };
-
-      const scheduleEnsure = () => {
-        if (ensureScheduled) return;
-        ensureScheduled = true;
-        window.requestAnimationFrame(() => {
-          ensureScheduled = false;
-          ensure();
-        });
-      };
-
-      document.addEventListener("click", scheduleEnsure, true);
-      const observer = new MutationObserver(scheduleEnsure);
-      observer.observe(document.documentElement, {
-        attributes: true,
-        attributeFilter: ["lang"],
-        childList: true,
-        subtree: true,
-      });
-      send("appSettings.request");
-      scheduleEnsure();
-    })();
     """#
 }
