@@ -36,6 +36,12 @@ extension AppSettingsWebBridge {
         .dsh-studio-app-settings-row.last-row {
           border-bottom: none;
         }
+        .dsh-studio-app-settings-notification-row {
+          border-bottom: none;
+        }
+        .dsh-studio-app-settings-notification-row-last {
+          border-bottom: 1px solid var(--dsw-alias-border-l2);
+        }
         .dsh-studio-app-settings-row-text {
           display: flex;
           flex: 1;
@@ -224,8 +230,8 @@ extension AppSettingsWebBridge {
           flex: none;
           align-items: center;
           justify-content: center;
-          width: 36px;
-          height: 32px;
+          width: 52px;
+          height: 36px;
           padding: 0;
           border: none;
           border-radius: 999px;
@@ -236,9 +242,9 @@ extension AppSettingsWebBridge {
         .dsh-studio-app-settings-switch-track {
           position: relative;
           display: inline-block;
-          width: 20px;
-          height: 10px;
-          border-radius: 5px;
+          width: 32px;
+          height: 20px;
+          border-radius: 10px;
           background: var(--dsw-alias-border-l2);
           transition: background-color .12s var(--ds-ease-in-out);
         }
@@ -246,8 +252,8 @@ extension AppSettingsWebBridge {
           position: absolute;
           top: 2px;
           left: 2px;
-          width: 6px;
-          height: 6px;
+          width: 16px;
+          height: 16px;
           border-radius: 50%;
           background: var(--dsw-alias-bg-layer-1);
           transition: transform .12s var(--ds-ease-in-out);
@@ -256,7 +262,7 @@ extension AppSettingsWebBridge {
           background: var(--dsw-alias-state-business-primary);
         }
         .dsh-studio-app-settings-switch[aria-checked="true"] .dsh-studio-app-settings-switch-thumb {
-          transform: translateX(10px);
+          transform: translateX(12px);
         }
         .dsh-studio-app-settings-switch:hover:not(:disabled) .dsh-studio-app-settings-switch-track {
           filter: brightness(.96);

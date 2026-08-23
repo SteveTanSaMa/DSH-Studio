@@ -29,7 +29,7 @@ extension AppSettingsWebBridge {
             <input class="dsh-studio-app-settings-number" type="text" inputmode="numeric" placeholder="748–2400" data-app-key="chatContentMaxWidth" data-app-i18n-aria-label="chatContentWidthAria" aria-label="对话内容宽度" />
           </div>
           <div class="dsh-studio-app-settings-group-title" data-app-i18n="notifications">通知</div>
-          <div class="dsh-studio-app-settings-row">
+          <div class="dsh-studio-app-settings-row dsh-studio-app-settings-notification-row">
             <div class="dsh-studio-app-settings-row-text">
               <div class="dsh-studio-app-settings-title" data-app-i18n="turnCompletionNotification">轮次完成通知</div>
               <div class="dsh-studio-app-settings-detail" data-app-i18n="turnCompletionNotificationDetail">设置 ChatGPT 完成后何时提醒您</div>
@@ -46,7 +46,7 @@ extension AppSettingsWebBridge {
               </div>
             </div>
           </div>
-          <div class="dsh-studio-app-settings-row">
+          <div class="dsh-studio-app-settings-row dsh-studio-app-settings-notification-row">
             <div class="dsh-studio-app-settings-row-text">
               <div class="dsh-studio-app-settings-title" data-app-i18n="permissionNotifications">启用权限通知</div>
               <div class="dsh-studio-app-settings-detail" data-app-i18n="permissionNotificationsDetail">在需要通知权限时显示提醒</div>
@@ -55,7 +55,7 @@ extension AppSettingsWebBridge {
               <span class="dsh-studio-app-settings-switch-track"><span class="dsh-studio-app-settings-switch-thumb"></span></span>
             </button>
           </div>
-          <div class="dsh-studio-app-settings-row">
+          <div class="dsh-studio-app-settings-row dsh-studio-app-settings-notification-row dsh-studio-app-settings-notification-row-last">
             <div class="dsh-studio-app-settings-row-text">
               <div class="dsh-studio-app-settings-title" data-app-i18n="questionNotifications">启用问题通知</div>
               <div class="dsh-studio-app-settings-detail" data-app-i18n="questionNotificationsDetail">需要输入才能继续时显示提醒</div>
