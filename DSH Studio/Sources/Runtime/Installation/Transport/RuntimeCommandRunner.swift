@@ -17,24 +17,6 @@ public struct RuntimeCommandResult: Sendable {
     }
 }
 
-private final class RuntimePipeCollector: @unchecked Sendable {
-    private let lock = NSLock()
-    private var collectedData = Data()
-
-    func drain(_ handle: FileHandle) {
-        let data = handle.readDataToEndOfFile()
-        lock.lock()
-        collectedData = data
-        lock.unlock()
-    }
-
-    func data() -> Data {
-        lock.lock()
-        defer { lock.unlock() }
-        return collectedData
-    }
-}
-
 public protocol RuntimeCommandRunning: Sendable {
     func run(
         executable: URL,
@@ -53,39 +35,49 @@ public struct SystemRuntimeCommandRunner: RuntimeCommandRunning, Sendable {
         currentDirectory: URL,
         environment: [String: String]
     ) throws -> RuntimeCommandResult {
-        // Drain both pipes while the process runs. Waiting for exit first can
-        // deadlock when a command such as tar -tzf fills its stdout pipe.
+        // Redirect directly to temporary files so the caller only waits for the
+        // child process. Waiting on utility-QoS pipe-draining queues from a
+        // user-initiated task creates a priority inversion.
+        let fileManager = FileManager.default
+        let outputDirectory = fileManager.temporaryDirectory
+            .appendingPathComponent("DSHStudio-RuntimeCommand-\(UUID().uuidString)", isDirectory: true)
+        let outputURL = outputDirectory.appendingPathComponent("stdout", isDirectory: false)
+        let errorURL = outputDirectory.appendingPathComponent("stderr", isDirectory: false)
+        try fileManager.createDirectory(at: outputDirectory, withIntermediateDirectories: true)
+        defer {
+            try? fileManager.removeItem(at: outputDirectory)
+        }
+
+        try Data().write(to: outputURL, options: .atomic)
+        try Data().write(to: errorURL, options: .atomic)
+        var outputHandle: FileHandle?
+        var errorHandle: FileHandle?
+        defer {
+            try? outputHandle?.close()
+            try? errorHandle?.close()
+        }
+
+        outputHandle = try FileHandle(forWritingTo: outputURL)
+        errorHandle = try FileHandle(forWritingTo: errorURL)
+
         let process = Process()
-        let outputPipe = Pipe()
-        let errorPipe = Pipe()
-        let outputCollector = RuntimePipeCollector()
-        let errorCollector = RuntimePipeCollector()
-        let drainGroup = DispatchGroup()
         process.executableURL = executable
         process.arguments = arguments
         process.currentDirectoryURL = currentDirectory
         process.environment = environment
-        process.standardOutput = outputPipe
-        process.standardError = errorPipe
+        process.standardOutput = outputHandle
+        process.standardError = errorHandle
         try process.run()
-
-        drainGroup.enter()
-        DispatchQueue.global(qos: .utility).async {
-            outputCollector.drain(outputPipe.fileHandleForReading)
-            drainGroup.leave()
-        }
-        drainGroup.enter()
-        DispatchQueue.global(qos: .utility).async {
-            errorCollector.drain(errorPipe.fileHandleForReading)
-            drainGroup.leave()
-        }
-
         process.waitUntilExit()
-        drainGroup.wait()
+
+        try outputHandle?.close()
+        outputHandle = nil
+        try errorHandle?.close()
+        errorHandle = nil
         return RuntimeCommandResult(
             status: process.terminationStatus,
-            stdout: String(data: outputCollector.data(), encoding: .utf8) ?? "",
-            stderr: bounded(String(data: errorCollector.data(), encoding: .utf8) ?? "")
+            stdout: String(data: try Data(contentsOf: outputURL), encoding: .utf8) ?? "",
+            stderr: bounded(String(data: try Data(contentsOf: errorURL), encoding: .utf8) ?? "")
         )
     }
 

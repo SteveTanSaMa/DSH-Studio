@@ -15,7 +15,7 @@ final class RuntimeArchiveValidationTests: XCTestCase {
     node/
     node/darwin-arm64/bin/node
     harness/
-    harness/darwin-arm64/0.1.0-rc.6/package.json
+    harness/darwin-arm64/0.1.1-rc.2/package.json
     """
 
     func testValidBuilderListingIsAccepted() {

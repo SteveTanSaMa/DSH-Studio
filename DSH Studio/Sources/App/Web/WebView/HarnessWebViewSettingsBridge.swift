@@ -91,18 +91,112 @@ extension HarnessWebView.Coordinator: WKScriptMessageHandler {
                         webView: webView
                     )
                 }
-            case "appSettings.copyDiagnostics":
-                if model.copyDiagnostics() {
+            case "appSettings.chooseWorkspace":
+                do {
+                    let changed = try await model.chooseWorkspace()
                     sendAppSettingsReply(
                         requestID: requestID,
-                        message: "诊断信息已复制",
+                        message: changed ? "工作区已切换" : nil,
+                        cancelled: changed ? nil : true,
                         webView: webView
                     )
-                } else {
+                } catch {
                     sendAppSettingsReply(
                         requestID: requestID,
-                        errorCode: "diagnostics-copy-failed",
-                        errorMessage: "无法复制诊断信息",
+                        errorCode: "workspace-change-failed",
+                        errorMessage: LogRedactor.redact(error.localizedDescription),
+                        webView: webView
+                    )
+                }
+            case "appSettings.createProfile":
+                do {
+                    guard let name = body["name"] as? String else {
+                        throw AppSettingsBridgeError(code: "invalid-profile-name", message: "缺少 Profile 名称")
+                    }
+                    try model.createHarnessProfile(name: name)
+                    sendAppSettingsReply(requestID: requestID, message: "Profile 已创建", webView: webView)
+                } catch let error as AppSettingsBridgeError {
+                    sendAppSettingsReply(requestID: requestID, errorCode: error.code, errorMessage: error.message, webView: webView)
+                } catch {
+                    sendAppSettingsReply(requestID: requestID, errorCode: "profile-create-failed", errorMessage: LogRedactor.redact(error.localizedDescription), webView: webView)
+                }
+            case "appSettings.selectProfile":
+                do {
+                    guard let name = body["name"] as? String else {
+                        throw AppSettingsBridgeError(code: "invalid-profile-name", message: "缺少 Profile 名称")
+                    }
+                    _ = try await model.selectHarnessProfile(name: name)
+                    sendAppSettingsReply(requestID: requestID, message: "Profile 已切换", webView: webView)
+                } catch let error as AppSettingsBridgeError {
+                    sendAppSettingsReply(requestID: requestID, errorCode: error.code, errorMessage: error.message, webView: webView)
+                } catch {
+                    sendAppSettingsReply(requestID: requestID, errorCode: "profile-select-failed", errorMessage: LogRedactor.redact(error.localizedDescription), webView: webView)
+                }
+            case "appSettings.deleteProfile":
+                do {
+                    guard let name = body["name"] as? String else {
+                        throw AppSettingsBridgeError(code: "invalid-profile-name", message: "缺少 Profile 名称")
+                    }
+                    try model.deleteHarnessProfile(name: name)
+                    sendAppSettingsReply(requestID: requestID, message: "Profile 已删除", webView: webView)
+                } catch let error as AppSettingsBridgeError {
+                    sendAppSettingsReply(requestID: requestID, errorCode: error.code, errorMessage: error.message, webView: webView)
+                } catch {
+                    sendAppSettingsReply(requestID: requestID, errorCode: "profile-delete-failed", errorMessage: LogRedactor.redact(error.localizedDescription), webView: webView)
+                }
+            case "appSettings.importPreset":
+                do {
+                    guard let presetID = try await model.importAgentPreset() else {
+                        sendAppSettingsReply(requestID: requestID, cancelled: true, webView: webView)
+                        return
+                    }
+                    sendAppSettingsReply(
+                        requestID: requestID,
+                        message: "Agent Preset 已导入：\(presetID)",
+                        webView: webView
+                    )
+                } catch {
+                    sendAppSettingsReply(
+                        requestID: requestID,
+                        errorCode: "preset-import-failed",
+                        errorMessage: LogRedactor.redact(error.localizedDescription),
+                        webView: webView
+                    )
+                }
+            case "appSettings.exportPreset":
+                do {
+                    guard let destination = try await model.exportAgentPreset() else {
+                        sendAppSettingsReply(requestID: requestID, cancelled: true, webView: webView)
+                        return
+                    }
+                    sendAppSettingsReply(
+                        requestID: requestID,
+                        message: "Agent Preset 已导出：\(destination.lastPathComponent)",
+                        webView: webView
+                    )
+                } catch {
+                    sendAppSettingsReply(
+                        requestID: requestID,
+                        errorCode: "preset-export-failed",
+                        errorMessage: LogRedactor.redact(error.localizedDescription),
+                        webView: webView
+                    )
+                }
+            case "appSettings.exportDiagnostics":
+                do {
+                    let destination = try await model.exportDiagnostics()
+                    sendAppSettingsReply(
+                        requestID: requestID,
+                        message: "诊断包已保存到 \(destination.lastPathComponent)",
+                        webView: webView
+                    )
+                } catch DiagnosticsExportError.saveCancelled {
+                    sendAppSettingsReply(requestID: requestID, cancelled: true, webView: webView)
+                } catch {
+                    sendAppSettingsReply(
+                        requestID: requestID,
+                        errorCode: "diagnostics-export-failed",
+                        errorMessage: LogRedactor.redact(error.localizedDescription),
                         webView: webView
                     )
                 }
@@ -231,7 +325,16 @@ extension HarnessWebView.Coordinator: WKScriptMessageHandler {
                 runtimeUpdateAvailable: model.hasVerifiedRuntimeUpdate,
                 turnCompletionNotification: model.settings.turnCompletionNotification.rawValue,
                 permissionNotificationsEnabled: model.settings.permissionNotificationsEnabled,
-                questionNotificationsEnabled: model.settings.questionNotificationsEnabled
+                questionNotificationsEnabled: model.settings.questionNotificationsEnabled,
+                harnessProfileName: currentRuntime.configuration.profileName,
+                harnessProfiles: model.harnessProfiles.profiles().map {
+                    AppSettingsProfileState(
+                        name: $0.name,
+                        selectable: $0.selectable,
+                        exists: $0.exists,
+                        problem: $0.problem
+                    )
+                }
             )
         }
 

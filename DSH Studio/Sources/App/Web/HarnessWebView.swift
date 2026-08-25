@@ -64,7 +64,6 @@ struct HarnessWebView: NSViewRepresentable {
         )
         configuration.userContentController.add(context.coordinator, name: AppSettingsWebBridge.messageHandlerName)
         let webView = WKWebView(frame: .zero, configuration: configuration)
-        webView.isInspectable = true
         webView.navigationDelegate = context.coordinator
         webView.uiDelegate = context.coordinator
         HarnessWebView.register(webView)

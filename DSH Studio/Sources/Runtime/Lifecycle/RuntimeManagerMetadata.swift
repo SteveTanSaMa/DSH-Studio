@@ -238,6 +238,18 @@ extension RuntimeManager {
         start()
     }
 
+    /// Updates launch-only configuration after the child process has stopped.
+    public func updateWorkspace(_ workspace: URL) {
+        guard state == .idle || state == .terminated || state == .failed || state == .crashed else { return }
+        configuration.workspace = workspace.standardizedFileURL
+    }
+
+    /// Selects the Harness composition used by the next launch.
+    public func updateProfileName(_ profileName: String) {
+        guard state == .idle || state == .terminated || state == .failed || state == .crashed else { return }
+        configuration.profileName = profileName
+    }
+
     public func updateStartupTimeout(_ timeout: TimeInterval) {
         configuration.startupTimeout = timeout
     }

@@ -12,6 +12,7 @@ import SwiftUI
 struct ContentView: View {
     @ObservedObject var model: AppModel
     @State private var webContentCrashed = false
+    @State private var recoveryNotice: String?
 
     var body: some View {
         // The WebView is mounted only after RuntimeManager reports readiness;
@@ -63,9 +64,51 @@ struct ContentView: View {
             Text(message)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 420)
-            Button("重试") {
-                webContentCrashed = false
-                model.runtime.retry()
+            if let recoveryNotice {
+                Text(recoveryNotice)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 520)
+            }
+            HStack(spacing: 10) {
+                Button("重试") {
+                    recoveryNotice = nil
+                    webContentCrashed = false
+                    model.runtime.retry()
+                }
+                Button("复制诊断") {
+                    Task {
+                        recoveryNotice = await model.copyDiagnostics()
+                            ? "诊断信息已复制"
+                            : "无法复制诊断信息"
+                    }
+                }
+                Button("导出诊断包") {
+                    Task {
+                        do {
+                            let url = try await model.exportDiagnostics()
+                            recoveryNotice = "已保存：\(url.lastPathComponent)"
+                        } catch {
+                            recoveryNotice = error.localizedDescription
+                        }
+                    }
+                }
+                Button("打开日志") {
+                    recoveryNotice = model.openLogs() ? "已打开日志文件夹" : "无法打开日志文件夹"
+                }
+            }
+            if model.runtime.runtimeVersionStatus?.rollbackAvailable == true {
+                Button("恢复上一版 Runtime") {
+                    Task {
+                        do {
+                            try await model.rollbackRuntime()
+                            recoveryNotice = "Runtime 已恢复，请重试启动"
+                        } catch {
+                            recoveryNotice = error.localizedDescription
+                        }
+                    }
+                }
             }
         }
         .padding()

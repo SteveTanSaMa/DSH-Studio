@@ -11,14 +11,15 @@ import Foundation
 /// scripts. Every network request can therefore be checked against a known
 /// host, version, integrity value, and archive checksum.
 public enum RuntimeRelease {
-    public static let runtimeVersion = "2026.08.20.1"
+    public static let runtimeVersion = "0.1.1-rc.2-ver1"
     public static let nodeVersion = "24.19.0"
     public static let harnessVersion = RuntimeLocator.harnessVersion
-    public static let pnpmVersion = "11.7.0"
+    public static let pnpmVersion = "11.22.0"
     public static let registryHost = "registry.npmjs.org"
     public static let npmRegistryURL = URL(string: "https://registry.npmjs.org")!
-    public static let harnessPackageIntegrity = "sha512-brpZfED7ieRa2PQ5tUxMhHrM1pb2CmKFVM/f6yMULBDMicahk+Z2OsHgTwTDnoiZm23Ftu9rQz0NN4pflaoJcg=="
-    public static let pnpmPackageIntegrity = "sha512-GcyFLBIMcSV2DyRD7mvgyltA+fUFmN4aCaHxd1A+AQ5Xwjx3ZG4B52HeWb+HT7IqM5jDOrlpH8E+uUa28PTWIA=="
+    public static let harnessPackageIntegrity = "sha512-UP1UIh6q3Gme/yXRn/QL2P8IsVlv8Shpg22TRJIZPsCRWLm4CBiA1MUvXmJAfsOEETBMLAl+xWPtFw6ICsN3wg=="
+    public static let pnpmPackageIntegrity = "sha512-H/hwxMYTPf2I+yr8Rt0T1H8JyXlLQ4xv20fKmMrzvBY4HuC+k6CRuOOCTPAfiJ9G19niCRD7C+GrD7W6qA3WIQ=="
+    public static let dataFormat = RuntimeDataFormatDescriptor(id: "sqlite-v2")
 
     public static func nodeArchiveURL(architecture: String) -> URL? {
         nodeArchiveURL(nodeVersion: nodeVersion, architecture: architecture)
@@ -73,7 +74,8 @@ public enum RuntimeRelease {
             nodeArchiveSHA256: nodeArchiveSHA256,
             harnessPackageIntegrity: harnessPackageIntegrity,
             pnpmPackageIntegrity: pnpmPackageIntegrity,
-            runtimeVersion: runtimeVersion
+            runtimeVersion: runtimeVersion,
+            dataFormat: dataFormat
         )
     }
 

@@ -133,7 +133,7 @@ extension RuntimeDataProfileTests {
             runtimeVersion: "legacy-runtime",
             architecture: "darwin-arm64",
             nodeVersion: "24.19.0",
-            harnessVersion: "0.1.0-rc.6",
+            harnessVersion: "legacy-harness",
             nodeSHA256: "node-sha",
             harnessPackageIntegrity: "harness-integrity",
             dataFormat: nil

@@ -185,6 +185,10 @@ final class AppNotificationCoordinator {
     }
 
     private func localizedBody(for kind: AppNotificationKind) -> String {
+        if case .turnCompleted(.completed) = kind {
+            return "DSH Studio has completed a trun."
+        }
+
         if Locale.current.identifier.lowercased().hasPrefix("zh") {
             switch kind {
             case let .turnCompleted(reason):
@@ -212,7 +216,7 @@ final class AppNotificationCoordinator {
         case let .turnCompleted(reason):
             switch reason {
             case .completed:
-                return "DeepSeek Harness completed a turn in DSH Studio."
+                return "DSH Studio has completed a trun."
             case .blocked:
                 return "A DeepSeek Harness turn ended blocked in DSH Studio."
             case .error:

@@ -16,6 +16,12 @@ xcuserdata/
 # Local source artwork kept outside the repository
 /鲸鱼娘/
 
+# Temporary audio design files
+/Audio Design/
+
 # Runtime Builder output
 /RuntimeArtifacts/
 .runtime-builder/
+
+# Local analysis and design notes
+/docs/

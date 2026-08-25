@@ -50,7 +50,7 @@ final class FixtureCommandRunner: RuntimeCommandRunning, @unchecked Sendable {
             let entry = harnessPackage.appendingPathComponent("lib/bin.js")
             try fileManager.createDirectory(at: entry.deletingLastPathComponent(), withIntermediateDirectories: true)
             try Data("#!/usr/bin/env node\n".utf8).write(to: entry)
-            let packageJSON = "{\"name\":\"@deepseek-ai/dsh\",\"version\":\"0.1.0-rc.6\"}"
+            let packageJSON = "{\"name\":\"@deepseek-ai/dsh\",\"version\":\"\(RuntimeRelease.harnessVersion)\"}"
             try Data(packageJSON.utf8).write(to: harnessPackage.appendingPathComponent("package.json"))
 
             let pnpmPackage = currentDirectory

@@ -14,6 +14,7 @@ extension RuntimeManager {
     static func makeMVP(
         workspace: URL,
         dshHome: URL? = nil,
+        profileName: String = "web",
         release requestedRelease: RuntimeReleaseDescriptor? = nil,
         catalogService: RuntimeCatalogService? = nil
     ) -> RuntimeManager {
@@ -51,7 +52,8 @@ extension RuntimeManager {
             harnessEntry: RuntimeLocator.harnessEntry(root: root),
             dshHome: dshHome,
             workspace: workspace,
-            pnpmExecutable: RuntimeLocator.pnpmExecutable(root: root)
+            pnpmExecutable: RuntimeLocator.pnpmExecutable(root: root),
+            profileName: profileName
         )
         let provisioner: (any RuntimeProvisioning)? =
             RuntimeLocator.usesDevelopmentOverride() || RuntimeLocator.isBundledRuntimeRoot(root)

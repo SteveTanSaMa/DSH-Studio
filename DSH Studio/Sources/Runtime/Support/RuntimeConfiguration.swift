@@ -17,6 +17,7 @@ public struct RuntimeConfiguration: Sendable, Equatable {
     public var pnpmExecutable: URL?
     public var dshHome: URL
     public var workspace: URL
+    public var profileName: String
     public let host: String
     public var port: String
     public var startupTimeout: TimeInterval
@@ -38,13 +39,15 @@ public struct RuntimeConfiguration: Sendable, Equatable {
         healthCheckTimeout: TimeInterval = 5,
         environment: [String: String] = [:],
         expectedNodeVersion: String = "24.19.0",
-        expectedHarnessVersion: String = RuntimeLocator.harnessVersion
+        expectedHarnessVersion: String = RuntimeLocator.harnessVersion,
+        profileName: String = "web"
     ) {
         self.nodeExecutable = nodeExecutable
         self.harnessEntry = harnessEntry
         self.pnpmExecutable = pnpmExecutable
         self.dshHome = dshHome
         self.workspace = workspace
+        self.profileName = profileName
         self.host = Self.loopbackHost
         self.port = port
         self.startupTimeout = startupTimeout
@@ -60,11 +63,12 @@ public struct RuntimeConfiguration: Sendable, Equatable {
     /// The explicit loopback bind is part of the security contract: the app
     /// never exposes Harness to the local network.
     public var arguments: [String] {
-        [
-            harnessEntry.path,
-            "web",
-            "--host", host,
-            "--port", port
-        ]
+        let launchArguments: [String]
+        if profileName == "web" {
+            launchArguments = [harnessEntry.path, "web"]
+        } else {
+            launchArguments = [harnessEntry.path, "--profile", profileName]
+        }
+        return launchArguments + ["--host", host, "--port", port]
     }
 }

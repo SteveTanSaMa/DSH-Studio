@@ -174,7 +174,7 @@ extension RuntimeLocatorTests {
         try makeRuntimeFixture(
             root: legacyBackup,
             runtimeVersion: "2026.08.18.1",
-            harnessVersion: "0.1.0-rc.6"
+            harnessVersion: "legacy-harness"
         )
 
         XCTAssertNil(

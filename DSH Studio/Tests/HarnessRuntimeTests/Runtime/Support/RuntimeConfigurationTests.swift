@@ -24,6 +24,21 @@ final class RuntimeConfigurationTests: XCTestCase {
         XCTAssertFalse(configuration.arguments.contains("0.0.0.0"))
     }
 
+    func testNamedProfileUsesLauncherProfileArgument() {
+        let configuration = RuntimeConfiguration(
+            nodeExecutable: URL(fileURLWithPath: "/tmp/node"),
+            harnessEntry: URL(fileURLWithPath: "/tmp/dsh"),
+            dshHome: URL(fileURLWithPath: "/tmp/home"),
+            workspace: URL(fileURLWithPath: "/tmp/workspace"),
+            profileName: "review"
+        )
+
+        XCTAssertEqual(
+            configuration.arguments,
+            ["/tmp/dsh", "--profile", "review", "--host", "127.0.0.1", "--port", "0"]
+        )
+    }
+
     func testRuntimePathPrioritizesBundledPnpmAndNode() {
         let path = SystemHarnessProcess.runtimePath(
             nodeExecutable: URL(fileURLWithPath: "/runtime/node/bin/node"),

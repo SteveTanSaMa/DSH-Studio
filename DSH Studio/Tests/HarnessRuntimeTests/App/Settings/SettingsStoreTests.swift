@@ -12,7 +12,7 @@ import XCTest
 /// Verifies app-owned settings persistence and CSS width normalization.
 final class SettingsStoreTests: XCTestCase {
     @MainActor
-    func testWorkspaceAndDataHomeUseFixedAppOwnedLocations() {
+    func testWorkspaceCanBeRestoredWhileDataHomeRemainsAppOwned() {
         let suiteName = "DeepSeekStudio.SettingsStoreTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defer { defaults.removePersistentDomain(forName: suiteName) }
@@ -21,7 +21,7 @@ final class SettingsStoreTests: XCTestCase {
         defaults.set("/tmp/legacy-data", forKey: "dshHomePath")
         let store = SettingsStore(defaults: defaults)
 
-        XCTAssertEqual(store.workspaceURL, RuntimeLocator.defaultWorkspace())
+        XCTAssertEqual(store.workspaceURL.path, "/tmp/legacy-workspace")
         XCTAssertEqual(store.dshHomeURL, RuntimeLocator.defaultDSHHome())
         XCTAssertEqual(defaults.string(forKey: "workspacePath"), "/tmp/legacy-workspace")
         XCTAssertEqual(defaults.string(forKey: "dshHomePath"), "/tmp/legacy-data")

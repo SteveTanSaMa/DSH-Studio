@@ -165,8 +165,7 @@ final class NotificationEventTests: XCTestCase {
         XCTAssertEqual(center.authorizationRequests, 1)
         XCTAssertEqual(center.addedRequests, 1)
         let body = center.requests[0].content.body
-        XCTAssertTrue(body.contains("DeepSeek Harness"))
-        XCTAssertTrue(body.contains("DSH Studio"))
+        XCTAssertEqual(body, "DSH Studio has completed a trun.")
 
         coordinator.handle(.permissionWaiting(sessionID: "s", requestID: "p"))
         await waitForNotificationWork(center, expectedAddedRequests: 2)

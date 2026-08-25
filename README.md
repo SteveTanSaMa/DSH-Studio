@@ -110,8 +110,8 @@ The current development snapshot contains:
 | Component | Version | Source |
 | --- | --- | --- |
 | Node.js | `24.19.0` | `nodejs.org` |
-| DeepSeek Harness | `@deepseek-ai/dsh@0.1.0-rc.6` | `registry.npmjs.org` |
-| pnpm | `11.7.0` | `registry.npmjs.org` |
+| DeepSeek Harness | `@deepseek-ai/dsh@0.1.1-rc.2` | `registry.npmjs.org` |
+| pnpm | `11.22.0` | `registry.npmjs.org` |
 
 The Runtime Builder is maintained in the independent
 [DSH Studio Runtime repository](https://github.com/SteveTanSaMa/DSH-Studio-Runtime).
@@ -175,22 +175,72 @@ remote discovery.
 
 Runtime Builder inputs may follow npm `latest`, but each published artifact is pinned by its generated manifest and SHA-256. User installs and updates always use that immutable snapshot, which keeps checksum verification and rollback meaningful.
 
+## Plugin Market
+
+DSH Studio can install and manage the upstream `dshmarket@1.21.2` plugin for the
+Harness Runtime `0.1.1-rc.2`. This is the first Runtime release in this project
+line with the verified download and validation mechanism; `0.1.0-rc.6` is
+legacy metadata and is not a supported install target.
+
+The market package is resolved from the official `registry.npmjs.org` registry
+and its package metadata and lockfile integrity are checked before the `web`
+profile is changed. The market plugin manages community plugins; DSH Studio
+uses the Runtime's bundled Node.js and pnpm paths and does not run a separate
+host installation flow.
+
+Third-party plugins run with Runtime permissions and are not sandboxed. Settings
+exposes install, update, repair, enable, disable, uninstall, refresh, logs, and
+diagnostic-copy operations. Failed changes are validated and recovered through
+the managed profile, with operation errors retained for diagnostics. Only the
+`web` profile is currently managed. Uninstalling the market removes the market
+itself; reinstalling it is required to restore its UI and browse community
+plugins.
+
+## Agent Preset Transfer
+
+User-authored Agent Presets can be moved between local DSH Studio installations
+as `.dshpreset` archives. DSH Studio reads and writes only
+`DSH_HOME/.agent-presets/<preset-id>`; built-in Runtime Presets are not exported.
+The archive contains a versioned `manifest.json` and a `preset/` tree whose
+required entry point is `agent.cordis.yml`. Preset composition remains owned by
+Harness Runtime, so DSH Studio does not reimplement plugin resolution or
+composition semantics.
+
+Import is previewed before installation. The preview reports the source
+Harness version, file count, uncompressed size, possible credential markers,
+and whether the requested Preset ID conflicts with an existing one. The user
+must choose a different ID for a conflict; existing Presets are never
+overwritten. Installation moves the validated tree into place as one local
+operation.
+
+The transfer boundary excludes API keys and other credentials, Sessions,
+workspace files, and all other DSH_HOME data. Archives are limited to 16 MiB
+compressed, 32 MiB uncompressed, 256 files, and 12 MiB per file. Absolute,
+traversal, unsupported, duplicate, and symbolic-link entries are rejected; the
+composition file must be non-empty, UTF-8, and no larger than 2 MiB. These
+checks protect the local file boundary, but importing a Preset still grants its
+composition the Runtime's normal plugin and tool permissions, so only trusted
+archives should be installed.
+
 ## API Keys And Privacy
 
 DSH Studio does not provide a DeepSeek API key, proxy API requests, sell API access, or upload user API keys to a DSH Studio server. Users configure their own API access through the local Harness application.
 
 DSH Studio does not add telemetry or analytics. The local Runtime is launched with telemetry disabled, and application diagnostics are redacted before being written to the local log. API keys and bearer tokens must not be placed in issue reports or debug output.
 
-The Harness data and workspace locations are fixed under:
+The default Harness data and workspace locations are created under:
 
 ```text
 ~/Library/Application Support/DSH Studio/DSH_HOME
 ~/Library/Application Support/DSH Studio/Workspace
 ```
 
-They are app-owned locations and cannot be changed in the application settings.
-The data folder can be opened from settings for manual backup. DSH Studio does
-not upload either directory as part of its Runtime management.
+The data folder remains app-owned and can be opened from settings for manual
+backup. The workspace is selectable from settings, subject to local directory
+admission checks. Harness composition Profiles are stored below
+`DSH_HOME/profiles`, while their active/pending/last-known-good selection is
+kept in Application Support. DSH Studio does not upload these locations as
+part of Runtime management.
 
 ## Localhost And Security Boundaries
 

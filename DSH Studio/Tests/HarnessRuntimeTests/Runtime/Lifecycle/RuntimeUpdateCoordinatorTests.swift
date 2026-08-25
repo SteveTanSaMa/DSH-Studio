@@ -157,7 +157,7 @@ final class RuntimeUpdateCoordinatorTests: XCTestCase {
         XCTAssertEqual(updater.prepareCount, 1)
         XCTAssertEqual(updater.activateCount, 1)
         XCTAssertEqual(initialProcess.gracefulCount, 1)
-        XCTAssertEqual(manager.configuration.expectedHarnessVersion, "0.1.0-rc.7")
+        XCTAssertEqual(manager.configuration.expectedHarnessVersion, RuntimeRelease.harnessVersion)
     }
 
     @MainActor

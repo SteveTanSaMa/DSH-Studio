@@ -26,7 +26,7 @@ final class RuntimeLocatorTests: XCTestCase {
     func testHarnessEntryUsesArchitectureDirectory() {
         let root = URL(fileURLWithPath: "/tmp/runtime")
         let entry = RuntimeLocator.harnessEntry(root: root, architecture: "darwin-x64")
-        XCTAssertTrue(entry.path.contains("harness/darwin-x64/0.1.0-rc.6"))
+        XCTAssertTrue(entry.path.contains("harness/darwin-x64/0.1.1-rc.2"))
         XCTAssertTrue(entry.path.hasSuffix("@deepseek-ai/dsh/lib/bin.js"))
     }
 
@@ -114,7 +114,7 @@ final class RuntimeLocatorTests: XCTestCase {
             harnessVersion: harnessVersion
         )
         try fileManager.createDirectory(at: pnpmPackage.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try Data("{\"name\":\"pnpm\",\"version\":\"11.7.0\"}".utf8).write(to: pnpmPackage)
+        try Data("{\"name\":\"pnpm\",\"version\":\"\(RuntimeRelease.pnpmVersion)\"}".utf8).write(to: pnpmPackage)
 
         let manifest = RuntimeInstallationManifest(
             runtimeVersion: runtimeVersion,

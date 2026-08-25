@@ -22,12 +22,16 @@ final class SettingsStore: ObservableObject {
     static let permissionNotificationsEnabledDefault = true
     static let questionNotificationsEnabledKey = "questionNotificationsEnabled"
     static let questionNotificationsEnabledDefault = true
+    static let workspacePathKey = "workspacePath"
 
     private let defaults: UserDefaults
 
-    /// Workspace and Harness data locations are app-owned fixed locations.
-    /// Older custom path values in UserDefaults are intentionally ignored.
-    let workspaceURL: URL
+    /// The workspace is user-selectable; DSH_HOME remains app-owned.
+    @Published var workspaceURL: URL {
+        didSet {
+            defaults.set(workspaceURL.standardizedFileURL.path, forKey: Self.workspacePathKey)
+        }
+    }
     let dshHomeURL: URL
 
     @Published var chatContentMaxWidth: Double {
@@ -61,9 +65,12 @@ final class SettingsStore: ObservableObject {
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        workspaceURL = RuntimeLocator.defaultWorkspace()
+        let defaultWorkspace = RuntimeLocator.defaultWorkspace()
             ?? RuntimeLocator.applicationSupportDirectory()!
                 .appendingPathComponent("Workspace", isDirectory: true)
+        workspaceURL = WorkspaceAdmission.persistedURL(
+            from: defaults.string(forKey: Self.workspacePathKey)
+        ) ?? defaultWorkspace
         dshHomeURL = RuntimeLocator.defaultDSHHome()
             ?? RuntimeLocator.applicationSupportDirectory()!
                 .appendingPathComponent("DSH_HOME", isDirectory: true)

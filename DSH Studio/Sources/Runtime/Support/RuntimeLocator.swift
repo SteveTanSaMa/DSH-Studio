@@ -9,7 +9,7 @@ import Foundation
 /// Deterministic discovery of the installed Node and Harness runtime.
 public enum RuntimeLocator {
     public static let dshPackageName = "@deepseek-ai/dsh"
-    public static let harnessVersion = "0.1.0-rc.6"
+    public static let harnessVersion = "0.1.1-rc.2"
 
     public static func runtimeRoot(
         bundle: Bundle = .main,

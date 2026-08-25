@@ -28,13 +28,13 @@ final class RuntimeProvisionerTests: XCTestCase {
               "name": "deepseek-harness-macos-runtime",
               "version": "0.0.1",
               "dependencies": {
-                "@deepseek-ai/dsh": "0.1.0-rc.6",
+                "@deepseek-ai/dsh": "\(RuntimeRelease.harnessVersion)",
                 "pnpm": "\(RuntimeRelease.pnpmVersion)"
               }
             },
             "node_modules/@deepseek-ai/dsh": {
-              "version": "0.1.0-rc.6",
-              "resolved": "https://registry.npmjs.org/@deepseek-ai/dsh/-/dsh-0.1.0-rc.6.tgz",
+              "version": "\(RuntimeRelease.harnessVersion)",
+              "resolved": "https://registry.npmjs.org/@deepseek-ai/dsh/-/dsh-\(RuntimeRelease.harnessVersion).tgz",
               "integrity": "\(harnessIntegrity)"
             },
             "node_modules/pnpm": {

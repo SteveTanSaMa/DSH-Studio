@@ -103,16 +103,28 @@ final class WebBridgeScriptTests: XCTestCase {
         ]
         .map { try String(contentsOf: sourceRoot.appendingPathComponent($0), encoding: .utf8) }
         .joined(separator: "\n")
+        let settingsHandlerSource = try String(
+            contentsOf: sourceRoot
+                .deletingLastPathComponent()
+                .appendingPathComponent("WebView/HarnessWebViewSettingsBridge.swift"),
+            encoding: .utf8
+        )
 
         XCTAssertTrue(source.contains("appSettings.openDataFolder"))
-        XCTAssertTrue(source.contains("appSettings.copyDiagnostics"))
+        XCTAssertTrue(source.contains("appSettings.exportDiagnostics"))
+        XCTAssertTrue(source.contains("appSettings.openLogs"))
         XCTAssertTrue(source.contains("appSettings.runtimeUpdate"))
         XCTAssertTrue(source.contains("latestHarnessVersion"))
         XCTAssertFalse(source.contains("availableHarnessVersion"))
         XCTAssertFalse(source.contains("harnessStatus"))
         XCTAssertTrue(source.contains("placeholder=\"748–2400\""))
-        XCTAssertFalse(source.contains("选择目录"))
+        XCTAssertTrue(source.contains("选择工作区"))
         XCTAssertTrue(source.contains("data-app-i18n=\"dataFolder\">数据文件夹"))
+        XCTAssertLessThan(
+            source.range(of: "data-app-i18n=\"workspace\"")!.lowerBound,
+            source.range(of: "data-app-i18n=\"dataFolder\"")!.lowerBound
+        )
+        XCTAssertFalse(source.contains("workspaceDetail"))
         XCTAssertTrue(source.contains("data-app-i18n=\"harnessVersion\">Harness版本"))
         XCTAssertTrue(source.contains("dsh-studio-app-settings-section-divider"))
         XCTAssertTrue(source.contains("border-bottom: 1px solid var(--dsw-alias-border-l2)"))
@@ -120,7 +132,8 @@ final class WebBridgeScriptTests: XCTestCase {
         XCTAssertTrue(source.contains("Chat content width"))
         XCTAssertTrue(source.contains("data-app-i18n=\"notifications\">通知"))
         XCTAssertTrue(source.contains("data-app-i18n=\"turnCompletionNotification\">轮次完成通知"))
-        XCTAssertTrue(source.contains("设置 ChatGPT 完成后何时提醒您"))
+        XCTAssertTrue(source.contains("设置 DSH Studio完成后何时提醒您"))
+        XCTAssertTrue(source.contains("Choose when to be notified after DSH Studio finishes"))
         XCTAssertTrue(source.contains("data-app-i18n=\"permissionNotifications\">启用权限通知"))
         XCTAssertTrue(source.contains("在需要通知权限时显示提醒"))
         XCTAssertTrue(source.contains("data-app-i18n=\"questionNotifications\">启用问题通知"))
@@ -140,7 +153,7 @@ final class WebBridgeScriptTests: XCTestCase {
         XCTAssertTrue(source.contains("role=\"switch\""))
         XCTAssertTrue(source.contains("aria-haspopup=\"listbox\""))
         XCTAssertTrue(source.contains("data-app-option=\"whenNotFocused\""))
-        XCTAssertFalse(source.contains("<select"))
+        XCTAssertTrue(source.contains("<select"))
         XCTAssertFalse(source.contains("type=\"checkbox\""))
         XCTAssertTrue(source.contains("whenNotFocused"))
         XCTAssertTrue(source.contains("仅在未聚焦时"))
@@ -148,16 +161,23 @@ final class WebBridgeScriptTests: XCTestCase {
         XCTAssertTrue(source.contains("attributeFilter: [\"lang\"]"))
         XCTAssertTrue(source.contains("打开日志文件夹"))
         XCTAssertTrue(source.contains("dsh-studio-app-settings-version-actions"))
-        XCTAssertFalse(source.contains("当前工作区"))
+        XCTAssertTrue(source.contains("工作区"))
         XCTAssertFalse(source.contains("当前数据文件夹"))
         XCTAssertFalse(source.contains("<div class=\"dsh-studio-app-settings-section-title\">诊断</div>"))
-        XCTAssertFalse(source.contains("appSettings.chooseWorkspace"))
+        XCTAssertTrue(source.contains("appSettings.chooseWorkspace"))
         XCTAssertFalse(source.contains("appSettings.runtimeCheck"))
-        XCTAssertFalse(source.contains("appSettings.selectDataProfile"))
+        XCTAssertTrue(source.contains("appSettings.selectProfile"))
         XCTAssertFalse(source.contains("appSettings.runtimeCreateProfile"))
         XCTAssertFalse(source.contains("runtimeAvailableDataFormatID"))
+        XCTAssertFalse(source.contains("appSettings.pluginMarket"))
+        XCTAssertTrue(source.contains("appSettings.importPreset"))
+        XCTAssertTrue(source.contains("appSettings.exportPreset"))
+        XCTAssertTrue(settingsHandlerSource.contains("Agent Preset 已导入：\\(presetID)"))
+        XCTAssertTrue(settingsHandlerSource.contains("Agent Preset 已导出：\\(destination.lastPathComponent)"))
         XCTAssertFalse(source.contains("Node 版本"))
         XCTAssertFalse(source.contains("Runtime 版本"))
+        XCTAssertFalse(source.contains("pluginMarket"))
+        XCTAssertFalse(settingsHandlerSource.contains("copyDiagnostics"))
 
     }
 

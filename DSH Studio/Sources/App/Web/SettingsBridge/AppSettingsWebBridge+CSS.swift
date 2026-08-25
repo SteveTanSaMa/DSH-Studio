@@ -128,6 +128,31 @@ extension AppSettingsWebBridge {
           color: var(--dsw-alias-label-tertiary);
           opacity: 1;
         }
+        .dsh-studio-app-settings-select,
+        .dsh-studio-app-settings-profile-input {
+          box-sizing: border-box;
+          min-width: 128px;
+          height: 34px;
+          padding: 0 10px;
+          border: 1px solid var(--dsw-alias-border-l2);
+          border-radius: 8px;
+          background: var(--dsw-alias-bg-layer-1);
+          color: var(--dsw-alias-label-primary);
+          font: inherit;
+          font-size: 13px;
+        }
+        .dsh-studio-app-settings-profile-actions {
+          display: flex;
+          flex: none;
+          flex-wrap: wrap;
+          justify-content: flex-end;
+          gap: 6px;
+          max-width: 62%;
+        }
+        .dsh-studio-app-settings-select:disabled,
+        .dsh-studio-app-settings-profile-input:disabled {
+          opacity: .6;
+        }
         .dsh-studio-app-settings-select-wrap {
           position: relative;
           flex: none;
@@ -285,6 +310,7 @@ extension AppSettingsWebBridge {
           .dsh-studio-app-settings-row-text { padding-right: 16px; }
           .dsh-studio-app-settings-value { max-width: 42%; }
           .dsh-studio-app-settings-actions { max-width: 50%; }
+          .dsh-studio-app-settings-profile-actions { max-width: 58%; }
         }
     """#
 }

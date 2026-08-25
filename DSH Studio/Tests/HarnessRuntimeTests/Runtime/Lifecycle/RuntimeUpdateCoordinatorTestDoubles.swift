@@ -102,7 +102,7 @@ final class FakeCandidateRuntimeUpdater: RuntimeCandidateUpdating, @unchecked Se
             runtimeVersion: "old-runtime",
             architecture: "darwin-arm64",
             nodeVersion: "24.18.0",
-            harnessVersion: "0.1.0-rc.6",
+            harnessVersion: "legacy-harness",
             nodeSHA256: "old-node-sha",
             harnessPackageIntegrity: "old-harness-integrity",
             dataFormat: dataFormat
@@ -111,7 +111,7 @@ final class FakeCandidateRuntimeUpdater: RuntimeCandidateUpdating, @unchecked Se
             runtimeVersion: "new-runtime",
             architecture: "darwin-arm64",
             nodeVersion: "24.19.0",
-            harnessVersion: "0.1.0-rc.7",
+            harnessVersion: RuntimeRelease.harnessVersion,
             nodeSHA256: "new-node-sha",
             harnessPackageIntegrity: "new-harness-integrity",
             dataFormat: dataFormat
@@ -119,7 +119,7 @@ final class FakeCandidateRuntimeUpdater: RuntimeCandidateUpdating, @unchecked Se
         availableRelease = RuntimeReleaseDescriptor(
             architecture: "darwin-arm64",
             nodeVersion: "24.19.0",
-            harnessVersion: "0.1.0-rc.7",
+            harnessVersion: RuntimeRelease.harnessVersion,
             pnpmVersion: "11.7.0",
             nodeArchiveSHA256: "new-node-sha",
             harnessPackageIntegrity: "new-harness-integrity",

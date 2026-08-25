@@ -32,7 +32,7 @@ extension AppSettingsWebBridge {
           <div class="dsh-studio-app-settings-row dsh-studio-app-settings-notification-row">
             <div class="dsh-studio-app-settings-row-text">
               <div class="dsh-studio-app-settings-title" data-app-i18n="turnCompletionNotification">轮次完成通知</div>
-              <div class="dsh-studio-app-settings-detail" data-app-i18n="turnCompletionNotificationDetail">设置 ChatGPT 完成后何时提醒您</div>
+              <div class="dsh-studio-app-settings-detail" data-app-i18n="turnCompletionNotificationDetail">设置 DSH Studio完成后何时提醒您</div>
             </div>
             <div class="dsh-studio-app-settings-select-wrap">
               <button type="button" class="dsh-studio-app-settings-select-trigger" data-app-key="turnCompletionNotification" data-app-i18n-aria-label="turnCompletionNotificationAria" aria-label="轮次完成通知" aria-haspopup="listbox" aria-expanded="false">
@@ -66,10 +66,39 @@ extension AppSettingsWebBridge {
           </div>
           <div class="dsh-studio-app-settings-row">
             <div class="dsh-studio-app-settings-row-text">
+              <div class="dsh-studio-app-settings-title" data-app-i18n="workspace">工作区</div>
+              <div class="dsh-studio-app-settings-detail" data-app-field="workspace"></div>
+            </div>
+            <button type="button" class="dsh-studio-app-settings-button" data-app-action="chooseWorkspace" data-app-i18n="chooseWorkspace">选择工作区</button>
+          </div>
+          <div class="dsh-studio-app-settings-row">
+            <div class="dsh-studio-app-settings-row-text">
               <div class="dsh-studio-app-settings-title" data-app-i18n="dataFolder">数据文件夹</div>
               <div class="dsh-studio-app-settings-detail" data-app-field="dsh-home"></div>
             </div>
             <button type="button" class="dsh-studio-app-settings-button" data-app-action="openDataFolder" data-app-i18n="openDataFolder">打开文件夹</button>
+          </div>
+          <div class="dsh-studio-app-settings-row">
+            <div class="dsh-studio-app-settings-row-text">
+              <div class="dsh-studio-app-settings-title" data-app-i18n="profiles">Harness Profiles</div>
+              <div class="dsh-studio-app-settings-detail" data-app-i18n="profilesDetail">按配置隔离插件和界面组合</div>
+            </div>
+            <div class="dsh-studio-app-settings-profile-actions">
+              <select class="dsh-studio-app-settings-select" data-app-key="harnessProfileName" aria-label="Harness Profile"></select>
+              <input class="dsh-studio-app-settings-profile-input" type="text" data-app-field="profile-name-input" data-app-i18n-placeholder="profileNamePlaceholder" placeholder="Profile 名称" maxlength="64" />
+              <button type="button" class="dsh-studio-app-settings-button" data-app-action="createProfile" data-app-i18n="createProfile">创建</button>
+              <button type="button" class="dsh-studio-app-settings-button" data-app-action="deleteProfile" data-app-i18n="deleteProfile">删除当前 Profile</button>
+            </div>
+          </div>
+          <div class="dsh-studio-app-settings-row">
+            <div class="dsh-studio-app-settings-row-text">
+              <div class="dsh-studio-app-settings-title" data-app-i18n="agentPresets">Agent Presets</div>
+              <div class="dsh-studio-app-settings-detail" data-app-i18n="agentPresetsDetail">导入或导出用户创建的 Agent 配置</div>
+            </div>
+            <div class="dsh-studio-app-settings-actions">
+              <button type="button" class="dsh-studio-app-settings-button" data-app-action="importPreset" data-app-i18n="importPreset">导入</button>
+              <button type="button" class="dsh-studio-app-settings-button" data-app-action="exportPreset" data-app-i18n="exportPreset">导出</button>
+            </div>
           </div>
           <div class="dsh-studio-app-settings-row">
             <div class="dsh-studio-app-settings-row-text">
@@ -87,7 +116,7 @@ extension AppSettingsWebBridge {
               <div class="dsh-studio-app-settings-detail" data-app-i18n="diagnosticsDetail">用于排查 Runtime、Harness 和数据文件问题</div>
             </div>
             <div class="dsh-studio-app-settings-actions">
-              <button type="button" class="dsh-studio-app-settings-button" data-app-action="copyDiagnostics" data-app-i18n="copyDiagnostics">复制诊断信息</button>
+              <button type="button" class="dsh-studio-app-settings-button" data-app-action="exportDiagnostics" data-app-i18n="exportDiagnostics">导出诊断包</button>
               <button type="button" class="dsh-studio-app-settings-button" data-app-action="logs" data-app-i18n="openLogs">打开日志文件夹</button>
             </div>
           </div>
@@ -110,13 +139,13 @@ extension AppSettingsWebBridge {
             send("appSettings.update", { key: "chatContentMaxWidth", value });
             scheduleEnsure();
           };
-          element.addEventListener("focusin", event => {
-            const input = event.target.closest?.('input[data-app-key="chatContentMaxWidth"]');
+        element.addEventListener("focusin", event => {
+          const input = event.target.closest?.('input[data-app-key="chatContentMaxWidth"]');
             if (input) {
               input.dataset.editing = "true";
               delete input.dataset.empty;
             }
-          });
+        });
           element.addEventListener("focusout", event => {
             const input = event.target.closest?.('input[data-app-key="chatContentMaxWidth"]');
             if (!input) return;
@@ -129,7 +158,18 @@ extension AppSettingsWebBridge {
               event.preventDefault();
               input.blur();
             }
+            const profileInput = event.target.closest?.('input[data-app-field="profile-name-input"]');
+            if (profileInput && event.key === "Enter") {
+              event.preventDefault();
+              element.querySelector('[data-app-action="createProfile"]')?.click();
+            }
           });
+        element.addEventListener("change", event => {
+          const profileSelect = event.target.closest?.('select[data-app-key="harnessProfileName"]');
+          if (!profileSelect || profileSelect.disabled) return;
+          send("appSettings.selectProfile", { name: profileSelect.value });
+          scheduleEnsure();
+        });
         element.addEventListener("click", event => {
           const button = event.target.closest?.("[data-app-action]");
           const option = event.target.closest?.("[data-app-option]");
@@ -161,8 +201,17 @@ extension AppSettingsWebBridge {
           if (!button || button.disabled) return;
           const action = button.dataset.appAction;
           if (action === "openDataFolder") send("appSettings.openDataFolder");
+          if (action === "chooseWorkspace") send("appSettings.chooseWorkspace");
+          if (action === "createProfile") {
+            const input = element.querySelector('[data-app-field="profile-name-input"]');
+            send("appSettings.createProfile", { name: input?.value?.trim() || "" });
+            if (input) input.value = "";
+          }
+          if (action === "deleteProfile") send("appSettings.deleteProfile", { name: currentState.harnessProfileName });
+          if (action === "importPreset") send("appSettings.importPreset");
+          if (action === "exportPreset") send("appSettings.exportPreset");
           if (action === "logs") send("appSettings.openLogs");
-          if (action === "copyDiagnostics") send("appSettings.copyDiagnostics");
+          if (action === "exportDiagnostics") send("appSettings.exportDiagnostics");
           if (action === "runtimeUpdate") send("appSettings.runtimeUpdate");
           scheduleEnsure();
         });
@@ -188,6 +237,25 @@ extension AppSettingsWebBridge {
         text(block, '[data-app-field="harness-version"]', currentState.harnessVersion || localized("notInstalled", locale));
         text(block, '[data-app-field="latest-harness-version"]', currentState.latestHarnessVersion, localized("unknown", locale));
         text(block, '[data-app-field="dsh-home"]', currentState.dshHomePath, localized("unknown", locale));
+        const profileSelect = block.querySelector('select[data-app-key="harnessProfileName"]');
+        if (profileSelect) {
+          const profiles = Array.isArray(currentState.harnessProfiles) ? currentState.harnessProfiles : [];
+          profileSelect.replaceChildren(...profiles.map(profile => {
+            const option = document.createElement("option");
+            option.value = profile.name;
+            option.textContent = profile.name + (profile.selectable ? "" : " (不可用)");
+            option.disabled = !profile.selectable;
+            option.selected = profile.name === currentState.harnessProfileName;
+            return option;
+          }));
+          profileSelect.value = currentState.harnessProfileName;
+          profileSelect.disabled = busy;
+        }
+        const profileInput = block.querySelector('[data-app-field="profile-name-input"]');
+        if (profileInput) {
+          profileInput.placeholder = localized("profileNamePlaceholder", locale);
+          profileInput.disabled = busy;
+        }
         const chatWidth = block.querySelector('input[data-app-key="chatContentMaxWidth"]');
         if (chatWidth && !chatWidth.dataset.editing) {
           chatWidth.value = chatWidth.dataset.empty
@@ -225,6 +293,8 @@ extension AppSettingsWebBridge {
           question.disabled = busy;
         }
         block.querySelectorAll("[data-app-action]").forEach(button => { button.disabled = busy; });
+        const deleteProfile = block.querySelector('[data-app-action="deleteProfile"]');
+        if (deleteProfile) deleteProfile.disabled = busy || currentState.harnessProfileName === "web";
         const updateButton = block.querySelector('[data-app-action="runtimeUpdate"]');
         if (updateButton) updateButton.disabled = busy || !currentState.runtimeUpdateAvailable;
         if (updateButton) updateButton.hidden = !currentState.runtimeUpdateAvailable;
