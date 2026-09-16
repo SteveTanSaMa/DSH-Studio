@@ -15,9 +15,17 @@ extension HarnessLayoutWebBridge {
       style.dataset.deepseekStudioLayoutStyle = "true";
       style.textContent = `
         /* Give the conversation room to grow with the host window while
-           retaining a readable lower bound and an App-configurable upper bound. */
+           retaining a readable lower bound and an App-configurable upper
+           bound. When the host is narrower than that lower bound, keep the
+           content inside the available column instead of creating overflow
+           that can make WebKit repeatedly relayout during window resizing. */
         [data-phase][class*="_root"] {
-          --dsh-chat-content-width: clamp(748px, calc(100% - 96px), var(--deepseek-studio-chat-max-width, 1000px)) !important;
+          --dsh-chat-content-width: min(
+            var(--deepseek-studio-chat-max-width, 1000px),
+            max(748px, calc(100% - 96px)),
+            max(0px, calc(100% - 32px))
+          ) !important;
+          min-width: 0 !important;
         }
 
         /* Keep the controls on Harness's own flex row. The live insets below

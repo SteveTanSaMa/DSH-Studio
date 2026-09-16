@@ -110,4 +110,47 @@ final class HarnessProfileStoreTests: XCTestCase {
             XCTAssertEqual(error as? HarnessProfileStoreError, .notFound)
         }
     }
+
+    func testProfileSearchRecentOrderAndStatusArePersistedSeparately() throws {
+        let store = HarnessProfileStore(dshHome: dshHome, supportDirectory: support)
+        _ = try store.create(name: "review")
+        _ = try store.create(name: "research")
+
+        XCTAssertEqual(store.search(query: "REV").map(\.name), ["review"])
+        XCTAssertEqual(store.status(for: "web"), .active)
+
+        try store.select(name: "research")
+        XCTAssertEqual(store.status(for: "research"), .pending)
+        XCTAssertEqual(store.recentProfiles(limit: 2).map(\.name), ["research", "review"])
+
+        try store.markHealthy(name: "research")
+        XCTAssertEqual(store.status(for: "research"), .active)
+        XCTAssertEqual(store.recentProfiles(limit: 2).map(\.name), ["research", "review"])
+        XCTAssertTrue(FileManager.default.fileExists(atPath: store.recentStateURL.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: store.selectionStateURL.path))
+        XCTAssertNotEqual(store.recentStateURL, store.selectionStateURL)
+    }
+
+    func testSelectionAndRecentStateAreIsolatedPerDataHome() throws {
+        let firstHome = root.appendingPathComponent("first-home", isDirectory: true)
+        let secondHome = root.appendingPathComponent("second-home", isDirectory: true)
+        let firstStore = HarnessProfileStore(dshHome: firstHome, supportDirectory: support)
+        let secondStore = HarnessProfileStore(dshHome: secondHome, supportDirectory: support)
+
+        _ = try firstStore.create(name: "review")
+        _ = try secondStore.create(name: "research")
+        try firstStore.select(name: "review")
+        try firstStore.markHealthy(name: "review")
+        try secondStore.select(name: "research")
+        _ = secondStore.startupProfile()
+
+        XCTAssertEqual(firstStore.selection().active, "review")
+        XCTAssertEqual(secondStore.selection().active, "research")
+        XCTAssertTrue(firstStore.isRecentlyUsed(name: "review"))
+        XCTAssertFalse(firstStore.isRecentlyUsed(name: "research"))
+        XCTAssertTrue(secondStore.isRecentlyUsed(name: "research"))
+        XCTAssertFalse(secondStore.isRecentlyUsed(name: "review"))
+        XCTAssertNotEqual(firstStore.selectionStateURL, secondStore.selectionStateURL)
+        XCTAssertNotEqual(firstStore.recentStateURL, secondStore.recentStateURL)
+    }
 }

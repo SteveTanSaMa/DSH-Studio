@@ -11,13 +11,15 @@ import Foundation
 /// install script or resolves an unbounded npm tag on a user's machine.
 public enum PluginMarketRelease {
     public static let packageName = "dshmarket"
-    public static let packageVersion = "1.21.2"
+    public static let packageVersion = "1.46.1"
     public static let profileName = "web"
     public static let registryHost = "registry.npmjs.org"
     public static let registryURL = URL(string: "https://registry.npmjs.org")!
-    public static let packageIntegrity = "sha512-Q+5i9eHvD2R/vm422Qn0fImpkD74VfP7D4ltab0YlQ6cwAvE93ONcVuxz3Iej630PP6FjojUt6G1w4/3LY/kAQ=="
+    public static let packageIntegrity = "sha512-TtQbcCXhaWMiq6rElNg7EtckkPD8JxMfOvbxU4WxN9amQVqnqVsCqfuA9Cq1iZTVQeh59vK6brI7oIl9S+/JsA=="
+    /// Retained for compatibility with the existing state model. Installation
+    /// is governed by the fixed Plugin Market package contract below.
     public static let compatibleHarnessVersion = RuntimeRelease.harnessVersion
-    public static let sourceDescription = "npmjs.com / dshmarket@1.21.2"
+    public static let sourceDescription = "npmjs.com / dshmarket@1.46.1"
 }
 
 public enum PluginMarketInstallState: String, Codable, Equatable, Sendable {

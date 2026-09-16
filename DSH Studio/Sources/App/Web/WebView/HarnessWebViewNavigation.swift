@@ -3,7 +3,6 @@
 //  DSH Studio
 //
 
-import AppKit
 import DeepSeekHarness
 import DeepSeekLogging
 import Foundation
@@ -15,8 +14,9 @@ extension HarnessWebView.Coordinator: WKNavigationDelegate, WKUIDelegate {
             decidePolicyFor navigationAction: WKNavigationAction,
             decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
         ) {
-            // Session export is the one Harness download handled natively. All
-            // other remote URLs are handed to the default macOS browser.
+            // Session export is the one Harness download handled natively. The
+            // embedded UI is loopback-only, so external navigations are
+            // cancelled instead of escaping to the system browser.
             guard let url = navigationAction.request.url else {
                 decisionHandler(.cancel)
                 return
@@ -34,7 +34,6 @@ extension HarnessWebView.Coordinator: WKNavigationDelegate, WKUIDelegate {
                 decisionHandler(.allow)
                 return
             }
-            NSWorkspace.shared.open(url)
             decisionHandler(.cancel)
         }
 
@@ -57,7 +56,6 @@ extension HarnessWebView.Coordinator: WKNavigationDelegate, WKUIDelegate {
             if isAllowed(url) {
                 decisionHandler(.allow)
             } else {
-                NSWorkspace.shared.open(url)
                 decisionHandler(.cancel)
             }
         }
@@ -68,9 +66,6 @@ extension HarnessWebView.Coordinator: WKNavigationDelegate, WKUIDelegate {
             for navigationAction: WKNavigationAction,
             windowFeatures: WKWindowFeatures
         ) -> WKWebView? {
-            if let url = navigationAction.request.url {
-                NSWorkspace.shared.open(url)
-            }
             return nil
         }
 

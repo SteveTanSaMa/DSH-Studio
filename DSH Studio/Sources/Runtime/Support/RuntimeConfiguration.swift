@@ -69,6 +69,8 @@ public struct RuntimeConfiguration: Sendable, Equatable {
         } else {
             launchArguments = [harnessEntry.path, "--profile", profileName]
         }
-        return launchArguments + ["--host", host, "--port", port]
+        // DSH Studio owns the WebView, so the Runtime must never launch the
+        // user's default browser while starting its local server.
+        return launchArguments + ["--no-open", "--host", host, "--port", port]
     }
 }

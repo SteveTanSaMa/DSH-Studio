@@ -20,6 +20,7 @@ public final class RuntimeManager: ObservableObject {
     @Published public internal(set) var runtimeVersionStatus: RuntimeVersionStatus?
     @Published public internal(set) var activeDataProfile: RuntimeDataProfile?
     @Published public internal(set) var restartCount = 0
+    public internal(set) var lastTerminationStatus: Int32?
 
     public internal(set) var configuration: RuntimeConfiguration
     public let logs: RuntimeLogStore
@@ -46,7 +47,7 @@ public final class RuntimeManager: ObservableObject {
     var lastStderrLines: [String] = []
     var dataHomeWasEmptyBeforeLaunch: Bool?
     let readyPattern = try! NSRegularExpression(
-        pattern: #"dsh web: (http://127\.0\.0\.1:\d+)"#
+        pattern: #"dsh web: (http://127\.0\.0\.1:\d+(?:/[^\s]*)?)"#
     )
 
     public lazy var runtimeUpdateCoordinator: RuntimeUpdateCoordinator? = {
@@ -75,6 +76,7 @@ public final class RuntimeManager: ObservableObject {
         self.logs = RuntimeLogStore(logFileURL: logFileURL)
         self.dataProfileStore = dataProfileStore
         self.activeDataProfile = nil
+        self.lastTerminationStatus = nil
         self.nodeVersion = RuntimeLocator.nodeVersion(nodeExecutable: configuration.nodeExecutable)
         self.harnessVersion = RuntimeLocator.packageJSONVersion(at: configuration.harnessEntry)
         self.runtimeVersionStatus = self.runtimeUpdater?.versionStatus()
@@ -96,6 +98,7 @@ public final class RuntimeManager: ObservableObject {
         stdoutBuffer = ""
         stderrBuffer = ""
         dataHomeWasEmptyBeforeLaunch = nil
+        lastTerminationStatus = nil
 
         if let runtimeUpdater {
             let status = runtimeUpdater.versionStatus()
@@ -115,6 +118,27 @@ public final class RuntimeManager: ObservableObject {
             return
         }
         beginLaunch()
+    }
+
+    public var currentProcessID: Int32? {
+        process?.pid
+    }
+
+    public var canOpenTerminal: Bool {
+        state != .provisioning
+            && state != .updating
+            && state != .rollingBack
+            && state != .launching
+            && state != .starting
+            && state != .stopping
+    }
+
+    public var currentProcessGeneration: Int {
+        processGeneration
+    }
+
+    public var recentCrashStderr: [String] {
+        lastStderrLines
     }
 
     private func beginProvisioning(with provisioner: any RuntimeProvisioning) {

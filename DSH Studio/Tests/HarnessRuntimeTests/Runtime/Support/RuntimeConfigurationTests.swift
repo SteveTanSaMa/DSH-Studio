@@ -19,8 +19,9 @@ final class RuntimeConfigurationTests: XCTestCase {
         )
 
         XCTAssertEqual(configuration.host, "127.0.0.1")
-        XCTAssertEqual(configuration.arguments[2], "--host")
-        XCTAssertEqual(configuration.arguments[3], "127.0.0.1")
+        XCTAssertTrue(configuration.arguments.contains("--no-open"))
+        XCTAssertEqual(configuration.arguments[3], "--host")
+        XCTAssertEqual(configuration.arguments[4], "127.0.0.1")
         XCTAssertFalse(configuration.arguments.contains("0.0.0.0"))
     }
 
@@ -35,7 +36,7 @@ final class RuntimeConfigurationTests: XCTestCase {
 
         XCTAssertEqual(
             configuration.arguments,
-            ["/tmp/dsh", "--profile", "review", "--host", "127.0.0.1", "--port", "0"]
+            ["/tmp/dsh", "--profile", "review", "--no-open", "--host", "127.0.0.1", "--port", "0"]
         )
     }
 

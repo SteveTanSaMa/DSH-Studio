@@ -8,8 +8,10 @@ import Foundation
 extension AppSettingsWebBridge {
     static let appSettingsCSS = #"""
         .dsh-studio-app-settings {
-          display: contents;
           color: var(--dsw-alias-label-primary);
+        }
+        .dsh-studio-app-settings-general {
+          display: contents;
         }
         .dsh-studio-app-settings * { box-sizing: border-box; }
         .dsh-studio-app-settings-section-divider {
@@ -33,9 +35,6 @@ extension AppSettingsWebBridge {
           font-weight: 500;
           line-height: 20px;
         }
-        .dsh-studio-app-settings-row.last-row {
-          border-bottom: none;
-        }
         .dsh-studio-app-settings-notification-row {
           border-bottom: none;
         }
@@ -51,26 +50,17 @@ extension AppSettingsWebBridge {
           padding-right: 48px;
         }
         .dsh-studio-app-settings-title {
+          color: var(--dsw-alias-label-primary);
           font-size: 14px;
           font-weight: 400;
           line-height: 22px;
-          color: var(--dsw-alias-label-primary);
         }
         .dsh-studio-app-settings-detail {
           overflow-wrap: anywhere;
+          color: var(--dsw-alias-label-tertiary);
           font-size: 12px;
           font-weight: 400;
           line-height: 18px;
-          color: var(--dsw-alias-label-tertiary);
-        }
-        .dsh-studio-app-settings-value {
-          flex: none;
-          max-width: 48%;
-          overflow-wrap: anywhere;
-          font-size: 14px;
-          line-height: 22px;
-          color: var(--dsw-alias-label-secondary);
-          text-align: right;
         }
         .dsh-studio-app-settings-button {
           display: inline-flex;
@@ -78,6 +68,8 @@ extension AppSettingsWebBridge {
           align-items: center;
           justify-content: center;
           height: 36px;
+          max-width: 45%;
+          overflow: hidden;
           padding: 0 14px;
           border: none;
           border-radius: 18px;
@@ -87,30 +79,27 @@ extension AppSettingsWebBridge {
           font: inherit;
           font-size: 14px;
           line-height: 22px;
+          text-overflow: ellipsis;
           white-space: nowrap;
         }
         .dsh-studio-app-settings-button:hover:not(:disabled) {
           background: var(--dsw-alias-interactive-bg-hover);
         }
-        .dsh-studio-app-settings-actions {
-          display: flex;
-          flex: none;
-          flex-wrap: wrap;
-          justify-content: flex-end;
-          gap: 6px;
-        }
         .dsh-studio-app-settings-button:focus-visible,
-        .dsh-studio-app-settings-number:focus-visible {
+        .dsh-studio-app-settings-number:focus-visible,
+        .dsh-studio-app-settings-select-trigger:focus-visible,
+        .dsh-studio-app-settings-switch:focus-visible {
           outline: 1px solid var(--dsw-alias-state-business-primary);
           outline-offset: 1px;
         }
         .dsh-studio-app-settings-button:disabled,
-        .dsh-studio-app-settings-number:disabled {
+        .dsh-studio-app-settings-number:disabled,
+        .dsh-studio-app-settings-select-trigger:disabled,
+        .dsh-studio-app-settings-switch:disabled {
           cursor: default;
           opacity: .6;
         }
         .dsh-studio-app-settings-number {
-          box-sizing: border-box;
           width: 96px;
           height: 32px;
           flex: none;
@@ -127,31 +116,6 @@ extension AppSettingsWebBridge {
         .dsh-studio-app-settings-number::placeholder {
           color: var(--dsw-alias-label-tertiary);
           opacity: 1;
-        }
-        .dsh-studio-app-settings-select,
-        .dsh-studio-app-settings-profile-input {
-          box-sizing: border-box;
-          min-width: 128px;
-          height: 34px;
-          padding: 0 10px;
-          border: 1px solid var(--dsw-alias-border-l2);
-          border-radius: 8px;
-          background: var(--dsw-alias-bg-layer-1);
-          color: var(--dsw-alias-label-primary);
-          font: inherit;
-          font-size: 13px;
-        }
-        .dsh-studio-app-settings-profile-actions {
-          display: flex;
-          flex: none;
-          flex-wrap: wrap;
-          justify-content: flex-end;
-          gap: 6px;
-          max-width: 62%;
-        }
-        .dsh-studio-app-settings-select:disabled,
-        .dsh-studio-app-settings-profile-input:disabled {
-          opacity: .6;
         }
         .dsh-studio-app-settings-select-wrap {
           position: relative;
@@ -180,18 +144,7 @@ extension AppSettingsWebBridge {
         .dsh-studio-app-settings-select-trigger:hover:not(:disabled) {
           background: var(--dsw-alias-interactive-bg-hover);
         }
-        .dsh-studio-app-settings-select-trigger:focus-visible,
-        .dsh-studio-app-settings-switch:focus-visible {
-          outline: 1px solid var(--dsw-alias-state-business-primary);
-          outline-offset: 1px;
-        }
-        .dsh-studio-app-settings-select-trigger:disabled,
-        .dsh-studio-app-settings-switch:disabled {
-          cursor: default;
-          opacity: .6;
-        }
         .dsh-studio-app-settings-select-chevron {
-          box-sizing: border-box;
           width: 8px;
           height: 8px;
           flex: none;
@@ -202,10 +155,10 @@ extension AppSettingsWebBridge {
         }
         .dsh-studio-app-settings-select-menu {
           z-index: 100;
-          box-sizing: border-box;
           position: absolute;
           top: calc(100% + 4px);
           right: 0;
+          box-sizing: border-box;
           min-width: 218px;
           max-width: min(360px, calc(100vw - 32px));
           padding: 4px;
@@ -292,25 +245,12 @@ extension AppSettingsWebBridge {
         .dsh-studio-app-settings-switch:hover:not(:disabled) .dsh-studio-app-settings-switch-track {
           filter: brightness(.96);
         }
-        .dsh-studio-app-settings-version-actions {
-          display: flex;
-          flex: none;
-          align-items: center;
-          gap: 8px;
-          margin-left: auto;
-        }
         .dsh-studio-app-settings-status {
           margin: 8px 0 0;
+          color: var(--dsw-alias-state-error-primary);
           font-size: 12px;
           line-height: 18px;
         }
         .dsh-studio-app-settings-status[hidden] { display: none; }
-        .dsh-studio-app-settings-status[data-kind="error"] { color: var(--dsw-alias-state-error-primary); }
-        @media (max-width: 720px) {
-          .dsh-studio-app-settings-row-text { padding-right: 16px; }
-          .dsh-studio-app-settings-value { max-width: 42%; }
-          .dsh-studio-app-settings-actions { max-width: 50%; }
-          .dsh-studio-app-settings-profile-actions { max-width: 58%; }
-        }
     """#
 }

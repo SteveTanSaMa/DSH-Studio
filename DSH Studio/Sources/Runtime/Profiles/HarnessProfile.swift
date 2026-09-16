@@ -30,6 +30,29 @@ public struct HarnessProfile: Codable, Equatable, Sendable {
     }
 }
 
+public enum HarnessProfileStatus: String, Codable, Equatable, Sendable {
+    case active
+    case pending
+    case lastKnownGood
+    case ready
+    case invalid
+
+    public var displayName: String {
+        switch self {
+        case .active:
+            return "当前"
+        case .pending:
+            return "待启动"
+        case .lastKnownGood:
+            return "上次可用"
+        case .ready:
+            return "可用"
+        case .invalid:
+            return "不可用"
+        }
+    }
+}
+
 public struct HarnessProfileSelection: Codable, Equatable, Sendable {
     public static let currentVersion = 1
 
@@ -86,4 +109,3 @@ public enum HarnessProfileStoreError: Error, Equatable, LocalizedError, Sendable
         }
     }
 }
-

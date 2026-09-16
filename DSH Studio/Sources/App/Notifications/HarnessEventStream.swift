@@ -21,7 +21,7 @@ final class HarnessEventStream {
         stop()
         guard HarnessURLPolicy.isAllowedLoopback(baseURL) else { return }
         var components = URLComponents(
-            url: baseURL.appendingPathComponent("api/events.mux"),
+            url: HarnessURLPolicy.baseURL(from: baseURL).appendingPathComponent("api/remote.mux"),
             resolvingAgainstBaseURL: false
         )
         components?.scheme = baseURL.scheme?.lowercased() == "https" ? "wss" : "ws"

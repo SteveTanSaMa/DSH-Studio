@@ -26,4 +26,14 @@ public enum HarnessURLPolicy {
         }
         return true
     }
+
+    /// Removes the one-time process token before constructing native API URLs.
+    public static func baseURL(from url: URL) -> URL {
+        guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+            return url
+        }
+        components.query = nil
+        components.fragment = nil
+        return components.url ?? url
+    }
 }

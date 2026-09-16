@@ -98,7 +98,11 @@ extension RuntimeManager {
         stdoutBuffer += text
         for line in lines(from: &stdoutBuffer) {
             if line.contains("dsh web: http://") {
-                logs.log(component: "Harness", level: "info", message: line)
+                logs.log(
+                    component: "Harness",
+                    level: "info",
+                    message: LogRedactor.redact(line)
+                )
                 if let url = parseReadyURL(line) {
                     stagedURL = url
                     Task { [weak self] in

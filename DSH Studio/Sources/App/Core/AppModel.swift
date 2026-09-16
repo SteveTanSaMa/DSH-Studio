@@ -18,12 +18,13 @@ final class AppModel: ObservableObject {
     @Published var runtime: RuntimeManager
 
     var settings = SettingsStore()
-    let harnessProfiles: HarnessProfileStore
+    private(set) var harnessProfiles: HarnessProfileStore
     let pluginMarket: PluginMarketManager
     private(set) var presetTransfer: AgentPresetTransferManager
     private(set) var currentDataHomeURL: URL
     private(set) var selectedHarnessProfileName: String
     private let runtimeCatalogService: RuntimeCatalogService
+    private let supportDirectory: URL
     private let notificationCoordinator: AppNotificationCoordinator
     private var runtimeRelease: RuntimeReleaseDescriptor?
     private(set) var latestSignedRuntimeRelease: RuntimeReleaseDescriptor?
@@ -33,11 +34,14 @@ final class AppModel: ObservableObject {
     private var pluginMarketCancellable: AnyCancellable?
     private var pluginMarketRefreshTask: Task<Void, Never>?
     private var pluginMarketAutoInstallAttempted = false
+    private var pluginMarketRestartInProgress = false
+    private let terminalFileGenerator = RuntimeTerminalFileGenerator()
 
     init() {
         let support = RuntimeLocator.applicationSupportDirectory()
             ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
                 .appendingPathComponent("DSH Studio", isDirectory: true)
+        supportDirectory = support
         runtimeCatalogService = RuntimeCatalogService(supportDirectory: support)
         currentDataHomeURL = settings.dshHomeURL
         notificationCoordinator = AppNotificationCoordinator(settings: settings)
@@ -99,6 +103,35 @@ final class AppModel: ObservableObject {
         pluginMarketRefreshTask?.cancel()
     }
 
+    /// Handles dsh-market's restart request inside the app-owned Runtime
+    /// lifecycle. This prevents the market from forking an unmanaged Harness
+    /// replacement and avoids reporting its intentional SIGTERM as a crash.
+    func restartRuntimeForPluginMarket() {
+        guard !pluginMarketRestartInProgress else { return }
+        guard runtime.state == .ready else {
+            runtime.logs.log(
+                component: "PluginMarket",
+                level: "warn",
+                message: "ignored restart request while Runtime state is \(runtime.state)"
+            )
+            return
+        }
+        pluginMarketRestartInProgress = true
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer { self.pluginMarketRestartInProgress = false }
+            guard await self.runtime.restart() else {
+                self.runtime.logs.log(
+                    component: "PluginMarket",
+                    level: "error",
+                    message: "native Plugin Market Runtime restart did not start"
+                )
+                return
+            }
+            await self.waitForRuntimeOperationToFinish()
+        }
+    }
+
     func stopNotifications() {
         notificationCoordinator.stop()
     }
@@ -121,11 +154,25 @@ final class AppModel: ObservableObject {
                 await self.refreshRuntimeCatalog()
             }
 
+            let canInstallPluginMarketBeforeStart = self.runtime.configuration.profileName
+                == HarnessProfileStore.defaultProfileName
+                && !needsCatalogBeforeStart
+                && self.runtime.harnessVersion != nil
+                && self.runtime.configuration.pnpmExecutable != nil
+            if canInstallPluginMarketBeforeStart {
+                // Profile mutation is safe while Runtime is idle. Doing it
+                // here avoids the stop/restart cycle used for live changes.
+                await self.pluginMarket.refresh()
+                await self.installPluginMarketIfNeeded(allowIdle: true)
+            }
+
             self.runtime.start()
             await self.waitForRuntimeOperationToFinish()
             if self.runtime.configuration.profileName == HarnessProfileStore.defaultProfileName {
                 await self.pluginMarket.refresh()
-                await self.installPluginMarketIfNeeded()
+                if !self.pluginMarketAutoInstallAttempted {
+                    await self.installPluginMarketIfNeeded()
+                }
             }
             if !needsCatalogBeforeStart || self.runtimeRelease == nil {
                 await self.refreshRuntimeCatalog()
@@ -199,8 +246,9 @@ final class AppModel: ObservableObject {
         runtime.restartPolicy.enabled = true
     }
 
-    private func installPluginMarketIfNeeded() async {
-        guard runtime.state == .ready,
+    private func installPluginMarketIfNeeded(allowIdle: Bool = false) async {
+        let canInstallWhileIdle = allowIdle && runtime.state == .idle
+        guard (runtime.state == .ready || canInstallWhileIdle),
               runtime.configuration.profileName == HarnessProfileStore.defaultProfileName,
               !pluginMarketAutoInstallAttempted else { return }
         pluginMarketAutoInstallAttempted = true
@@ -262,6 +310,10 @@ final class AppModel: ObservableObject {
         let updated = runtime.configuration.dshHome.standardizedFileURL
         guard updated != currentDataHomeURL.standardizedFileURL else { return }
         currentDataHomeURL = updated
+        harnessProfiles = HarnessProfileStore(
+            dshHome: updated,
+            supportDirectory: supportDirectory
+        )
         presetTransfer = AgentPresetTransferManager(dshHome: updated)
         objectWillChange.send()
     }
@@ -291,6 +343,39 @@ final class AppModel: ObservableObject {
             return false
         }
         return NSWorkspace.shared.open(dataFolder)
+    }
+
+    /// Opens a terminal whose DSH commands are scoped to the current app state.
+    /// The generated PATH and DSH_HOME exist only in the launched terminal tree.
+    @discardableResult
+    func openRuntimeTerminal() -> Bool {
+        let stateDirectory = supportDirectory
+            .appendingPathComponent("Terminal", isDirectory: true)
+            .appendingPathComponent(runtime.configuration.profileName, isDirectory: true)
+        let configuration = RuntimeTerminalConfiguration(
+            stateDirectory: stateDirectory,
+            nodeExecutable: runtime.configuration.nodeExecutable,
+            harnessEntry: runtime.configuration.harnessEntry,
+            pnpmExecutable: runtime.configuration.pnpmExecutable,
+            dshHome: currentDataHomeURL,
+            workspace: settings.workspaceURL,
+            profileName: runtime.configuration.profileName
+        )
+        do {
+            let files = try terminalFileGenerator.prepare(configuration: configuration)
+            let opened = NSWorkspace.shared.open(files.welcomeScript)
+            if !opened {
+                runtime.logs.log(component: "Terminal", level: "error", message: "unable to open generated terminal")
+            }
+            return opened
+        } catch {
+            runtime.logs.log(
+                component: "Terminal",
+                level: "error",
+                message: LogRedactor.redact(error.localizedDescription)
+            )
+            return false
+        }
     }
 
     func chooseWorkspace() async throws -> Bool {
@@ -444,8 +529,85 @@ final class AppModel: ObservableObject {
         return try await DiagnosticsExporter.export(
             systemInfo: lines.joined(separator: "\n"),
             logsDirectory: support.appendingPathComponent("Logs", isDirectory: true),
-            supportDirectory: support
+            supportDirectory: support,
+            evidence: diagnosticEvidence()
         )
+    }
+
+    private func diagnosticEvidence() -> [String: Data] {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        var evidence: [String: Data] = [:]
+        func jsonValue<T>(_ value: T?) -> Any {
+            value ?? NSNull()
+        }
+
+        let runtimeState: [String: Any] = [
+            "state": runtime.state.displayName,
+            "profile": runtime.configuration.profileName,
+            "workspace": LogRedactor.redactPath(settings.workspaceURL.path),
+            "dataHome": LogRedactor.redactPath(currentDataHomeURL.path),
+            "nodeExecutable": LogRedactor.redactPath(runtime.configuration.nodeExecutable.path),
+            "harnessEntry": LogRedactor.redactPath(runtime.configuration.harnessEntry.path),
+            "pnpmExecutable": jsonValue(runtime.configuration.pnpmExecutable.map { LogRedactor.redactPath($0.path) }),
+            "processID": jsonValue(runtime.currentProcessID),
+            "processGeneration": runtime.currentProcessGeneration,
+            "restartCount": runtime.restartCount,
+            "lastTerminationStatus": jsonValue(runtime.lastTerminationStatus),
+            "nodeVersion": jsonValue(runtime.nodeVersion),
+            "harnessVersion": jsonValue(runtime.harnessVersion),
+            "dataFormat": jsonValue(runtime.activeDataProfile?.dataFormatID),
+            "error": jsonValue(runtime.lastError?.uiDescription),
+            "recentStderr": runtime.recentCrashStderr
+        ]
+        if let data = try? JSONSerialization.data(withJSONObject: runtimeState, options: [.prettyPrinted, .sortedKeys]) {
+            evidence["runtime-state.json"] = data
+        }
+
+        let profiles = harnessProfiles.profiles().map { profile in
+            [
+                "name": profile.name,
+                "directory": LogRedactor.redactPath(profile.directory.path),
+                "bundles": profile.bundles,
+                "exists": profile.exists,
+                "selectable": profile.selectable,
+                "status": harnessProfiles.status(for: profile.name).rawValue,
+                "recent": harnessProfiles.isRecentlyUsed(name: profile.name),
+                "problem": jsonValue(profile.problem)
+            ] as [String: Any]
+        }
+        if let data = try? JSONSerialization.data(withJSONObject: profiles, options: [.prettyPrinted, .sortedKeys]) {
+            evidence["profiles.json"] = data
+        }
+
+        let presets = presetTransfer.summaries().map { preset in
+            [
+                "id": preset.id,
+                "name": preset.name,
+                "directory": LogRedactor.redactPath(preset.directory.path),
+                "fileCount": preset.fileCount,
+                "totalBytes": preset.totalBytes,
+                "status": preset.status.rawValue,
+                "recent": presetTransfer.isRecentlyUsed(id: preset.id),
+                "problem": jsonValue(preset.problem)
+            ] as [String: Any]
+        }
+        if let data = try? JSONSerialization.data(withJSONObject: presets, options: [.prettyPrinted, .sortedKeys]) {
+            evidence["presets.json"] = data
+        }
+
+        let lifecycle = runtime.logs.entries.suffix(160).map { entry in
+            [
+                "timestamp": ISO8601DateFormatter().string(from: entry.timestamp),
+                "level": entry.level,
+                "component": entry.component,
+                "message": entry.message
+            ]
+        }
+        if let data = try? encoder.encode(lifecycle) {
+            evidence["lifecycle.json"] = data
+        }
+        return evidence
     }
 
     @discardableResult

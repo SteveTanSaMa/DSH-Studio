@@ -41,6 +41,9 @@ extension RuntimeManager {
         // is deliberately not treated as an update source.
         let release = catalogRelease
             ?? RuntimeLocator.installationManifest(root: root).map(RuntimeReleaseDescriptor.init(manifest:))
+        let installedHarnessVersion = RuntimeLocator.installationManifest(root: root)?.harnessVersion
+            ?? release?.harnessVersion
+            ?? RuntimeLocator.harnessVersion
         let dshHome = dshHome ?? RuntimeLocator.defaultDSHHome() ?? support
             .appendingPathComponent("DSH_HOME", isDirectory: true)
         _ = try? dataProfileStore.ensureLegacyProfile(homeURL: dshHome)
@@ -49,10 +52,17 @@ extension RuntimeManager {
             .appendingPathComponent("runtime.log")
         let configuration = RuntimeConfiguration(
             nodeExecutable: RuntimeLocator.nodeExecutable(root: root),
-            harnessEntry: RuntimeLocator.harnessEntry(root: root),
+            harnessEntry: RuntimeLocator.harnessEntry(
+                root: root,
+                harnessVersion: installedHarnessVersion
+            ),
             dshHome: dshHome,
             workspace: workspace,
-            pnpmExecutable: RuntimeLocator.pnpmExecutable(root: root),
+            pnpmExecutable: RuntimeLocator.pnpmExecutable(
+                root: root,
+                harnessVersion: installedHarnessVersion
+            ),
+            expectedHarnessVersion: installedHarnessVersion,
             profileName: profileName
         )
         let provisioner: (any RuntimeProvisioning)? =

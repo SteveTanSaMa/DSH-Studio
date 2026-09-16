@@ -5,8 +5,8 @@
 
 import Foundation
 
-/// DOM bridge for the App-owned settings section injected into Harness's
-/// official Settings > General surface.
+/// DOM bridge for the App-owned settings sections injected into Harness's
+/// official Settings surface.
 enum AppSettingsWebBridge {
     static let messageHandlerName = "deepseekStudio"
     static let source = sourcePartOne + sourcePartTwo + sourcePartThree

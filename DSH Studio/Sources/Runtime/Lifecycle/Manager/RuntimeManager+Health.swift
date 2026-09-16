@@ -4,12 +4,18 @@
 //
 
 import Foundation
+import DeepSeekHarness
 
 extension RuntimeManager {
     func performHealthCheck(url: URL, generation: Int) async {
         guard state == .starting, generation == processGeneration else { return }
         logs.log(component: "Harness", level: "info", message: "detected port \(url.port.map(String.init) ?? "unknown")")
-        logs.log(component: "Harness", level: "info", message: "health check \(url.appendingPathComponent("api/host.describe").absoluteString)")
+        let cleanBaseURL = HarnessURLPolicy.baseURL(from: url)
+        logs.log(
+            component: "Harness",
+            level: "info",
+            message: "health check \(cleanBaseURL.appendingPathComponent("api/settings/describe").absoluteString)"
+        )
         // A late response from an old process must not mark its replacement
         // ready, so the generation is checked again after this await.
         let healthy = await healthChecker.check(
@@ -38,6 +44,7 @@ extension RuntimeManager {
     func handleTermination(_ status: Int32, generation: Int) {
         guard generation == processGeneration else { return }
         processExited = true
+        lastTerminationStatus = status
         process = nil
         logs.log(component: "Runtime", level: "info", message: "runtime termination status \(status)")
         if state == .failed { return }

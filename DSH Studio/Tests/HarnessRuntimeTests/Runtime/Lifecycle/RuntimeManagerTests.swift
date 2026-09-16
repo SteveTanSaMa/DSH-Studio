@@ -31,6 +31,22 @@ final class RuntimeManagerTests: XCTestCase {
     }
 
     @MainActor
+    func testSuccessfulLaunchPreservesHarnessProcessTokenForWebView() async {
+        let fake = FakeHarnessProcess()
+        let manager = makeManager(process: fake, healthResult: true)
+        manager.start()
+        fake.emitOutput("dsh web: http://127.0.0.1:43210/?token=process-secret\n")
+
+        let ready = await waitUntil(manager.state == .ready)
+        XCTAssertTrue(ready)
+        XCTAssertEqual(
+            manager.readyURL?.absoluteString,
+            "http://127.0.0.1:43210/?token=process-secret"
+        )
+        XCTAssertFalse(manager.logs.entries.contains { $0.message.contains("process-secret") })
+    }
+
+    @MainActor
     func testFailedHealthCheckFails() async {
         let fake = FakeHarnessProcess()
         let manager = makeManager(process: fake, healthResult: false)
@@ -58,11 +74,13 @@ final class RuntimeManagerTests: XCTestCase {
         let fake = FakeHarnessProcess()
         let manager = makeManager(process: fake, healthResult: true, restartPolicy: RestartPolicy(enabled: false))
         manager.start()
+        XCTAssertEqual(manager.currentProcessGeneration, 1)
         fake.emitOutput("dsh web: http://127.0.0.1:43212\n")
         _ = await waitUntil(manager.state == .ready)
         fake.simulateTermination(1)
         let crashed = await waitUntil(manager.state == .crashed)
         XCTAssertTrue(crashed)
+        XCTAssertEqual(manager.lastTerminationStatus, 1)
     }
 
     @MainActor
@@ -99,8 +117,37 @@ final class RuntimeManagerTests: XCTestCase {
         fake.simulateTermination(1)
         _ = await waitUntil(manager.state == .starting)
         XCTAssertEqual(manager.restartCount, 1)
+        XCTAssertEqual(manager.currentProcessGeneration, 2)
         fake.emitOutput("dsh web: http://127.0.0.1:43215\n")
         _ = await waitUntil(manager.state == .ready)
+    }
+
+    @MainActor
+    func testIntentionalRestartUsesNormalLifecycle() async {
+        let first = FakeHarnessProcess()
+        let second = FakeHarnessProcess()
+        let manager = RuntimeManager(
+            configuration: testConfiguration(gracefulTimeout: 0.05),
+            processFactory: SequencedProcessFactory(processes: [first, second]),
+            healthChecker: FakeHealthChecker(result: true),
+            restartPolicy: RestartPolicy(enabled: false),
+            validateRuntimeOnStart: false
+        )
+
+        manager.start()
+        first.emitOutput("dsh web: http://127.0.0.1:43216\n")
+        let initiallyReady = await waitUntil(manager.state == .ready)
+        XCTAssertTrue(initiallyReady)
+
+        let restarted = await manager.restart()
+        XCTAssertTrue(restarted)
+        XCTAssertEqual(manager.state, .starting)
+        XCTAssertEqual(manager.lastTerminationStatus, nil)
+
+        second.emitOutput("dsh web: http://127.0.0.1:43217\n")
+        let finallyReady = await waitUntil(manager.state == .ready)
+        XCTAssertTrue(finallyReady)
+        XCTAssertEqual(manager.lastError, nil)
     }
 
     @MainActor

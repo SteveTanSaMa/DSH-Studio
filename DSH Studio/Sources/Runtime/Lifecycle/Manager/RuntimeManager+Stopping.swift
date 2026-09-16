@@ -6,6 +6,17 @@
 import Foundation
 
 extension RuntimeManager {
+    /// Restarts the app-owned Harness process without entering the crash path.
+    /// Callers must initiate this only for an intentional Runtime restart.
+    @discardableResult
+    public func restart() async -> Bool {
+        guard state == .ready else { return false }
+        await stop()
+        guard state == .terminated || state == .idle else { return false }
+        start()
+        return true
+    }
+
     public func stop() async {
         if state == .terminated || state == .idle {
             return

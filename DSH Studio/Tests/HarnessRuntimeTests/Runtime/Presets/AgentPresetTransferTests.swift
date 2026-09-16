@@ -131,6 +131,24 @@ final class AgentPresetTransferTests: XCTestCase {
         }
     }
 
+    func testPresetSearchRecentOrderAndHealthStatus() throws {
+        let ready = dshHome.appendingPathComponent(".agent-presets/review", isDirectory: true)
+        try write("name: Review\ndescription: code review\n", to: ready.appendingPathComponent("preset.yml"))
+        try write("- name: '@deepseek-ai/dsh-base'\n", to: ready.appendingPathComponent("agent.cordis.yml"))
+
+        let broken = dshHome.appendingPathComponent(".agent-presets/broken", isDirectory: true)
+        try write("name: Broken\n", to: broken.appendingPathComponent("preset.yml"))
+
+        let manager = AgentPresetTransferManager(dshHome: dshHome)
+        XCTAssertEqual(manager.search(query: "REV").map(\.id), ["review"])
+        XCTAssertEqual(manager.search().first?.status, .invalid)
+        XCTAssertEqual(manager.search().first?.problem, "缺少 agent.cordis.yml")
+
+        manager.recordUsage(id: "review")
+        XCTAssertEqual(manager.recentPresets(limit: 2).map(\.id), ["review", "broken"])
+        XCTAssertTrue(FileManager.default.fileExists(atPath: manager.recentStateURL.path))
+    }
+
     private func write(_ text: String, to url: URL) throws {
         try FileManager.default.createDirectory(
             at: url.deletingLastPathComponent(),

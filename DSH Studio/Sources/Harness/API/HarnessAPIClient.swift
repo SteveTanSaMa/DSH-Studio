@@ -147,7 +147,8 @@ public final class HarnessAPIClient {
             throw HarnessAPIError.invalidBaseURL
         }
 
-        let endpoint = baseURL.appendingPathComponent("api", isDirectory: true)
+        let endpoint = HarnessURLPolicy.baseURL(from: baseURL)
+            .appendingPathComponent("api", isDirectory: true)
             .appendingPathComponent(method, isDirectory: false)
         let rpcID = UUID().uuidString
         let body = RPCRequest(

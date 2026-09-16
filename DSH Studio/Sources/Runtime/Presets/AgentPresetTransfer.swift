@@ -59,6 +59,48 @@ public struct AgentPresetImportPreview: Equatable, Sendable {
     }
 }
 
+public enum AgentPresetStatus: String, Codable, Equatable, Sendable {
+    case ready
+    case invalid
+
+    public var displayName: String {
+        switch self {
+        case .ready:
+            return "可用"
+        case .invalid:
+            return "不可用"
+        }
+    }
+}
+
+public struct AgentPresetSummary: Codable, Equatable, Sendable {
+    public let id: String
+    public let name: String
+    public let directory: URL
+    public let fileCount: Int
+    public let totalBytes: Int64
+    public let status: AgentPresetStatus
+    public let problem: String?
+
+    public init(
+        id: String,
+        name: String,
+        directory: URL,
+        fileCount: Int,
+        totalBytes: Int64,
+        status: AgentPresetStatus,
+        problem: String? = nil
+    ) {
+        self.id = id
+        self.name = name
+        self.directory = directory
+        self.fileCount = fileCount
+        self.totalBytes = totalBytes
+        self.status = status
+        self.problem = problem
+    }
+}
+
 public enum AgentPresetTransferError: Error, Equatable, LocalizedError, Sendable {
     case cancelled
     case invalidPresetID
@@ -128,6 +170,7 @@ public final class AgentPresetTransferManager: @unchecked Sendable {
 
     public let dshHome: URL
     public let userPresetRoot: URL
+    public let recentStateURL: URL
 
     private let fileManager: FileManager
 
@@ -135,6 +178,9 @@ public final class AgentPresetTransferManager: @unchecked Sendable {
         self.dshHome = dshHome.standardizedFileURL
         self.userPresetRoot = self.dshHome
             .appendingPathComponent(Self.userPresetDirectoryName, isDirectory: true)
+        self.recentStateURL = self.dshHome
+            .appendingPathComponent(".dsh-studio", isDirectory: true)
+            .appendingPathComponent("preset-recent.json", isDirectory: false)
         self.fileManager = fileManager
     }
 
@@ -147,6 +193,61 @@ public final class AgentPresetTransferManager: @unchecked Sendable {
         return id.utf8.dropFirst().allSatisfy {
             ($0 >= 48 && $0 <= 57) || ($0 >= 97 && $0 <= 122) || $0 == 45
         }
+    }
+
+    public func search(query: String? = nil) -> [AgentPresetSummary] {
+        let normalized = query?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+        let values = summaries()
+        guard !normalized.isEmpty else { return values }
+        return values.filter {
+            $0.id.lowercased().contains(normalized)
+                || $0.name.lowercased().contains(normalized)
+                || ($0.problem?.lowercased().contains(normalized) == true)
+        }
+    }
+
+    public func recentPresets(limit: Int = 5, query: String? = nil) -> [AgentPresetSummary] {
+        let candidates = search(query: query)
+        let byID = Dictionary(uniqueKeysWithValues: candidates.map { ($0.id, $0) })
+        let recent = recentIDs().compactMap { byID[$0] }
+        let remaining = candidates
+            .filter { !recent.contains($0) }
+            .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+        return Array((recent + remaining).prefix(max(0, limit)))
+    }
+
+    public func isRecentlyUsed(id: String) -> Bool {
+        recentIDs().contains(id)
+    }
+
+    public func recordUsage(id: String) {
+        guard Self.isSafePresetID(id), summaries().contains(where: { $0.id == id }) else { return }
+        var ids = recentIDs().filter { $0 != id }
+        ids.insert(id, at: 0)
+        ids = Array(ids.prefix(20))
+        try? fileManager.createDirectory(
+            at: recentStateURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try? JSONEncoder().encode(ids).write(to: recentStateURL, options: .atomic)
+    }
+
+    public func summaries() -> [AgentPresetSummary] {
+        guard isNonSymlinkDirectory(userPresetRoot),
+              let entries = try? fileManager.contentsOfDirectory(
+                  at: userPresetRoot,
+                  includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey],
+                  options: [.skipsHiddenFiles]
+              ) else {
+            return []
+        }
+        return entries.compactMap { entry in
+            guard Self.isSafePresetID(entry.lastPathComponent), isNonSymlinkDirectory(entry) else {
+                return nil
+            }
+            return inspectPreset(id: entry.lastPathComponent, directory: entry)
+        }
+        .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
 
     public func exportArchive(
@@ -218,6 +319,7 @@ public final class AgentPresetTransferManager: @unchecked Sendable {
             withIntermediateDirectories: true
         )
         try fileManager.copyItem(at: archive, to: destination)
+        recordUsage(id: presetID)
     }
 
     public func previewImport(from archive: URL, requestedID: String? = nil) throws -> AgentPresetImportPreview {
@@ -242,8 +344,74 @@ public final class AgentPresetTransferManager: @unchecked Sendable {
                 at: root.appendingPathComponent("preset", isDirectory: true),
                 to: target
             )
+            recordUsage(id: preview.targetID)
             return preview
         }
+    }
+
+    private func inspectPreset(id: String, directory: URL) -> AgentPresetSummary {
+        let composition = directory.appendingPathComponent(Self.compositionFileName)
+        guard isNonSymlinkRegularFile(composition) else {
+            return AgentPresetSummary(
+                id: id,
+                name: id,
+                directory: directory,
+                fileCount: 0,
+                totalBytes: 0,
+                status: .invalid,
+                problem: "缺少 agent.cordis.yml"
+            )
+        }
+        do {
+            let tree = try inspectTree(directory, relativePath: id)
+            let metadata = readMetadata(from: directory.appendingPathComponent(Self.metadataFileName))
+            return AgentPresetSummary(
+                id: id,
+                name: metadata.name ?? id,
+                directory: directory,
+                fileCount: tree.files,
+                totalBytes: tree.bytes,
+                status: .ready,
+                problem: nil
+            )
+        } catch {
+            return AgentPresetSummary(
+                id: id,
+                name: id,
+                directory: directory,
+                fileCount: 0,
+                totalBytes: 0,
+                status: .invalid,
+                problem: error.localizedDescription
+            )
+        }
+    }
+
+    private func readMetadata(from url: URL) -> (name: String?, description: String?) {
+        guard isNonSymlinkRegularFile(url),
+              let text = try? String(contentsOf: url, encoding: .utf8) else {
+            return (nil, nil)
+        }
+        var name: String?
+        var description: String?
+        for line in text.split(whereSeparator: { $0.isNewline }).map(String.init) {
+            let parts = line.split(separator: ":", maxSplits: 1).map(String.init)
+            guard parts.count == 2 else { continue }
+            let key = parts[0].trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            let value = parts[1].trimmingCharacters(in: .whitespacesAndNewlines)
+                .trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
+            if key == "name" { name = value.isEmpty ? nil : value }
+            if key == "description" { description = value.isEmpty ? nil : value }
+        }
+        return (name, description)
+    }
+
+    private func recentIDs() -> [String] {
+        guard let data = try? Data(contentsOf: recentStateURL),
+              let ids = try? JSONDecoder().decode([String].self, from: data) else {
+            return []
+        }
+        return ids.filter(Self.isSafePresetID)
     }
 
     private func withExtractedArchive<T>(

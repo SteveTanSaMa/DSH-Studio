@@ -62,6 +62,13 @@ struct HarnessWebView: NSViewRepresentable {
                 forMainFrameOnly: true
             )
         )
+        configuration.userContentController.addUserScript(
+            WKUserScript(
+                source: PluginMarketRestartWebBridge.source,
+                injectionTime: .atDocumentEnd,
+                forMainFrameOnly: true
+            )
+        )
         configuration.userContentController.add(context.coordinator, name: AppSettingsWebBridge.messageHandlerName)
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.navigationDelegate = context.coordinator
@@ -85,6 +92,22 @@ struct HarnessWebView: NSViewRepresentable {
         // WebKit callback racing RuntimeManager.stop().
         for entry in liveWebViews {
             entry.value?.stopLoading()
+        }
+    }
+
+    @MainActor
+    static func reloadLiveWebViews() {
+        liveWebViews = liveWebViews.filter { $0.value != nil }
+        liveWebViews.forEach { $0.value?.reload() }
+    }
+
+    @MainActor
+    static func toggleSidebarOnLiveWebViews() {
+        liveWebViews = liveWebViews.filter { $0.value != nil }
+        liveWebViews.forEach { webView in
+            webView.value?.evaluateJavaScript(
+                "window.__deepseekStudioToggleSidebar && window.__deepseekStudioToggleSidebar();"
+            )
         }
     }
 

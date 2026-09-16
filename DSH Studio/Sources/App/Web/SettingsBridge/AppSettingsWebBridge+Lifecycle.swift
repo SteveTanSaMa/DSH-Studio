@@ -8,30 +8,20 @@ import Foundation
 extension AppSettingsWebBridge {
     static let sourcePartThree = #"""
       const findOptions = () => document.querySelector(".VOzbGW_options") || document.querySelector('[class*="_options"]');
+      const findGeneral = options => options?.querySelector("._WvWnq_section") || options?.querySelector('[class*="_WvWnq_section"]');
 
-      const removeBlocks = () => {
-        document.querySelectorAll(".dsh-studio-app-settings").forEach(element => element.remove());
-        block = null;
-        lastRenderedSignature = "";
+      const attachGeneralBlock = general => {
+        if (!generalBlock) generalBlock = createGeneralBlock();
+        if (generalBlock.parentElement !== general) general.appendChild(generalBlock);
       };
 
-      // Harness can recreate the Settings DOM after navigation or tab changes;
-      // this reconciler puts the App-owned rows back when necessary.
+      // Harness can recreate the Settings DOM after navigation or tab changes.
+      // Reconcile only the General contribution and leave native navigation
+      // and plugin-market entries entirely under Harness's control.
       const ensure = () => {
         const options = findOptions();
-        const general = options?.querySelector("._WvWnq_section") || options?.querySelector('[class*="_WvWnq_section"]');
-        if (!general) {
-          removeBlocks();
-          return;
-        }
-        const existing = general.querySelector("[data-deepseek-studio-app-settings]");
-        if (existing) {
-          block = existing;
-        } else {
-          removeBlocks();
-          block = createBlock();
-          general.appendChild(block);
-        }
+        const general = findGeneral(options);
+        if (general) attachGeneralBlock(general);
         render();
         if (Date.now() - lastStateRequestAt > 30000 && pending.size === 0) {
           lastStateRequestAt = Date.now();
@@ -55,7 +45,6 @@ extension AppSettingsWebBridge {
           menu.hidden = true;
           trigger.setAttribute("aria-expanded", "false");
         }
-        scheduleEnsure();
       }, true);
       document.addEventListener("keydown", event => {
         if (event.key !== "Escape") return;
@@ -66,10 +55,14 @@ extension AppSettingsWebBridge {
         trigger?.setAttribute("aria-expanded", "false");
         trigger?.focus();
       });
-      const observer = new MutationObserver(scheduleEnsure);
+      const observer = new MutationObserver(mutations => {
+        if (mutations.some(mutation => mutation.type === "childList" || mutation.attributeName === "lang" || mutation.attributeName === "class")) {
+          scheduleEnsure();
+        }
+      });
       observer.observe(document.documentElement, {
         attributes: true,
-        attributeFilter: ["lang"],
+        attributeFilter: ["lang", "class"],
         childList: true,
         subtree: true,
       });

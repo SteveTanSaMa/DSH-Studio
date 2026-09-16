@@ -83,8 +83,8 @@ public final class PluginMarketManager: ObservableObject {
         let retainedOperationError = record?.succeeded == false ? state.statusError : nil
         do {
             let inspection = try profileStore.inspect()
-            let actualHarness = runtime.harnessVersion
-            let compatibleHarness = actualHarness == PluginMarketRelease.compatibleHarnessVersion
+            let compatibleHarness = runtime.harnessVersion
+                == runtime.configuration.expectedHarnessVersion
             let hasMarketFootprint = inspection.dependencySpec != nil
                 || inspection.bundleListed
                 || inspection.installedVersion != nil
@@ -367,9 +367,10 @@ public final class PluginMarketManager: ObservableObject {
 
     private func validateHarness() throws {
         let actual = runtime.harnessVersion
-        guard actual == PluginMarketRelease.compatibleHarnessVersion else {
+        let expected = runtime.configuration.expectedHarnessVersion
+        guard actual == expected else {
             throw PluginMarketManagerError.incompatibleHarness(
-                expected: PluginMarketRelease.compatibleHarnessVersion,
+                expected: expected,
                 actual: actual
             )
         }

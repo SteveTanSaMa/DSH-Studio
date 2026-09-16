@@ -3,6 +3,7 @@
 //  DSH Studio
 //
 
+import CryptoKit
 import Foundation
 
 /// Manages Harness composition Profiles separately from Runtime data homes.
@@ -16,6 +17,7 @@ public final class HarnessProfileStore: @unchecked Sendable {
     public let dshHome: URL
     public let profilesDirectory: URL
     public let selectionStateURL: URL
+    public let recentStateURL: URL
 
     private let fileManager: FileManager
     private let encoder: JSONEncoder
@@ -28,12 +30,17 @@ public final class HarnessProfileStore: @unchecked Sendable {
     ) {
         self.dshHome = dshHome.standardizedFileURL
         self.profilesDirectory = self.dshHome.appendingPathComponent("profiles", isDirectory: true)
-        self.selectionStateURL = supportDirectory.standardizedFileURL
+        let stateDirectory = supportDirectory.standardizedFileURL
             .appendingPathComponent("HarnessProfiles", isDirectory: true)
+            .appendingPathComponent(Self.stableIdentifier(for: self.dshHome.path), isDirectory: true)
+        self.selectionStateURL = stateDirectory
             .appendingPathComponent("selection.json", isDirectory: false)
+        self.recentStateURL = stateDirectory
+            .appendingPathComponent("recent.json", isDirectory: false)
         self.fileManager = fileManager
         self.encoder = JSONEncoder()
         self.decoder = JSONDecoder()
+        migrateLegacyStateIfNeeded(from: supportDirectory.standardizedFileURL)
     }
 
     public func profiles() -> [HarnessProfile] {
@@ -63,6 +70,47 @@ public final class HarnessProfileStore: @unchecked Sendable {
             return virtualDefaultProfile()
         }
         return profiles().first { $0.name == name }
+    }
+
+    public func search(query: String? = nil) -> [HarnessProfile] {
+        let normalized = query?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+        guard !normalized.isEmpty else { return profiles() }
+        return profiles().filter { profile in
+            profile.name.lowercased().contains(normalized)
+                || profile.bundles.contains { $0.lowercased().contains(normalized) }
+                || (profile.problem?.lowercased().contains(normalized) == true)
+        }
+    }
+
+    public func status(for name: String) -> HarnessProfileStatus {
+        guard let profile = profile(named: name), profile.selectable else { return .invalid }
+        let selection = selection()
+        if selection.active == name { return .active }
+        if selection.pending == name { return .pending }
+        if selection.lastKnownGood == name { return .lastKnownGood }
+        return .ready
+    }
+
+    public func recentProfiles(limit: Int = 5, query: String? = nil) -> [HarnessProfile] {
+        let candidates = search(query: query)
+        let byName = Dictionary(uniqueKeysWithValues: candidates.map { ($0.name, $0) })
+        let recent = recentNames().compactMap { byName[$0] }
+        let remaining = candidates
+            .filter { !recent.contains($0) }
+            .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+        return Array((recent + remaining).prefix(max(0, limit)))
+    }
+
+    public func isRecentlyUsed(name: String) -> Bool {
+        recentNames().contains(name)
+    }
+
+    public func recordUsage(name: String) {
+        guard profile(named: name) != nil else { return }
+        var names = recentNames().filter { $0 != name }
+        names.insert(name, at: 0)
+        names = Array(names.prefix(20))
+        try? persistRecentNames(names)
     }
 
     public func selection() -> HarnessProfileSelection {
@@ -144,6 +192,7 @@ public final class HarnessProfileStore: @unchecked Sendable {
             pending: name == current.active ? nil : name,
             lastKnownGood: current.lastKnownGood
         ))
+        recordUsage(name: name)
     }
 
     public func markHealthy(name: String) throws {
@@ -151,6 +200,7 @@ public final class HarnessProfileStore: @unchecked Sendable {
             throw HarnessProfileStoreError.notSelectable("配置不存在")
         }
         try persist(HarnessProfileSelection(active: name, lastKnownGood: name))
+        recordUsage(name: name)
     }
 
     public func rollbackToLastKnownGood() throws -> String {
@@ -272,5 +322,52 @@ public final class HarnessProfileStore: @unchecked Sendable {
         } catch {
             throw HarnessProfileStoreError.persistenceFailed(error.localizedDescription)
         }
+    }
+
+    private func recentNames() -> [String] {
+        guard let data = try? Data(contentsOf: recentStateURL),
+              let names = try? decoder.decode([String].self, from: data) else {
+            return []
+        }
+        return names.filter(Self.isSafeName)
+    }
+
+    private func persistRecentNames(_ names: [String]) throws {
+        guard names.allSatisfy(Self.isSafeName) else { return }
+        try fileManager.createDirectory(
+            at: recentStateURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try encoder.encode(names).write(to: recentStateURL, options: .atomic)
+    }
+
+    private func migrateLegacyStateIfNeeded(from supportDirectory: URL) {
+        let legacyDirectory = supportDirectory.appendingPathComponent("HarnessProfiles", isDirectory: true)
+        let legacyURLs = [
+            (legacyDirectory.appendingPathComponent("selection.json", isDirectory: false), selectionStateURL),
+            (legacyDirectory.appendingPathComponent("recent.json", isDirectory: false), recentStateURL)
+        ]
+        for (source, destination) in legacyURLs {
+            guard !fileManager.fileExists(atPath: destination.path),
+                  isNonSymlinkRegularFile(source) else { continue }
+            do {
+                try fileManager.createDirectory(
+                    at: destination.deletingLastPathComponent(),
+                    withIntermediateDirectories: true
+                )
+                try fileManager.copyItem(at: source, to: destination)
+                try? fileManager.removeItem(at: source)
+            } catch {
+                continue
+            }
+        }
+    }
+
+    private static func stableIdentifier(for path: String) -> String {
+        SHA256.hash(data: Data(path.utf8))
+            .map { String(format: "%02x", $0) }
+            .joined()
+            .prefix(16)
+            .description
     }
 }

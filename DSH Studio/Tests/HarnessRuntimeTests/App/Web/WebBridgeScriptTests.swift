@@ -25,6 +25,11 @@ final class WebBridgeScriptTests: XCTestCase {
         XCTAssertTrue(source.contains("align-items: center"))
         XCTAssertTrue(source.contains("padding-top: 32px !important"))
         XCTAssertTrue(source.contains("padding: 40px 10px 6px !important"))
+        XCTAssertTrue(source.contains("let sidebarStateRetryTimer = 0"))
+        XCTAssertTrue(source.contains("let sidebarStateRetryCount = 0"))
+        XCTAssertTrue(source.contains("const sidebarEntrySelector"))
+        XCTAssertTrue(source.contains("mutationChangesSidebarStructure"))
+        XCTAssertTrue(source.contains("scheduleSidebarState();"))
     }
 
     func testHeroControlsTrackRenderedComposerCardBounds() {
@@ -43,6 +48,19 @@ final class WebBridgeScriptTests: XCTestCase {
         XCTAssertTrue(source.contains("rowBounds.right - cardBounds.right"))
         XCTAssertTrue(source.contains("new ResizeObserver(scheduleHeroAlignment)"))
         XCTAssertTrue(source.contains("window.addEventListener(\"resize\", scheduleHeroAlignment)"))
+        XCTAssertTrue(source.contains("let heroStructureDirty = true"))
+        XCTAssertTrue(source.contains("let heroEntries = []"))
+        XCTAssertTrue(source.contains("[root, composer, card].forEach"))
+        XCTAssertTrue(source.contains("const refreshHeroEntries"))
+        XCTAssertTrue(source.contains("heroContainerSelector"))
+        XCTAssertTrue(source.contains("mutationChangesHeroStructure"))
+        XCTAssertTrue(source.contains("const scheduleSidebarState"))
+        XCTAssertFalse(source.contains("[root, composer, row, card].forEach"))
+        XCTAssertTrue(source.contains("var(--deepseek-studio-chat-max-width, 1000px)"))
+        XCTAssertTrue(source.contains("max(748px, calc(100% - 96px))"))
+        XCTAssertTrue(source.contains("max(0px, calc(100% - 32px))"))
+        XCTAssertTrue(source.contains("min-width: 0 !important"))
+        XCTAssertFalse(source.contains("clamp(748px, calc(100% - 96px)"))
         XCTAssertFalse(source.contains("--dsh-studio-hero-content-width"))
         XCTAssertFalse(source.contains(":has(> [data-composer-card])"))
         XCTAssertFalse(source.contains("flex: 0 0 var(--dsh-studio-hero-content-width)"))
@@ -86,7 +104,7 @@ final class WebBridgeScriptTests: XCTestCase {
         XCTAssertTrue(source.contains("z-index: 1200 !important"))
     }
 
-    func testAppSettingsBridgeKeepsRuntimeDetailsInternal() throws {
+    func testAppSettingsBridgeProjectsOnlyGeneralSettings() throws {
         let sourceRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -111,12 +129,18 @@ final class WebBridgeScriptTests: XCTestCase {
         )
 
         XCTAssertTrue(source.contains("appSettings.openDataFolder"))
-        XCTAssertTrue(source.contains("appSettings.exportDiagnostics"))
-        XCTAssertTrue(source.contains("appSettings.openLogs"))
-        XCTAssertTrue(source.contains("appSettings.runtimeUpdate"))
-        XCTAssertTrue(source.contains("latestHarnessVersion"))
-        XCTAssertFalse(source.contains("availableHarnessVersion"))
-        XCTAssertFalse(source.contains("harnessStatus"))
+        XCTAssertTrue(source.contains("appSettings.chooseWorkspace"))
+        XCTAssertFalse(source.contains("appSettings.openTerminal"))
+        XCTAssertFalse(source.contains("appSettings.exportDiagnostics"))
+        XCTAssertFalse(source.contains("appSettings.openLogs"))
+        XCTAssertFalse(source.contains("appSettings.runtimeUpdate"))
+        XCTAssertFalse(source.contains("appSettings.createProfile"))
+        XCTAssertFalse(source.contains("appSettings.selectProfile"))
+        XCTAssertFalse(source.contains("appSettings.importPreset"))
+        XCTAssertFalse(source.contains("appSettings.exportPreset"))
+        XCTAssertFalse(source.contains("latestHarnessVersion"))
+        XCTAssertFalse(source.contains("harnessProfiles"))
+        XCTAssertFalse(source.contains("agentPresets"))
         XCTAssertTrue(source.contains("placeholder=\"748–2400\""))
         XCTAssertTrue(source.contains("选择工作区"))
         XCTAssertTrue(source.contains("data-app-i18n=\"dataFolder\">数据文件夹"))
@@ -125,19 +149,28 @@ final class WebBridgeScriptTests: XCTestCase {
             source.range(of: "data-app-i18n=\"dataFolder\"")!.lowerBound
         )
         XCTAssertFalse(source.contains("workspaceDetail"))
-        XCTAssertTrue(source.contains("data-app-i18n=\"harnessVersion\">Harness版本"))
         XCTAssertTrue(source.contains("dsh-studio-app-settings-section-divider"))
         XCTAssertTrue(source.contains("border-bottom: 1px solid var(--dsw-alias-border-l2)"))
         XCTAssertTrue(source.contains("const messages ="))
         XCTAssertTrue(source.contains("Chat content width"))
         XCTAssertTrue(source.contains("data-app-i18n=\"notifications\">通知"))
         XCTAssertTrue(source.contains("data-app-i18n=\"turnCompletionNotification\">轮次完成通知"))
-        XCTAssertTrue(source.contains("设置 DSH Studio完成后何时提醒您"))
+        XCTAssertTrue(source.contains("设置 DSH Studio 完成后何时提醒您"))
         XCTAssertTrue(source.contains("Choose when to be notified after DSH Studio finishes"))
         XCTAssertTrue(source.contains("data-app-i18n=\"permissionNotifications\">启用权限通知"))
         XCTAssertTrue(source.contains("在需要通知权限时显示提醒"))
         XCTAssertTrue(source.contains("data-app-i18n=\"questionNotifications\">启用问题通知"))
         XCTAssertTrue(source.contains("需要输入才能继续时显示提醒"))
+        XCTAssertTrue(source.contains("createGeneralBlock"))
+        XCTAssertTrue(source.contains("attachGeneralBlock"))
+        XCTAssertTrue(source.contains("dataset.slot = \"settings.general.item\""))
+        XCTAssertFalse(source.contains("settings.section"))
+        XCTAssertFalse(source.contains("dsh-studio-settings-nav"))
+        XCTAssertFalse(source.contains("deepseekStudioSettingsSection"))
+        XCTAssertFalse(source.contains("data-deepseek-studio-settings-content-active"))
+        XCTAssertFalse(source.contains("createStudioBlock"))
+        XCTAssertFalse(source.contains("studioBlock"))
+        XCTAssertFalse(source.contains("settingsSectionIds"))
         XCTAssertTrue(source.contains("dsh-studio-app-settings-notification-row"))
         XCTAssertTrue(source.contains("dsh-studio-app-settings-notification-row-last"))
         XCTAssertTrue(source.contains("width: 52px;"))
@@ -153,32 +186,208 @@ final class WebBridgeScriptTests: XCTestCase {
         XCTAssertTrue(source.contains("role=\"switch\""))
         XCTAssertTrue(source.contains("aria-haspopup=\"listbox\""))
         XCTAssertTrue(source.contains("data-app-option=\"whenNotFocused\""))
-        XCTAssertTrue(source.contains("<select"))
+        XCTAssertFalse(source.contains("<select"))
         XCTAssertFalse(source.contains("type=\"checkbox\""))
         XCTAssertTrue(source.contains("whenNotFocused"))
         XCTAssertTrue(source.contains("仅在未聚焦时"))
         XCTAssertTrue(source.contains("document.documentElement?.lang"))
-        XCTAssertTrue(source.contains("attributeFilter: [\"lang\"]"))
-        XCTAssertTrue(source.contains("打开日志文件夹"))
-        XCTAssertTrue(source.contains("dsh-studio-app-settings-version-actions"))
+        XCTAssertTrue(source.contains("attributeFilter: [\"lang\", \"class\"]"))
         XCTAssertTrue(source.contains("工作区"))
-        XCTAssertFalse(source.contains("当前数据文件夹"))
-        XCTAssertFalse(source.contains("<div class=\"dsh-studio-app-settings-section-title\">诊断</div>"))
-        XCTAssertTrue(source.contains("appSettings.chooseWorkspace"))
-        XCTAssertFalse(source.contains("appSettings.runtimeCheck"))
-        XCTAssertTrue(source.contains("appSettings.selectProfile"))
-        XCTAssertFalse(source.contains("appSettings.runtimeCreateProfile"))
-        XCTAssertFalse(source.contains("runtimeAvailableDataFormatID"))
-        XCTAssertFalse(source.contains("appSettings.pluginMarket"))
-        XCTAssertTrue(source.contains("appSettings.importPreset"))
-        XCTAssertTrue(source.contains("appSettings.exportPreset"))
-        XCTAssertTrue(settingsHandlerSource.contains("Agent Preset 已导入：\\(presetID)"))
-        XCTAssertTrue(settingsHandlerSource.contains("Agent Preset 已导出：\\(destination.lastPathComponent)"))
-        XCTAssertFalse(source.contains("Node 版本"))
-        XCTAssertFalse(source.contains("Runtime 版本"))
-        XCTAssertFalse(source.contains("pluginMarket"))
+        XCTAssertTrue(source.contains("数据文件夹"))
+        XCTAssertTrue(source.contains("data-app-i18n=\"notifications\">通知"))
+        XCTAssertFalse(source.contains("dsh-studio-app-settings-version-actions"))
+        XCTAssertFalse(source.contains("dsh-studio-app-settings-resource-list"))
+        XCTAssertFalse(source.contains("dsh-studio-app-settings-status-badge"))
+        XCTAssertFalse(settingsHandlerSource.contains("case \"appSettings.openTerminal\":"))
+        XCTAssertFalse(settingsHandlerSource.contains("terminal-open-failed"))
+        XCTAssertFalse(settingsHandlerSource.contains("Agent Preset 已导入"))
+        XCTAssertFalse(settingsHandlerSource.contains("Agent Preset 已导出"))
         XCTAssertFalse(settingsHandlerSource.contains("copyDiagnostics"))
 
+    }
+
+    func testNativeSettingsSceneOwnsAppLevelSettings() throws {
+        let sourceRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/App")
+        let appSource = try String(
+            contentsOf: sourceRoot.appendingPathComponent("Core/DeepSeekHarnessSliceApp.swift"),
+            encoding: .utf8
+        )
+        let settingsSource = try String(
+            contentsOf: sourceRoot.appendingPathComponent("Core/AppSettingsView.swift"),
+            encoding: .utf8
+        )
+
+        XCTAssertTrue(appSource.contains("Settings {"))
+        XCTAssertTrue(appSource.contains("AppSettingsView(model: AppDelegate.sharedModel)"))
+        XCTAssertTrue(settingsSource.contains("Harness Profiles"))
+        XCTAssertTrue(settingsSource.contains("Agent Presets"))
+        XCTAssertTrue(settingsSource.contains("Runtime"))
+        XCTAssertTrue(settingsSource.contains("诊断与工具"))
+    }
+
+    /// Guards the Settings window contract: one sidebar category per concern,
+    /// the macOS 26 settings metrics (46pt rows, 12pt group radius, 13/11pt
+    /// type) with no decoration layered on top of them, and no setting that
+    /// Harness's own settings page already projects.
+    func testSettingsWindowUsesSystemSettingsMetricsAndNativeControls() throws {
+        let appRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/App")
+        let source = try [
+            "Core/AppSettingsView.swift",
+            "Core/Settings/SettingsDesign.swift",
+            "Core/Settings/AppSettingsView+Profiles.swift",
+            "Core/Settings/AppSettingsView+Presets.swift",
+            "Core/Settings/AppSettingsView+Runtime.swift",
+            "Core/Settings/AppSettingsView+Diagnostics.swift"
+        ]
+        .map { try String(contentsOf: appRoot.appendingPathComponent($0), encoding: .utf8) }
+        .joined(separator: "\n")
+
+        // Only the categories this app owns appear in the sidebar.
+        for pane in ["case profiles", "case presets", "case runtime", "case diagnostics"] {
+            XCTAssertTrue(source.contains(pane), "missing settings pane \(pane)")
+        }
+        XCTAssertTrue(source.contains("NavigationSplitView"))
+        XCTAssertTrue(source.contains(".listStyle(.sidebar)"))
+        XCTAssertTrue(source.contains(".navigationTitle(activePane.title)"))
+        XCTAssertTrue(source.contains("SettingsGroup("))
+
+        // Preferences that Harness's own settings page already projects are not
+        // duplicated in the native window: one setting, one home.
+        for duplicated in ["chatContentMaxWidth", "workspaceURL", "currentDataHomeURL",
+                           "turnCompletionNotification", "permissionNotificationsEnabled",
+                           "questionNotificationsEnabled"] {
+            XCTAssertFalse(
+                source.contains(duplicated),
+                "\(duplicated) belongs to Harness's settings page, not the native window"
+            )
+        }
+
+        // macOS 26 settings surface metrics.
+        XCTAssertTrue(source.contains("static let rowMinHeight: CGFloat = 46"))
+        XCTAssertTrue(source.contains("static let groupCornerRadius: CGFloat = 12"))
+        XCTAssertTrue(source.contains("static let titleFont = Font.body.weight(.medium)"))
+        XCTAssertTrue(source.contains("static let detailFont = Font.subheadline"))
+        XCTAssertTrue(source.contains("static let headerFont = Font.subheadline.weight(.bold)"))
+        XCTAssertTrue(source.contains(".fill(SettingsDesign.groupFill)"))
+
+        // The group surface follows the effective appearance instead of being
+        // frozen to the one that was current when the value was created.
+        XCTAssertTrue(source.contains("static let groupFill = adaptive("))
+        XCTAssertTrue(source.contains("static let separator = adaptive("))
+
+        // Every row action shares one width, and the sidebar cannot be collapsed.
+        XCTAssertTrue(source.contains("static let actionButtonLabelWidth"))
+        XCTAssertTrue(source.contains("frame(minWidth: SettingsDesign.actionButtonLabelWidth)"))
+        XCTAssertTrue(source.contains("SettingsWindowConfigurator"))
+        XCTAssertTrue(source.contains("itemIdentifier == .toggleSidebar"))
+        XCTAssertTrue(source.contains("window.toolbarStyle = .unified"))
+
+        // Destructive removal is confirmed and unreachable for the default profile.
+        XCTAssertTrue(source.contains("case confirmProfileDeletion"))
+        XCTAssertTrue(source.contains("canDeleteCurrentProfile"))
+        XCTAssertTrue(source.contains("HarnessProfileStore.defaultProfileName"))
+
+        // Hierarchy comes from spacing, type, and one low-contrast fill.
+        XCTAssertFalse(source.contains("LinearGradient"))
+        XCTAssertFalse(source.contains(".shadow("))
+        XCTAssertFalse(source.contains(".borderedProminent"))
+        XCTAssertFalse(source.contains(".glassEffect("))
+        XCTAssertFalse(source.contains("NSVisualEffectView"))
+
+        // The window still opens on a category this app owns.
+        XCTAssertTrue(source.contains("initialPane: SettingsPane = .profiles"))
+    }
+
+    func testNativeMenuCommandsCoverAppFileViewAndHelpActions() throws {
+        let sourceURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/App/Core/DeepSeekHarnessSliceApp.swift")
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+
+        XCTAssertTrue(source.contains("Settings {"))
+        XCTAssertFalse(source.contains("CommandMenu(\"DSH Studio\")"))
+        XCTAssertTrue(source.contains("检查 Runtime 更新"))
+        XCTAssertTrue(source.contains("打开 DSH 终端"))
+        XCTAssertTrue(source.contains("打开工作区"))
+        XCTAssertTrue(source.contains("打开数据文件夹"))
+        XCTAssertTrue(source.contains("关闭窗口"))
+        XCTAssertTrue(source.contains("显示/隐藏侧边栏"))
+        XCTAssertTrue(source.contains("刷新 Harness"))
+        XCTAssertTrue(source.contains("进入全屏"))
+        XCTAssertTrue(source.contains("DSH Studio 帮助"))
+        XCTAssertTrue(source.contains("打开日志文件夹"))
+        XCTAssertTrue(source.contains("导出诊断包"))
+        XCTAssertTrue(source.contains("复制诊断信息"))
+    }
+
+    func testHarnessMenuBridgeExposesSidebarToggleAndNativeControls() throws {
+        let behaviorURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/Harness/Web/Layout/HarnessLayoutWebBridge+Behavior.swift")
+        let webViewURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/App/Web/HarnessWebView.swift")
+        let behaviorSource = try String(contentsOf: behaviorURL, encoding: .utf8)
+        let webViewSource = try String(contentsOf: webViewURL, encoding: .utf8)
+
+        XCTAssertTrue(behaviorSource.contains("__deepseekStudioToggleSidebar"))
+        XCTAssertTrue(behaviorSource.contains("toggle.click()"))
+        XCTAssertTrue(webViewSource.contains("reloadLiveWebViews"))
+        XCTAssertTrue(webViewSource.contains("toggleSidebarOnLiveWebViews"))
+        XCTAssertTrue(webViewSource.contains("evaluateJavaScript"))
+    }
+
+    func testPluginMarketRestartIsRoutedThroughNativeRuntime() throws {
+        let sourceRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/App")
+        let bridgeSource = try String(
+            contentsOf: sourceRoot.appendingPathComponent("Web/WebView/PluginMarketRestartWebBridge.swift"),
+            encoding: .utf8
+        )
+        let webViewSource = try String(
+            contentsOf: sourceRoot.appendingPathComponent("Web/HarnessWebView.swift"),
+            encoding: .utf8
+        )
+        let handlerSource = try String(
+            contentsOf: sourceRoot.appendingPathComponent("Web/WebView/HarnessWebViewSettingsBridge.swift"),
+            encoding: .utf8
+        )
+
+        XCTAssertTrue(bridgeSource.contains("/dsh-market/restart"))
+        XCTAssertTrue(bridgeSource.contains("pluginMarket.restart"))
+        XCTAssertTrue(bridgeSource.contains("status: 202"))
+        XCTAssertTrue(webViewSource.contains("PluginMarketRestartWebBridge.source"))
+        XCTAssertTrue(handlerSource.contains("PluginMarketRestartWebBridge.messageType"))
+        XCTAssertTrue(handlerSource.contains("restartRuntimeForPluginMarket"))
     }
 
     func testWorkspaceGroupsUseAvailableListWidthAroundScrollbar() {
@@ -216,5 +425,28 @@ final class WebBridgeScriptTests: XCTestCase {
         XCTAssertTrue(source.contains("button.click()"))
         XCTAssertFalse(source.contains("Session 导出失败"))
         XCTAssertFalse(source.contains("Session export failed"))
+    }
+
+    func testDiagnosticsExporterContractUsesBoundedRedactedEvidence() throws {
+        let sourceRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/App/Core")
+        let source = try String(
+            contentsOf: sourceRoot.appendingPathComponent("DiagnosticsExporter.swift"),
+            encoding: .utf8
+        )
+
+        XCTAssertTrue(source.contains("static func prepareStaging"))
+        XCTAssertTrue(source.contains("LogRedactor.redact(systemInfo)"))
+        XCTAssertTrue(source.contains("sanitizeText: true"))
+        XCTAssertTrue(source.contains("maxEvidenceBytes"))
+        XCTAssertTrue(source.contains("maxTotalStagingBytes"))
+        XCTAssertTrue(source.contains("allowedEvidenceNames"))
+        XCTAssertTrue(source.contains("isNonSymlinkRegularFile"))
+        XCTAssertTrue(source.contains("DiagnosticsExportError.unsafeInput"))
     }
 }

@@ -120,7 +120,7 @@ Its process is intentionally explicit:
 1. `DSH Studio Runtime/Scripts/build-runtime.sh` resolves `@deepseek-ai/dsh@latest` and `pnpm@latest` from `registry.npmjs.org`.
 2. It downloads a fixed Node.js version, creates a lockfile, and runs `npm ci --ignore-scripts` in the isolated build directory.
 3. Harness, pnpm, native dependencies, and the local `host.describe` smoke test are validated.
-4. The script emits an architecture-specific tarball, manifest, SHA-256 file, and artifact metadata.
+4. The script emits an architecture-specific tarball, manifest, and artifact metadata. GitHub Release provides the human-readable artifact SHA-256; metadata and the signed catalog retain the checksum for automatic verification.
 5. `DSH Studio Runtime/Scripts/generate-runtime-catalog.sh` combines the arm64 and x86_64 metadata into a release catalog.
 6. The Runtime repository workflow signs that catalog with the Runtime catalog Ed25519 key and publishes the signed file to its fixed `runtime-catalog` GitHub Release.
 
