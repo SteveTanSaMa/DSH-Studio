@@ -3,7 +3,9 @@ import XCTest
 
 @testable import DeepSeekRuntime
 
+/// Activation cases: what the store records, and what it refuses to infer.
 extension RuntimeDataProfileTests {
+    /// Activation persists the Runtime and data profile as one pair.
     func testActivationPersistsRuntimeAndDataProfilePair() throws {
         let store = RuntimeDataProfileStore(supportDirectory: temporaryRoot)
         let profile = try store.ensureLegacyProfile(
@@ -32,6 +34,7 @@ extension RuntimeDataProfileTests {
         XCTAssertEqual(store.dataFormatID(forProfileID: profile.id), "sqlite-v1")
     }
 
+    /// A missing profile manifest is not replaced by the active-state record.
     func testDataFormatLookupDoesNotTrustActiveStateWhenProfileMetadataIsMissing() throws {
         let store = RuntimeDataProfileStore(supportDirectory: temporaryRoot)
         let profile = try store.ensureLegacyProfile(
@@ -58,6 +61,7 @@ extension RuntimeDataProfileTests {
         XCTAssertEqual(store.activeState()?.dataFormatID, "sqlite-v1")
     }
 
+    /// Activation keeps the previous Runtime version available for rollback.
     func testActivationRetainsPreviousRuntimeVersionForRollback() throws {
         let store = RuntimeDataProfileStore(supportDirectory: temporaryRoot)
         let profile = try store.ensureLegacyProfile(
@@ -90,6 +94,7 @@ extension RuntimeDataProfileTests {
         XCTAssertEqual(store.activeState()?.previousRuntimeVersion, "rc7-runtime")
     }
 
+    /// Activation keeps the previous profile so a rollback can return to it.
     func testActivationRetainsPreviousProfileForRuntimeRollback() throws {
         let store = RuntimeDataProfileStore(supportDirectory: temporaryRoot)
         let oldProfile = try store.ensureLegacyProfile(
@@ -123,6 +128,7 @@ extension RuntimeDataProfileTests {
         XCTAssertEqual(store.previousProfile(), oldProfile)
     }
 
+    /// Unknown Runtime and legacy data persist a pointer without inventing a format.
     func testUnknownRuntimeAndLegacyDataCanPersistActivePointerWithoutInferringFormat() throws {
         let store = RuntimeDataProfileStore(supportDirectory: temporaryRoot)
         let home = temporaryRoot.appendingPathComponent("legacy", isDirectory: true)
@@ -146,6 +152,7 @@ extension RuntimeDataProfileTests {
         XCTAssertNil(store.activeState()?.dataFormatID)
     }
 
+    /// Activation refuses a profile and Runtime whose formats conflict.
     func testActivationRejectsIncompatibleProfileAndRuntime() throws {
         let store = RuntimeDataProfileStore(supportDirectory: temporaryRoot)
         let profile = try store.ensureLegacyProfile(
@@ -171,6 +178,7 @@ extension RuntimeDataProfileTests {
         XCTAssertNil(store.activeState())
     }
 
+    /// An empty legacy home adopts the Runtime's format on first use.
     func testEmptyLegacyHomeCanReceiveItsFirstRuntimeFormat() throws {
         let store = RuntimeDataProfileStore(supportDirectory: temporaryRoot)
         let profile = try store.ensureLegacyProfile(
@@ -192,6 +200,7 @@ extension RuntimeDataProfileTests {
         XCTAssertEqual(store.activeState()?.dataFormatID, "sqlite-v2")
     }
 
+    /// A home that was empty before launch still adopts the format afterwards.
     func testPreLaunchEmptyHomeCanReceiveFormatAfterHarnessCreatesFiles() throws {
         let store = RuntimeDataProfileStore(supportDirectory: temporaryRoot)
         let home = temporaryRoot.appendingPathComponent("new-dsh-home", isDirectory: true)
@@ -221,6 +230,7 @@ extension RuntimeDataProfileTests {
         XCTAssertEqual(store.activeState()?.dataFormatID, "sqlite-v2")
     }
 
+    /// A non-empty unknown home never receives a format by inference.
     func testNonEmptyUnknownLegacyHomeCannotReceiveAFormatByInference() throws {
         let store = RuntimeDataProfileStore(supportDirectory: temporaryRoot)
         let home = temporaryRoot.appendingPathComponent("old-dsh-home", isDirectory: true)

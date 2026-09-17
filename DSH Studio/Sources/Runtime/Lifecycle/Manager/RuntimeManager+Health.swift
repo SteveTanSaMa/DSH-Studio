@@ -6,7 +6,16 @@
 import Foundation
 import DeepSeekHarness
 
+/// Readiness probing, exit handling, and the startup deadline.
 extension RuntimeManager {
+    /// Probes the freshly launched child and promotes it to ready when healthy.
+    ///
+    /// The generation is re-checked after the await, so a late answer from a replaced
+    /// process can never mark its successor ready.
+    ///
+    /// - Parameters:
+    ///   - url: URL the child printed as its ready line.
+    ///   - generation: Process generation the probe belongs to.
     func performHealthCheck(url: URL, generation: Int) async {
         guard state == .starting, generation == processGeneration else { return }
         logs.log(component: "Harness", level: "info", message: "detected port \(url.port.map(String.init) ?? "unknown")")
@@ -41,6 +50,14 @@ extension RuntimeManager {
         }
     }
 
+    /// Records the child's exit and decides between a crash and a clean stop.
+    ///
+    /// A requested stop ends in terminated; an unexpected exit while ready, starting,
+    /// or launching becomes a crash so the restart policy can act on it.
+    ///
+    /// - Parameters:
+    ///   - status: Exit status reported by the child.
+    ///   - generation: Process generation that exited.
     func handleTermination(_ status: Int32, generation: Int) {
         guard generation == processGeneration else { return }
         processExited = true
@@ -83,6 +100,9 @@ extension RuntimeManager {
         }
     }
 
+    /// Fails the launch if the child does not become ready in time.
+    ///
+    /// - Parameter generation: Process generation the deadline belongs to.
     func armStartupTimeout(generation: Int) {
         let timeout = configuration.startupTimeout
         startupTask = Task { [weak self] in

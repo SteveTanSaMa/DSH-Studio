@@ -7,8 +7,10 @@ import AppKit
 import DeepSeekRuntime
 import SwiftUI
 
-/// Native macOS settings for the Harness resources and support tools the app
-/// owns.
+/// Native macOS settings for the Harness resources and support tools.
+///
+/// App preferences that already live in Harness's own settings page are absent
+/// here on purpose.
 ///
 /// App preferences that are already projected into Harness's own settings page
 /// (workspace, data folder, chat width, notifications) are deliberately absent
@@ -20,10 +22,13 @@ import SwiftUI
 /// come from the system instead of being re-created here.
 @MainActor
 struct AppSettingsView: View {
+    /// Model whose Runtime, profiles, and presets the page edits.
     @ObservedObject var model: AppModel
     // Shared with the pane builders in the sibling `AppSettingsView+*.swift`
     // files, which keep each category's rows and copy readable on their own.
+    /// Operation in flight, used to disable and show progress per row.
     @State var operation: SettingsOperation?
+    /// Draft name for the create-profile field.
     @State var newProfileName = ""
 
     @State private var selection: SettingsPane?
@@ -31,11 +36,17 @@ struct AppSettingsView: View {
     @State private var statusDismissTask: Task<Void, Never>?
     @State private var alert: SettingsAlert?
 
+    /// Creates the settings page.
+    ///
+    /// - Parameters:
+    ///   - model: App model to edit.
+    ///   - initialPane: Category to show first; defaults to Harness Profiles.
     init(model: AppModel, initialPane: SettingsPane = .profiles) {
         self.model = model
         _selection = State(initialValue: initialPane)
     }
 
+    /// Renders the sidebar, the selected category, and the single alert surface.
     var body: some View {
         NavigationSplitView {
             sidebar
@@ -95,9 +106,7 @@ struct AppSettingsView: View {
 
         @MainActor
         final class Coordinator {
-            /// The window finishes building its toolbar a moment after the view
-            /// appears, so a few bounded retries are used instead of assuming a
-            /// single pass.
+            /// Retries a few times because the toolbar is built asynchronously.
             func configure(_ view: NSView, attempt: Int) {
                 Task { @MainActor [weak view] in
                     guard let view else { return }
@@ -175,8 +184,10 @@ struct AppSettingsView: View {
         }
     }
 
-    /// Transient confirmation for finished work. Failures are reported with an
-    /// alert instead, so this only ever carries neutral or success information.
+    /// Transient confirmation for finished work.
+    ///
+    /// Failures go to an alert instead, so this only ever carries neutral or
+    /// success information.
     @ViewBuilder
     private var statusBar: some View {
         if let status {
@@ -229,6 +240,7 @@ struct AppSettingsView: View {
         operation != nil || runtimeBusy
     }
 
+    /// Whether the Runtime is mid-transition and its controls must stay disabled.
     var runtimeBusy: Bool {
         switch model.runtime.state {
         case .provisioning, .updating, .rollingBack, .launching, .starting, .stopping:
@@ -238,22 +250,30 @@ struct AppSettingsView: View {
         }
     }
 
+    /// Version of the installed Runtime build, or `未知` when none is recorded.
     var installedRuntimeVersion: String {
         model.runtime.runtimeVersionStatus?.installed?.runtimeVersion ?? "未知"
     }
 
+    /// The draft profile name with surrounding whitespace removed.
     var trimmedNewProfileName: String {
         newProfileName.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    /// Whether the current profile may be deleted.
+    ///
+    /// The default profile is always protected, and no deletion is offered while an
+    /// operation is running.
     var canDeleteCurrentProfile: Bool {
         !isBusy && model.runtime.configuration.profileName != HarnessProfileStore.defaultProfileName
     }
 
+    /// Localized lifecycle state of the Runtime process.
     var installedRuntimeState: String {
         model.runtime.state.displayName
     }
 
+    /// Localized comparison between the installed and pinned Runtime.
     var runtimeVersionState: String {
         model.runtime.runtimeVersionStatus?.displayName ?? "正在检查"
     }
@@ -266,16 +286,29 @@ struct AppSettingsView: View {
         return "尚未获取可用版本，请先检查更新"
     }
 
+    /// Formats one preset's identifier, file count, and size for its row.
+    ///
+    /// - Parameter summary: Preset to describe.
+    /// - Returns: The secondary line shown under the preset name.
     func statusText(for summary: AgentPresetSummary) -> String {
         "\(summary.id) · \(summary.fileCount) 个文件 · \(ByteCountFormatter.string(fromByteCount: summary.totalBytes, countStyle: .file))"
     }
 
+    /// Describes a profile's bundles, or its problem when it has one.
+    ///
+    /// - Parameter profile: Profile to describe.
+    /// - Returns: The secondary line shown under the profile name.
     func profileDetail(_ profile: HarnessProfile) -> String {
         if let problem = profile.problem { return problem }
         if profile.bundles.isEmpty { return "无 Bundle 信息" }
         return profile.bundles.joined(separator: " · ")
     }
 
+    /// Shows a transient status message and announces it to assistive technology.
+    ///
+    /// The message clears itself after a few seconds; failures use ``alert`` instead.
+    ///
+    /// - Parameter message: Text to show in the status bar.
     func showStatus(_ message: String) {
         statusDismissTask?.cancel()
         withAnimation(.easeOut(duration: 0.15)) {
@@ -300,6 +333,10 @@ struct AppSettingsView: View {
         }
     }
 
+    /// Selection binding that switches profiles through the model.
+    ///
+    /// The setter ignores the current profile, so re-selecting it cannot restart
+    /// Harness.
     var activeProfileBinding: Binding<String> {
         Binding(
             get: { model.runtime.configuration.profileName },
@@ -323,6 +360,7 @@ struct AppSettingsView: View {
         }
     }
 
+    /// Creates a profile from the draft name and clears the field on success.
     func createProfile() {
         let name = trimmedNewProfileName
         guard !name.isEmpty, operation == nil else { return }
@@ -337,6 +375,7 @@ struct AppSettingsView: View {
         }
     }
 
+    /// Asks for confirmation before deleting the current profile.
     func requestProfileDeletion() {
         guard canDeleteCurrentProfile else { return }
         alert = .confirmProfileDeletion(model.runtime.configuration.profileName)
@@ -355,6 +394,7 @@ struct AppSettingsView: View {
         }
     }
 
+    /// Runs the import panel flow and reports the installed preset.
     func importPreset() {
         guard operation == nil else { return }
         operation = .importingPreset
@@ -369,6 +409,7 @@ struct AppSettingsView: View {
         }
     }
 
+    /// Runs the export panel flow and reports the written archive.
     func exportPreset() {
         guard operation == nil else { return }
         operation = .exportingPreset
@@ -383,6 +424,7 @@ struct AppSettingsView: View {
         }
     }
 
+    /// Refreshes the version comparison without downloading anything.
     func checkRuntime() {
         guard operation == nil else { return }
         operation = .checkingRuntimeUpdate
@@ -393,6 +435,7 @@ struct AppSettingsView: View {
         }
     }
 
+    /// Activates the verified Runtime update.
     func updateRuntime() {
         guard operation == nil else { return }
         operation = .updatingRuntime
@@ -407,6 +450,7 @@ struct AppSettingsView: View {
         }
     }
 
+    /// Restores the previous Runtime build.
     func rollbackRuntime() {
         guard operation == nil else { return }
         operation = .rollingBackRuntime
@@ -421,6 +465,7 @@ struct AppSettingsView: View {
         }
     }
 
+    /// Writes a diagnostics archive and reports its file name.
     func exportDiagnostics() {
         guard operation == nil else { return }
         operation = .exportingDiagnostics
@@ -435,6 +480,7 @@ struct AppSettingsView: View {
         }
     }
 
+    /// Copies the redacted diagnostics summary to the pasteboard.
     func copyDiagnostics() {
         guard operation == nil else { return }
         operation = .copyingDiagnostics
@@ -448,6 +494,7 @@ struct AppSettingsView: View {
         }
     }
 
+    /// Opens the log directory in Finder.
     func openLogs() {
         guard operation == nil else { return }
         operation = .openingLogs
@@ -459,6 +506,7 @@ struct AppSettingsView: View {
         }
     }
 
+    /// Opens a terminal scoped to the current Runtime, profile, and workspace.
     func openTerminal() {
         guard operation == nil else { return }
         operation = .openingTerminal
@@ -471,19 +519,27 @@ struct AppSettingsView: View {
     }
 }
 
-/// Categories shown in the Settings sidebar, in scan order: the Harness
-/// resources the app manages first, then maintenance.
+/// Categories shown in the Settings sidebar, in scan order.
+///
+/// The Harness resources the app manages come first, then maintenance. Preferences
+/// owned by Harness's own settings page are not repeated here.
 ///
 /// Harness-backed preferences belong to Harness's own settings page, so they are
 /// intentionally not repeated as categories here.
 enum SettingsPane: String, CaseIterable, Identifiable, Hashable {
+    /// Harness composition profiles: which one runs and what else is installed.
     case profiles
+    /// User Agent Presets: import, export, and what is installed.
     case presets
+    /// Runtime versions, status, and the maintenance actions.
     case runtime
+    /// Diagnostics bundles, logs, and the scoped terminal.
     case diagnostics
 
+    /// Identity for list rendering: the raw value.
     var id: String { rawValue }
 
+    /// Sidebar label for the category.
     var title: String {
         switch self {
         case .profiles: return "Harness Profiles"
@@ -493,6 +549,7 @@ enum SettingsPane: String, CaseIterable, Identifiable, Hashable {
         }
     }
 
+    /// SF Symbol used next to the sidebar label.
     var symbol: String {
         switch self {
         case .profiles: return "square.stack.3d.up"
@@ -503,30 +560,47 @@ enum SettingsPane: String, CaseIterable, Identifiable, Hashable {
     }
 }
 
-/// A user-initiated operation that must disable its controls and show progress
-/// without freezing the rest of the page.
+/// A user-initiated operation that disables its controls while it runs.
+///
+/// Only the affected rows are disabled; the rest of the page stays interactive.
 enum SettingsOperation: Hashable {
+    /// Switching the active profile, which restarts Harness.
     case selectingProfile
+    /// Creating a profile directory.
     case creatingProfile
+    /// Deleting the current profile directory.
     case deletingProfile
+    /// Importing a preset archive.
     case importingPreset
+    /// Exporting a preset archive.
     case exportingPreset
+    /// Refreshing the Runtime version comparison.
     case checkingRuntimeUpdate
+    /// Activating a verified Runtime update.
     case updatingRuntime
+    /// Restoring the previous Runtime build.
     case rollingBackRuntime
+    /// Writing a diagnostics archive.
     case exportingDiagnostics
+    /// Copying the diagnostics summary.
     case copyingDiagnostics
+    /// Opening the log directory.
     case openingLogs
+    /// Opening the scoped terminal.
     case openingTerminal
 }
 
-/// The one modal surface the page owns: a failure report or a destructive
-/// confirmation. Keeping both in a single presentation point avoids competing
-/// alerts when an operation fails while another one is pending.
+/// The one modal surface the page owns: a failure or a deletion confirmation.
+///
+/// Keeping both in a single presentation point avoids competing alerts when an
+/// operation fails while another one is pending.
 enum SettingsAlert: Identifiable {
+    /// An operation failed; carries the message to show.
     case failure(String)
+    /// Confirmation before deleting a profile; carries its name.
     case confirmProfileDeletion(String)
 
+    /// Identity derived from the alert's content.
     var id: String {
         switch self {
         case .failure(let message): return "failure:\(message)"
@@ -534,6 +608,7 @@ enum SettingsAlert: Identifiable {
         }
     }
 
+    /// Localized alert title.
     var title: String {
         switch self {
         case .failure: return "操作失败"
@@ -541,6 +616,7 @@ enum SettingsAlert: Identifiable {
         }
     }
 
+    /// Optional localized explanation shown under the title.
     var message: String? {
         switch self {
         case .failure(let message): return message

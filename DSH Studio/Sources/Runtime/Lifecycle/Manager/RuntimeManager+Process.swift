@@ -7,7 +7,14 @@ import Darwin
 import DeepSeekLogging
 import Foundation
 
+/// Launch prerequisites and child-process I/O for the manager.
 extension RuntimeManager {
+    /// Checks that the configured Node.js and Harness paths are usable.
+    ///
+    /// A missing path fails the manager with ``RuntimeError/missingRuntime(_:)``, so the
+    /// UI reports the problem instead of launching a process that cannot work.
+    ///
+    /// - Returns: `true` when both paths exist and the architecture matches.
     func validateRuntime() -> Bool {
         guard FileManager.default.isExecutableFile(atPath: configuration.nodeExecutable.path) else {
             fail(.missingRuntime(configuration.nodeExecutable.path))
@@ -39,6 +46,9 @@ extension RuntimeManager {
         return true
     }
 
+    /// Creates the data home and workspace directories the launch needs.
+    ///
+    /// - Returns: `true` when every directory exists afterwards.
     func prepareDirectories() -> Bool {
         do {
             try FileManager.default.createDirectory(
@@ -56,6 +66,10 @@ extension RuntimeManager {
         }
     }
 
+    /// Terminates a Harness process left behind by a previous run.
+    ///
+    /// The PID file is only trusted when it names a live process that is not this app,
+    /// so a recycled identifier cannot make the manager kill an unrelated process.
     func cleanStaleProcessIfNeeded() {
         let pidURL = configuration.dshHome
             .deletingLastPathComponent()
@@ -72,6 +86,7 @@ extension RuntimeManager {
         usleep(500_000)
     }
 
+    /// Removes the recorded PID file, ignoring a missing file.
     func removePIDFile() {
         let pidURL = configuration.dshHome
             .deletingLastPathComponent()
@@ -92,6 +107,14 @@ extension RuntimeManager {
         return String(data: data, encoding: .utf8) ?? ""
     }
 
+    /// Buffers child output and reacts to complete lines.
+    ///
+    /// Output from a superseded process generation is dropped, which is what keeps a
+    /// late callback from an old process out of the current state machine.
+    ///
+    /// - Parameters:
+    ///   - data: Chunk read from the child's standard output.
+    ///   - generation: Process generation the chunk belongs to.
     func handleStdout(_ data: Data, generation: Int) {
         guard generation == processGeneration else { return }
         guard let text = String(data: data, encoding: .utf8) else { return }
@@ -113,6 +136,11 @@ extension RuntimeManager {
         }
     }
 
+    /// Buffers child error output and keeps the recent lines for diagnostics.
+    ///
+    /// - Parameters:
+    ///   - data: Chunk read from the child's standard error.
+    ///   - generation: Process generation the chunk belongs to.
     func handleStderr(_ data: Data, generation: Int) {
         guard generation == processGeneration else { return }
         guard let text = String(data: data, encoding: .utf8) else { return }

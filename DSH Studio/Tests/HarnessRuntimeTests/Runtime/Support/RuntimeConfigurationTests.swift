@@ -10,6 +10,7 @@ import XCTest
 
 /// Ensures every Harness launch remains bound to 127.0.0.1.
 final class RuntimeConfigurationTests: XCTestCase {
+    /// Launch arguments always bind the loopback interface.
     func testRuntimeArgumentsAlwaysBindLoopback() {
         let configuration = RuntimeConfiguration(
             nodeExecutable: URL(fileURLWithPath: "/tmp/node"),
@@ -25,6 +26,7 @@ final class RuntimeConfigurationTests: XCTestCase {
         XCTAssertFalse(configuration.arguments.contains("0.0.0.0"))
     }
 
+    /// A named profile is passed through the launcher's profile argument.
     func testNamedProfileUsesLauncherProfileArgument() {
         let configuration = RuntimeConfiguration(
             nodeExecutable: URL(fileURLWithPath: "/tmp/node"),
@@ -40,6 +42,7 @@ final class RuntimeConfigurationTests: XCTestCase {
         )
     }
 
+    /// The child's path puts the bundled pnpm and Node first.
     func testRuntimePathPrioritizesBundledPnpmAndNode() {
         let path = SystemHarnessProcess.runtimePath(
             nodeExecutable: URL(fileURLWithPath: "/runtime/node/bin/node"),

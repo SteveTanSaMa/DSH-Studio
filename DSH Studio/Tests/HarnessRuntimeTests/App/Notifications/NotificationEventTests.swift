@@ -7,7 +7,9 @@ import Foundation
 import UserNotifications
 import XCTest
 
+/// Covers notification event decoding, deduplication, and authorization policy.
 final class NotificationEventTests: XCTestCase {
+    /// A `turn/end` frame decodes into a completed-turn notification event.
     func testWebSocketFrameAndTurnEnd() throws {
         let json = #"""
         {
@@ -30,6 +32,7 @@ final class NotificationEventTests: XCTestCase {
         )
     }
 
+    /// The turn-end reason survives decoding so failures are not reported as success.
     func testTurnEndReasonIsPreservedForNonSuccessfulResults() {
         let event = HarnessNotificationEvent(wireData: Data(#"""
         {"payload":{"type":"session/event","sessionId":"s","event":{"type":"turn/end","data":{"turn":2,"reason":{"kind":"error"}}}}}
@@ -41,6 +44,7 @@ final class NotificationEventTests: XCTestCase {
         )
     }
 
+    /// Tool activity is not user-facing and must not raise a notification.
     func testToolEventsDoNotBecomeNotificationEvents() {
         let toolCall = HarnessNotificationEvent(wireData: Data(#"""
         {"rpcId":"frame-tool","payload":{"type":"session/event","sessionId":"s","event":{"type":"tool/call","data":{"turn":1,"step":1,"callId":"c","name":"shell","arguments":"{}"}}}}
@@ -48,6 +52,7 @@ final class NotificationEventTests: XCTestCase {
         XCTAssertNil(toolCall)
     }
 
+    /// Approval and question frames carry the identifier used to resolve them.
     func testMuxInteractionFramesUseStableRequestIdentifiers() {
         let approval = HarnessNotificationEvent(wireData: Data(#"""
         {"rpcId":"frame-2","payload":{"type":"approval/requested","sessionId":"s","approvalId":"a"}}
@@ -74,6 +79,10 @@ final class NotificationEventTests: XCTestCase {
         )
     }
 
+    /// The deduper honours the focus policy and drops replayed events.
+    ///
+    /// A turn is skipped while the app is frontmost under the default preference, and
+    /// the same turn is never delivered twice.
     func testDeduperAppliesFocusPolicyAndSuppressesReplays() {
         var deduper = NotificationEventDeduper()
         let turn = HarnessNotificationEvent.turnCompleted(sessionID: "s", turn: 1, reason: .completed)
@@ -110,6 +119,7 @@ final class NotificationEventTests: XCTestCase {
         ))
     }
 
+    /// A pending interaction notifies once until it is resolved.
     func testPendingInteractionsNotifyOnceUntilResolved() {
         var deduper = NotificationEventDeduper()
         let permission = HarnessNotificationEvent.permissionWaiting(sessionID: "s", requestID: "p")
@@ -145,6 +155,7 @@ final class NotificationEventTests: XCTestCase {
         ), .permissionWaiting)
     }
 
+    /// Authorization is requested only when a notification is actually delivered.
     @MainActor
     func testCoordinatorRequestsAuthorizationOnlyForARealNotification() async {
         let suiteName = "DeepSeekStudio.NotificationTests.coordinator.\(UUID().uuidString)"
@@ -172,6 +183,7 @@ final class NotificationEventTests: XCTestCase {
         XCTAssertTrue(center.requests[1].content.body.contains("DSH Studio"))
     }
 
+    /// With turn notifications disabled, no authorization prompt appears.
     @MainActor
     func testDisabledTurnNotificationsDoNotRequestAuthorization() async {
         let suiteName = "DeepSeekStudio.NotificationTests.disabled.\(UUID().uuidString)"
@@ -194,6 +206,7 @@ final class NotificationEventTests: XCTestCase {
         XCTAssertEqual(center.addedRequests, 0)
     }
 
+    /// A denied authorization does not block later events from being processed.
     @MainActor
     func testCoordinatorDoesNotLetDeniedAuthorizationAffectLaterEvents() async {
         let suiteName = "DeepSeekStudio.NotificationTests.denied.\(UUID().uuidString)"

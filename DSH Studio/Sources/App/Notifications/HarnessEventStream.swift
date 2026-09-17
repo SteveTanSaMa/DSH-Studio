@@ -10,6 +10,7 @@ import OSLog
 /// Owns one reconnecting native WebSocket subscription to the Runtime mux stream.
 @MainActor
 final class HarnessEventStream {
+    /// Called for every event decoded from the stream; `nil` stops delivery.
     var onEvent: ((HarnessNotificationEvent) -> Void)?
 
     private let logger = Logger(subsystem: "SteveTan.DSH-Studio", category: "HarnessEventStream")
@@ -17,6 +18,12 @@ final class HarnessEventStream {
     private var webSocketTask: URLSessionWebSocketTask?
     private var generation = 0
 
+    /// Starts streaming from the Runtime, replacing any previous subscription.
+    ///
+    /// A non-loopback base URL is ignored, and the subscription reconnects on its own
+    /// until ``stop()`` or another ``start(baseURL:)`` cancels it.
+    ///
+    /// - Parameter baseURL: Ready URL reported by the Runtime.
     func start(baseURL: URL) {
         stop()
         guard HarnessURLPolicy.isAllowedLoopback(baseURL) else { return }
@@ -33,6 +40,9 @@ final class HarnessEventStream {
         }
     }
 
+    /// Cancels the subscription and its socket.
+    ///
+    /// The generation counter is bumped so a callback already in flight is dropped.
     func stop() {
         generation += 1
         streamTask?.cancel()

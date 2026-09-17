@@ -2,8 +2,10 @@ import Foundation
 import XCTest
 @testable import DeepSeekRuntime
 
+/// Conflict cases: a Runtime version is immutable, so differing content is refused.
 extension RuntimeProvisionerTests {
 
+    /// A version conflict cannot overwrite the active versioned installation.
     func testSameRuntimeVersionConflictCannotOverwriteActiveVersionedRuntime() async throws {
         let support = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: support) }
@@ -56,6 +58,7 @@ extension RuntimeProvisionerTests {
         )
     }
 
+    /// A version conflict cannot overwrite a prepared candidate.
     func testSameRuntimeVersionConflictCannotOverwritePreparedCandidate() async throws {
         let support = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: support) }
@@ -126,6 +129,7 @@ extension RuntimeProvisionerTests {
         )
     }
 
+    /// A legacy Runtime cannot ignore a conflicting versioned installation.
     func testLegacyRuntimeCannotIgnoreConflictingVersionedInstallation() async throws {
         let support = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: support) }

@@ -6,6 +6,7 @@
 import DeepSeekRuntime
 import Foundation
 
+/// Factory for the production manager wired to the app's support locations.
 extension RuntimeManager {
     /// Creates the production manager with the current app support locations.
     ///

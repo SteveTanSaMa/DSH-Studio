@@ -2,7 +2,9 @@ import Foundation
 import XCTest
 @testable import DeepSeekRuntime
 
+/// Guards the command runner's output capture.
 final class RuntimeCommandRunnerTests: XCTestCase {
+    /// Large output is captured without the child blocking on a full pipe.
     func testCapturesLargeStdoutAndStderrWithoutPipeBackpressure() throws {
         let result = try SystemRuntimeCommandRunner().run(
             executable: URL(fileURLWithPath: "/bin/sh"),

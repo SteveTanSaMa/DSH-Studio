@@ -5,9 +5,23 @@
 
 import Foundation
 
+/// The production artifact downloader, backed by `URLSession`.
 public struct URLSessionRuntimeAssetDownloader: RuntimeAssetDownloading, Sendable {
+    /// Creates a downloader with no shared state.
     public init() {}
 
+    /// Downloads a Runtime artifact to a destination file.
+    ///
+    /// `URLSession` may follow redirects, so both the requested URL and the final
+    /// response URL are checked against the trusted hosts before the archive is moved
+    /// into place.
+    ///
+    /// - Parameters:
+    ///   - url: Trusted artifact URL.
+    ///   - destination: File the archive is written to.
+    /// - Throws: ``RuntimeProvisioningError/downloadFailed(_:)`` when the source is
+    ///   untrusted, the response status or redirect target is unexpected, or the file
+    ///   cannot be moved.
     public func download(from url: URL, to destination: URL) async throws {
         // URLSession may follow redirects, so validate both the requested and
         // final response host before moving an archive into staging.

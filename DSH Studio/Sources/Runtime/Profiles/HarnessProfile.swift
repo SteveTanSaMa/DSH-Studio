@@ -5,14 +5,30 @@
 
 import Foundation
 
+/// One Harness composition profile discovered under `DSH_HOME/profiles`.
 public struct HarnessProfile: Codable, Equatable, Sendable {
+    /// Profile name, equal to its directory name.
     public let name: String
+    /// The profile directory.
     public let directory: URL
+    /// Bundle package names the profile loads, in resolution order.
     public let bundles: [String]
+    /// Whether the profile directory exists on disk; the default profile may be virtual.
     public let exists: Bool
+    /// Whether the profile can be launched as-is.
     public let selectable: Bool
+    /// Why the profile cannot be launched, when ``selectable`` is `false`.
     public let problem: String?
 
+    /// Creates a profile description.
+    ///
+    /// - Parameters:
+    ///   - name: Profile name, equal to the directory name.
+    ///   - directory: Profile directory.
+    ///   - bundles: Bundle package names the profile loads.
+    ///   - exists: Whether the directory exists on disk.
+    ///   - selectable: Whether the profile can be launched.
+    ///   - problem: Reason the profile is unusable, when it is.
     public init(
         name: String,
         directory: URL,
@@ -30,13 +46,20 @@ public struct HarnessProfile: Codable, Equatable, Sendable {
     }
 }
 
+/// How a profile relates to the current startup selection.
 public enum HarnessProfileStatus: String, Codable, Equatable, Sendable {
+    /// The profile is the one currently selected.
     case active
+    /// The profile is selected for the next launch but is not active yet.
     case pending
+    /// The profile last known to start successfully.
     case lastKnownGood
+    /// The profile is selectable but not otherwise special.
     case ready
+    /// The profile cannot be launched.
     case invalid
 
+    /// A localized label for the status.
     public var displayName: String {
         switch self {
         case .active:
@@ -53,14 +76,27 @@ public enum HarnessProfileStatus: String, Codable, Equatable, Sendable {
     }
 }
 
+/// The persisted profile selection used to decide what starts next.
 public struct HarnessProfileSelection: Codable, Equatable, Sendable {
+    /// The selection schema this app writes; other versions are treated as absent.
     public static let currentVersion = 1
 
+    /// Schema version of the stored selection.
     public let version: Int
+    /// Profile that is currently running.
     public let active: String
+    /// Profile requested for the next launch, when it differs from ``active``.
     public let pending: String?
+    /// Profile used as a fallback when the requested profile fails to start.
     public let lastKnownGood: String
 
+    /// Creates a selection record.
+    ///
+    /// - Parameters:
+    ///   - version: Schema version; defaults to ``currentVersion``.
+    ///   - active: Profile that is currently running.
+    ///   - pending: Profile requested for the next launch, if any.
+    ///   - lastKnownGood: Fallback profile for a failed start.
     public init(
         version: Int = currentVersion,
         active: String,
@@ -73,6 +109,7 @@ public struct HarnessProfileSelection: Codable, Equatable, Sendable {
         self.lastKnownGood = lastKnownGood
     }
 
+    /// Whether every recorded profile name passes the store's safety check.
     public var isValid: Bool {
         version == Self.currentVersion
             && HarnessProfileStore.isSafeName(active)
@@ -81,15 +118,24 @@ public struct HarnessProfileSelection: Codable, Equatable, Sendable {
     }
 }
 
+/// Failures raised while creating, selecting, or deleting a profile.
 public enum HarnessProfileStoreError: Error, Equatable, LocalizedError, Sendable {
+    /// The requested name is not usable as a profile directory name.
     case invalidName
+    /// A profile with that name already exists.
     case alreadyExists
+    /// No profile exists for the requested name.
     case notFound
+    /// The profile exists but cannot be launched; carries the reason.
     case notSelectable(String)
+    /// The profile is active, pending, or the last known good one, so it must be kept.
     case cannotDeleteActive
+    /// The profile manifest could not be parsed; carries the detail.
     case malformedManifest(String)
+    /// The selection state could not be written; carries the detail.
     case persistenceFailed(String)
 
+    /// A localized, user-facing description of the failure.
     public var errorDescription: String? {
         switch self {
         case .invalidName:

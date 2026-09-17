@@ -2,19 +2,40 @@ import Foundation
 import XCTest
 @testable import DeepSeekRuntime
 
+/// Writes fixed bytes as the downloaded artifact and counts the calls.
+///
+/// The counter is a lock-protected box so the double stays usable from the
+/// detached provisioning tasks the tests exercise.
 struct FixtureDownloader: RuntimeAssetDownloading {
+    /// Bytes written to every download destination.
     let data: Data
     private let counter = Counter()
 
+    /// Number of downloads performed so far.
     var downloadCount: Int { counter.value }
 
+    /// Counts the call and writes ``data`` to the destination.
+    ///
+    /// - Parameters:
+    ///   - url: Requested artifact URL; ignored by the fixture.
+    ///   - destination: File that receives the fixture bytes.
+    /// - Throws: When the fixture bytes cannot be written.
     func download(from url: URL, to destination: URL) async throws {
         counter.increment()
         try data.write(to: destination)
     }
 }
 
+/// Suspends until the surrounding task is cancelled.
+///
+/// Used to assert that a cancelled provisioning run never publishes a Runtime.
 struct CancellableDownloader: RuntimeAssetDownloading {
+    /// Suspends in a loop, letting cancellation unwind the caller.
+    ///
+    /// - Parameters:
+    ///   - url: Requested artifact URL; unused.
+    ///   - destination: Destination the double never writes to.
+    /// - Throws: `CancellationError` when the sleeping task is cancelled.
     func download(from url: URL, to destination: URL) async throws {
         try Task.checkCancellation()
         while true {
@@ -23,10 +44,25 @@ struct CancellableDownloader: RuntimeAssetDownloading {
     }
 }
 
+/// Fakes the two setup commands by writing the files a real run would produce.
+///
+/// `tar` invocations get a fake Node.js binary and npm CLI, and `npm ci` gets the
+/// Harness package, the pnpm package, the pnpm shim, and the native `node-pty`
+/// files, so the provisioner's validation runs against a complete tree without a
+/// network.
 final class FixtureCommandRunner: RuntimeCommandRunning, @unchecked Sendable {
     private let fileManager = FileManager.default
     private(set) var invocationCount = 0
 
+    /// Recreates the layout the given command would have produced.
+    ///
+    /// - Parameters:
+    ///   - executable: Command being run; unused.
+    ///   - arguments: Arguments used to tell the extraction and install cases apart.
+    ///   - currentDirectory: Directory the fixture writes into.
+    ///   - environment: Environment for the command; unused.
+    /// - Returns: A successful result with empty output.
+    /// - Throws: When the fixture files cannot be written.
     func run(
         executable: URL,
         arguments: [String],

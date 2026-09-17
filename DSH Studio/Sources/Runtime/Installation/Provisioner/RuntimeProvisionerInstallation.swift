@@ -5,12 +5,16 @@
 
 import Foundation
 
-/// Installation paths for the development compatibility setup and the
-/// immutable artifact setup live here so the provisioner entry point remains
-/// focused on selecting the correct strategy.
+/// Installation strategies for the provisioner.
+///
+/// The development compatibility setup and the immutable artifact setup live here
+/// so the entry point stays focused on choosing between them.
 extension RuntimeProvisioner {
-    /// Compatibility path for local development builds that have not yet
-    /// received a published artifact catalog.
+    /// Installs the Runtime through the legacy compatibility path.
+    ///
+    /// Used by local development builds that have not received a published artifact
+    /// catalog: work happens in an isolated staging directory and is published only
+    /// after the checksum, Node, npm, Harness, and native dependency checks pass.
     func installLegacy(
         force: Bool,
         destinationRoot: URL? = nil

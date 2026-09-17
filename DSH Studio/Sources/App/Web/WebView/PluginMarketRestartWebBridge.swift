@@ -5,12 +5,18 @@
 
 import Foundation
 
-/// Routes dsh-market's restart action through DSH Studio's RuntimeManager.
-/// The market's default endpoint forks a replacement Harness and terminates
-/// the current process, which conflicts with the app-owned process supervisor.
+/// Routes dsh-market's restart action through the app-owned RuntimeManager.
+///
+/// The market's default endpoint forks a replacement Harness and terminates the
+/// current process, which conflicts with the app-owned process supervisor.
 enum PluginMarketRestartWebBridge {
+    /// Message type the injected script posts when the market asks for a restart.
     static let messageType = "pluginMarket.restart"
 
+    /// Intercepts the market's restart call and forwards it to the native shell.
+    ///
+    /// The bridge replaces `window.fetch`, so the page keeps calling its own endpoint
+    /// while the app performs a supervised restart.
     static let source = """
     (() => {
       if (window.__dshStudioPluginMarketRestartBridgeInstalled) return;

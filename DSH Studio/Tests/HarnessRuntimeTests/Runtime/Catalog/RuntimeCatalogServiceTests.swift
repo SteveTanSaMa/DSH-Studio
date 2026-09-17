@@ -11,21 +11,25 @@ import XCTest
 
 @testable import DeepSeekRuntime
 
+/// Guards catalog resolution: verification, caching, and conflict refusal.
 final class RuntimeCatalogServiceTests: XCTestCase {
     private var temporaryRoot: URL!
 
+    /// Creates the isolated cache directory used by the catalog service.
     override func setUpWithError() throws {
         temporaryRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent("DeepSeekStudio.RuntimeCatalogTests-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: temporaryRoot, withIntermediateDirectories: true)
     }
 
+    /// Removes the isolated cache directory.
     override func tearDownWithError() throws {
         if let temporaryRoot {
             try? FileManager.default.removeItem(at: temporaryRoot)
         }
     }
 
+    /// A verified remote catalog is selected and written to the cache.
     func testVerifiedRemoteCatalogIsSelectedAndCached() async throws {
         let privateKey = Curve25519.Signing.PrivateKey()
         let catalog = try makeCatalog(runtimeVersion: "2026.08.21.1")
@@ -57,6 +61,7 @@ final class RuntimeCatalogServiceTests: XCTestCase {
         )
     }
 
+    /// A failed fetch falls back to the previously verified cache.
     func testFailedRemoteFetchUsesPreviouslyVerifiedCache() async throws {
         let privateKey = Curve25519.Signing.PrivateKey()
         let catalog = try makeCatalog(runtimeVersion: "2026.08.21.2")
@@ -88,6 +93,7 @@ final class RuntimeCatalogServiceTests: XCTestCase {
         XCTAssertEqual(resolution.release.runtimeVersion, "2026.08.21.2")
     }
 
+    /// Signed resolution never falls back to the unsigned bundled catalog.
     func testSignedResolutionDoesNotUseUnsignedBundledCatalog() async throws {
         let privateKey = Curve25519.Signing.PrivateKey()
         let bundledCatalog = try makeCatalog(runtimeVersion: "2026.08.21.9")
@@ -108,6 +114,7 @@ final class RuntimeCatalogServiceTests: XCTestCase {
         }
     }
 
+    /// A remote catalog cannot replace a known release with conflicting content.
     func testConflictingRemoteCatalogCannotReplaceKnownSameVersionRelease() async throws {
         let privateKey = Curve25519.Signing.PrivateKey()
         let knownCatalog = try makeCatalog(
@@ -152,6 +159,7 @@ final class RuntimeCatalogServiceTests: XCTestCase {
         XCTAssertEqual(resolution.release.artifact?.sha256, String(repeating: "b", count: 64))
     }
 
+    /// A cached release cannot replace the bundled one with conflicting content.
     func testConflictingCacheCannotReplaceBundledSameVersionRelease() async throws {
         let privateKey = Curve25519.Signing.PrivateKey()
         let bundledCatalog = try makeCatalog(
@@ -191,6 +199,7 @@ final class RuntimeCatalogServiceTests: XCTestCase {
         XCTAssertEqual(resolution.release.artifact?.sha256, String(repeating: "b", count: 64))
     }
 
+    /// A tampered envelope fails verification.
     func testTamperedEnvelopeCannotBeVerified() throws {
         let privateKey = Curve25519.Signing.PrivateKey()
         let catalog = try makeCatalog(runtimeVersion: "2026.08.21.3")

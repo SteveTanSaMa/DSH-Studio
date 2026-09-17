@@ -5,17 +5,31 @@
 
 import Foundation
 
+/// Where a resolved catalog came from.
 public enum RuntimeCatalogSource: String, Codable, Equatable, Sendable {
+    /// Fetched from the signed remote catalog and verified.
     case remote
+    /// Restored from the verified local cache.
     case cache
+    /// Shipped inside the app bundle.
     case bundled
 }
 
+/// A catalog together with the release selected for this Mac.
 public struct RuntimeCatalogResolution: Equatable, Sendable {
+    /// The catalog the release came from.
     public let catalog: RuntimeReleaseCatalog
+    /// The release selected for the requested architecture.
     public let release: RuntimeReleaseDescriptor
+    /// How the catalog was obtained.
     public let source: RuntimeCatalogSource
 
+    /// Creates a resolution.
+    ///
+    /// - Parameters:
+    ///   - catalog: Catalog the release came from.
+    ///   - release: Release selected for the architecture.
+    ///   - source: How the catalog was obtained.
     public init(
         catalog: RuntimeReleaseCatalog,
         release: RuntimeReleaseDescriptor,
@@ -27,10 +41,12 @@ public struct RuntimeCatalogResolution: Equatable, Sendable {
     }
 }
 
-/// Resolves the signed catalog from the independent Runtime repository and
-/// keeps a verified local cache for offline startup. A bad network response
-/// can never replace the last known-good cache.
+/// Resolves the signed catalog and keeps a verified cache for offline startup.
+///
+/// A network response that fails verification can never replace the last
+/// known-good cache.
 public final class RuntimeCatalogService: @unchecked Sendable {
+    /// The signed catalog published by the Runtime repository.
     public static let defaultRemoteURL = URL(
         string: "https://github.com/SteveTanSaMa/DSH-Studio-Runtime/releases/download/runtime-catalog/runtime-catalog.signed.json"
     )!
@@ -43,6 +59,17 @@ public final class RuntimeCatalogService: @unchecked Sendable {
     private let fetcher: any RuntimeCatalogFetching
     private let fileManager: FileManager
 
+    /// Creates a catalog service.
+    ///
+    /// - Parameters:
+    ///   - supportDirectory: App support directory used for the verified cache.
+    ///   - bundle: Bundle containing the bundled catalog and trust key.
+    ///   - architecture: Architecture to resolve; defaults to this host's.
+    ///   - remoteURL: Catalog URL override, mainly for tests.
+    ///   - publicKeyData: Ed25519 public key override; resolved from the bundle by
+    ///     default.
+    ///   - fetcher: Network seam used to download the catalog.
+    ///   - fileManager: File system seam used by tests.
     public init(
         supportDirectory: URL?,
         bundle: Bundle = .main,
@@ -61,6 +88,10 @@ public final class RuntimeCatalogService: @unchecked Sendable {
         self.fileManager = fileManager
     }
 
+    /// Resolves the catalog shipped inside the app bundle.
+    ///
+    /// - Returns: The bundled resolution, or `nil` when the bundle has no usable
+    ///   entry for this architecture.
     public func bundledResolution() -> RuntimeCatalogResolution? {
         guard let catalog = try? RuntimeReleaseCatalog.loadCatalog(bundle: bundle),
               let release = catalog.release(for: architecture) else {
@@ -69,9 +100,10 @@ public final class RuntimeCatalogService: @unchecked Sendable {
         return RuntimeCatalogResolution(catalog: catalog, release: release, source: .bundled)
     }
 
-    /// Resolves only catalogs that have passed the configured Ed25519
-    /// signature check. The unsigned bundled catalog is deliberately excluded
-    /// because it is not authoritative for the latest-version display.
+    /// Resolves only catalogs that passed the configured Ed25519 signature check.
+    ///
+    /// The unsigned bundled catalog is deliberately excluded because it is not
+    /// authoritative for the latest-version display.
     public func signedResolution() async throws -> RuntimeCatalogResolution {
         guard let publicKeyData else {
             throw RuntimeCatalogError.unavailable
@@ -113,6 +145,15 @@ public final class RuntimeCatalogService: @unchecked Sendable {
         }
     }
 
+    /// Resolves the best available catalog: remote, then cache, then bundled.
+    ///
+    /// A response that fails signature verification is discarded, so the last
+    /// known-good cache stays authoritative when the network is unavailable or
+    /// serves unexpected content.
+    ///
+    /// - Returns: The preferred resolution for this architecture.
+    /// - Throws: ``RuntimeCatalogError/unavailable`` when no source yields a usable
+    ///   release, or the verification error for a rejected remote payload.
     public func resolve() async throws -> RuntimeCatalogResolution {
         let bundled = bundledResolution()
 

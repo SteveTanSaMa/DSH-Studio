@@ -11,6 +11,7 @@ import Foundation
 
 /// Keeps user-facing Runtime state and errors out of the lower-level modules.
 extension RuntimeState {
+    /// Localized name of the lifecycle state shown in the app.
     var displayName: String {
         switch self {
         case .idle: return "未启动"
@@ -28,7 +29,9 @@ extension RuntimeState {
     }
 }
 
+/// User-facing text for a Runtime version comparison.
 extension RuntimeVersionStatus {
+    /// Harness version shown for this comparison, or `未知` when none is recorded.
     var harnessDisplayName: String {
         switch kind {
         case .missing:
@@ -49,7 +52,12 @@ extension RuntimeVersionStatus {
     }
 }
 
+/// Localized description of a Runtime failure.
 extension RuntimeError {
+    /// A message safe to show the user.
+    ///
+    /// Raw paths and process output are replaced by the localized wording, so no
+    /// machine detail leaks into the UI.
     var uiDescription: String {
         switch self {
         case .missingRuntime(let path):

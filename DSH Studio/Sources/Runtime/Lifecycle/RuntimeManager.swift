@@ -23,38 +23,79 @@ public final class RuntimeManager: ObservableObject {
     public internal(set) var lastTerminationStatus: Int32?
 
     public internal(set) var configuration: RuntimeConfiguration
+    /// Bounded in-memory history plus the sanitized log file shared with the app.
     public let logs: RuntimeLogStore
+    /// Policy applied when the child process exits unexpectedly.
     public var restartPolicy: RestartPolicy
+    /// Store used to persist data-profile metadata, when one is configured.
     public let dataProfileStore: RuntimeDataProfileStore?
 
+    /// Creates the child process; injected so tests can run without launching one.
     let processFactory: HarnessProcessFactory
+    /// Probes the ready URL after the process reports it.
     let healthChecker: HarnessHealthChecking
+    /// Installs a missing Runtime; `nil` when this manager may not provision.
     let provisioner: (any RuntimeProvisioning)?
+    /// Checks, prepares, and activates Runtime updates; `nil` disables updates.
     let runtimeUpdater: (any RuntimeUpdating)?
+    /// Whether the installation is validated before every launch.
     let validateRuntimeOnStart: Bool
+    /// Counts recent restarts so an unstable Runtime stops being retried.
     let restartTracker = RestartTracker()
+    /// The child process while one is owned by this manager.
     var process: HarnessProcess?
+    /// Downloaded update artifact that has not been activated yet.
     var stagedURL: URL?
+    /// Pending launch or provisioning work for the current generation.
     var startupTask: Task<Void, Never>?
+    /// Graceful-shutdown work; cancelled when a new launch supersedes it.
     var stopTask: Task<Void, Never>?
+    /// One-shot installation work started when the Runtime is missing or invalid.
     var provisioningTask: Task<Void, Never>?
+    /// Delayed restart scheduled by the restart policy.
     var restartTask: Task<Void, Never>?
+    /// Incremented per launch so callbacks from a superseded process are ignored.
     var processGeneration = 0
+    /// Set when a stop was requested, so the exit is not reported as a crash.
     var stopRequested = false
+    /// Set once the child exit has been handled for the current generation.
     var processExited = false
+    /// Partial standard-output line kept until its newline arrives.
     var stdoutBuffer = ""
+    /// Partial standard-error line kept until its newline arrives.
     var stderrBuffer = ""
+    /// Most recent standard-error lines, surfaced in crash diagnostics.
     var lastStderrLines: [String] = []
+    /// Whether the data home was empty at launch, used to stamp a format on first run.
     var dataHomeWasEmptyBeforeLaunch: Bool?
+    /// Matches the `dsh web: http://127.0.0.1:<port>` line that signals readiness.
     let readyPattern = try! NSRegularExpression(
         pattern: #"dsh web: (http://127\.0\.0\.1:\d+(?:/[^\s]*)?)"#
     )
 
+    /// Coordinator for update checks and activation; `nil` without an updater.
+    ///
+    /// Created lazily so a manager without update support never allocates one.
     public lazy var runtimeUpdateCoordinator: RuntimeUpdateCoordinator? = {
         guard let runtimeUpdater else { return nil }
         return RuntimeUpdateCoordinator(runtime: self, updater: runtimeUpdater)
     }()
 
+    /// Creates a manager for one Runtime configuration.
+    ///
+    /// Versions and the version status are read during initialization, so a caller
+    /// can inspect the installation before starting anything.
+    ///
+    /// - Parameters:
+    ///   - configuration: Launch-time values for the child process.
+    ///   - processFactory: Process seam; defaults to the system implementation.
+    ///   - healthChecker: Health probe used after the ready line appears.
+    ///   - logFileURL: File that receives log entries; `nil` keeps logs in memory.
+    ///   - restartPolicy: Policy for unexpected exits.
+    ///   - validateRuntimeOnStart: Whether to validate the installation before launch.
+    ///   - provisioner: Installer used when the Runtime is missing or invalid.
+    ///   - updater: Update source; falls back to the provisioner when it can update.
+    ///   - dataProfileStore: Store used to persist data-profile metadata.
     public init(
         configuration: RuntimeConfiguration,
         processFactory: HarnessProcessFactory = SystemHarnessProcessFactory(),
@@ -85,6 +126,10 @@ public final class RuntimeManager: ObservableObject {
         refreshRuntimeMetadata()
     }
 
+    /// Starts the Runtime, provisioning or adopting an installation first.
+    ///
+    /// The call is ignored while another lifecycle operation is running, and a
+    /// missing or invalid installation is provisioned before the first launch.
     public func start() {
         guard state == .idle || state == .failed || state == .crashed || state == .terminated else {
             return
@@ -120,10 +165,15 @@ public final class RuntimeManager: ObservableObject {
         beginLaunch()
     }
 
+    /// Process identifier of the running child, or `nil` when none is running.
     public var currentProcessID: Int32? {
         process?.pid
     }
 
+    /// Whether the DSH terminal can be opened right now.
+    ///
+    /// False during provisioning, updates, rollbacks, and launch or shutdown
+    /// transitions, when the Runtime's paths are not stable enough to shell into.
     public var canOpenTerminal: Bool {
         state != .provisioning
             && state != .updating
@@ -133,10 +183,12 @@ public final class RuntimeManager: ObservableObject {
             && state != .stopping
     }
 
+    /// Generation counter of the current process, used to discard stale callbacks.
     public var currentProcessGeneration: Int {
         processGeneration
     }
 
+    /// Standard-error lines from the most recent child, for crash diagnostics.
     public var recentCrashStderr: [String] {
         lastStderrLines
     }
@@ -229,6 +281,12 @@ public final class RuntimeManager: ObservableObject {
         armStartupTimeout(generation: generation)
     }
 
+    /// Moves the manager into the failed state and records why.
+    ///
+    /// Pending startup work is cancelled and a running child is force-terminated, so
+    /// a failure cannot leave a half-started process behind.
+    ///
+    /// - Parameter error: Failure to publish through ``lastError``.
     func fail(_ error: RuntimeError) {
         startupTask?.cancel()
         startupTask = nil

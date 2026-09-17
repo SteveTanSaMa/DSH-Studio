@@ -1,8 +1,10 @@
 import XCTest
 @testable import DeepSeekRuntime
 
+/// Recovery cases: which legacy root the locator may adopt.
 extension RuntimeLocatorTests {
 
+    /// During recovery the matching legacy root is adopted.
     func testRuntimeRootUsesMatchingLegacyDuringRecovery() throws {
         let support = FileManager.default.temporaryDirectory
             .appendingPathComponent("DeepSeekStudio.RuntimeRootRecovery-\(UUID().uuidString)", isDirectory: true)
@@ -34,6 +36,7 @@ extension RuntimeLocatorTests {
         )
     }
 
+    /// An unrelated legacy root is not adopted when the active target is missing.
     func testRuntimeRootDoesNotUseUnrelatedLegacyWhenActiveTargetIsMissing() throws {
         let support = FileManager.default.temporaryDirectory
             .appendingPathComponent("DeepSeekStudio.RuntimeRootConflict-\(UUID().uuidString)", isDirectory: true)
@@ -72,6 +75,7 @@ extension RuntimeLocatorTests {
         XCTAssertTrue(FileManager.default.fileExists(atPath: legacyRoot.path))
     }
 
+    /// An interrupted activation restores the Runtime matching the active state.
     func testIncompleteActivationRestoresRuntimeMatchingActiveState() throws {
         let support = FileManager.default.temporaryDirectory
             .appendingPathComponent("DeepSeekStudio.RuntimeRecovery-\(UUID().uuidString)", isDirectory: true)

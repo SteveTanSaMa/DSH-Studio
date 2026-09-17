@@ -7,24 +7,43 @@
 
 import Foundation
 
+/// One HTTP response from the loopback Harness API.
 public struct HarnessHTTPResponse: Sendable {
+    /// HTTP status code returned by Harness.
     public let statusCode: Int
+    /// Raw response body, bounded by the transport.
     public let data: Data
 
+    /// Creates a response value.
+    ///
+    /// - Parameters:
+    ///   - statusCode: HTTP status code.
+    ///   - data: Raw response body.
     public init(statusCode: Int, data: Data) {
         self.statusCode = statusCode
         self.data = data
     }
 }
 
+/// Sends encoded loopback RPC requests on behalf of ``HarnessAPIClient``.
+///
+/// The seam exists so tests can answer RPC calls without a live Harness process.
 public protocol HarnessAPITransport {
     /// Sends one already-encoded loopback RPC request.
     func send(_ request: URLRequest) async throws -> HarnessHTTPResponse
 }
 
+/// The production transport, backed by `URLSession`.
 public struct URLSessionHarnessAPITransport: HarnessAPITransport, Sendable {
+    /// Creates the shared-session transport.
     public init() {}
 
+    /// Sends a request through `URLSession`.
+    ///
+    /// - Parameter request: Already-encoded loopback request.
+    /// - Returns: The response status and body.
+    /// - Throws: ``HarnessAPIError/invalidResponse`` when the response is not HTTP,
+    ///   or the underlying `URLSession` error.
     public func send(_ request: URLRequest) async throws -> HarnessHTTPResponse {
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
@@ -34,14 +53,25 @@ public struct URLSessionHarnessAPITransport: HarnessAPITransport, Sendable {
     }
 }
 
+/// Failures raised while talking to the loopback Harness RPC surface.
+///
+/// Associated values carry raw detail; the user-facing sentence is produced by
+/// ``errorDescription``.
 public enum HarnessAPIError: Error, Equatable, LocalizedError, Sendable {
+    /// The configured base URL is not an allowed loopback URL.
     case invalidBaseURL
+    /// The request failed before a response arrived; carries the transport detail.
     case transport(String)
+    /// The response was not an HTTP response.
     case invalidResponse
+    /// Harness answered with a non-success status and an optional body excerpt.
     case httpStatus(Int, String)
+    /// The RPC envelope was missing, mismatched, or undecodable.
     case invalidEnvelope(String)
+    /// Harness rejected the call; carries its own error code and message.
     case remote(code: String, message: String)
 
+    /// A localized, user-facing description of the failure.
     public var errorDescription: String? {
         switch self {
         case .invalidBaseURL:
@@ -65,6 +95,11 @@ public final class HarnessAPIClient {
     private let baseURL: URL
     private let transport: any HarnessAPITransport
 
+    /// Creates a client for one Harness base URL.
+    ///
+    /// - Parameters:
+    ///   - baseURL: Loopback URL reported by the Runtime; validated on every call.
+    ///   - transport: Transport seam; defaults to `URLSession`.
     public init(
         baseURL: URL,
         transport: any HarnessAPITransport = URLSessionHarnessAPITransport()
@@ -73,7 +108,13 @@ public final class HarnessAPIClient {
         self.transport = transport
     }
 
-    /// Reads the official settings envelope without flattening unknown fields.
+    /// Reads every settings namespace from Harness.
+    ///
+    /// The official envelope is returned without flattening unknown fields.
+    ///
+    /// - Returns: The settings snapshot, including unknown fields.
+    /// - Throws: ``HarnessAPIError`` when the base URL is not loopback, the request
+    ///   fails, or Harness rejects it.
     public func settingsDescribe() async throws -> HarnessSettingsSnapshot {
         try await call(
             method: "settings.describe",
@@ -82,7 +123,17 @@ public final class HarnessAPIClient {
         )
     }
 
-    /// Applies a shallow settings patch while preserving Harness's revision.
+    /// Applies a shallow patch to one namespace.
+    ///
+    /// Harness's revision is preserved unless `expectedRevision` is supplied.
+    ///
+    /// - Parameters:
+    ///   - namespace: Namespace to patch.
+    ///   - patch: Top-level keys to merge into the namespace.
+    ///   - expectedRevision: Revision the caller last saw, enabling conflict detection.
+    /// - Returns: The updated namespace.
+    /// - Throws: ``HarnessAPIError`` when the request fails or Harness reports a
+    ///   revision conflict.
     public func settingsUpdate(
         namespace: String,
         patch: [String: HarnessJSONValue],
@@ -102,7 +153,18 @@ public final class HarnessAPIClient {
         )
     }
 
-    /// Applies path operations for settings that need nested updates or unsets.
+    /// Applies path operations to one namespace.
+    ///
+    /// Use this instead of ``settingsUpdate(namespace:patch:expectedRevision:)`` for
+    /// nested writes and for removals.
+    ///
+    /// - Parameters:
+    ///   - namespace: Namespace to mutate.
+    ///   - operations: Ordered path operations to apply.
+    ///   - expectedRevision: Revision the caller last saw, enabling conflict detection.
+    /// - Returns: The updated namespace.
+    /// - Throws: ``HarnessAPIError`` when the request fails or Harness reports a
+    ///   revision conflict.
     public func settingsMutate(
         namespace: String,
         operations: [HarnessSettingOperation],

@@ -5,17 +5,28 @@
 
 import Foundation
 
+/// Failures raised while checking, applying, or rolling back a Runtime update.
 public enum RuntimeUpdateError: Error, Equatable, LocalizedError, Sendable {
+    /// The Runtime cannot be updated online in this build.
     case unavailable
+    /// The installed Runtime already matches the target release.
     case noUpdateAvailable
+    /// The target version exists with different content, so the update is refused.
     case runtimeVersionConflict
+    /// The release declares no data contract, so takeover was blocked.
     case dataCompatibilityUnknown
+    /// The stored data uses a format the release cannot read.
     case dataIncompatible
+    /// The stored data needs migration before the release can run.
     case dataMigrationRequired
+    /// No previous Runtime build is available to restore.
     case rollbackUnavailable
+    /// Preparation or activation failed; carries the detail.
     case updateFailed(String)
+    /// Restoring the previous build failed; carries the detail.
     case rollbackFailed(String)
 
+    /// A localized, user-facing description of the failure.
     public var errorDescription: String? {
         switch self {
         case .unavailable:

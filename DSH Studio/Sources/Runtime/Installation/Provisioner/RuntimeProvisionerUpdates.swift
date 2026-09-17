@@ -7,6 +7,15 @@ import Foundation
 
 /// Version inspection, publication, and rollback operations for RuntimeProvisioner.
 extension RuntimeProvisioner {
+    /// Whether an existing installation contradicts the candidate release.
+    ///
+    /// A Runtime version is immutable by contract: if a directory already records the
+    /// same version with different content, overwriting it would silently change what
+    /// that version means. The check covers the active root, the candidate root, and
+    /// the versioned root for a legacy layout.
+    ///
+    /// - Parameter candidateRelease: Release that is about to be installed.
+    /// - Returns: `true` when an installation of that version does not match it.
     func hasImmutableRuntimeVersionConflict(
         with candidateRelease: RuntimeReleaseDescriptor
     ) -> Bool {
@@ -33,6 +42,10 @@ extension RuntimeProvisioner {
         return false
     }
 
+    /// Compares the installed Runtime, a prepared candidate, and the pinned release.
+    ///
+    /// - Returns: The comparison used by Settings, including data compatibility and
+    ///   whether a rollback target exists.
     public func versionStatus() -> RuntimeVersionStatus {
         let installed = RuntimeLocator.installationManifest(root: root)
         let current = RuntimeLocator.isComplete(
@@ -111,6 +124,12 @@ extension RuntimeProvisioner {
         )
     }
 
+    /// Restores the previously installed Runtime build.
+    ///
+    /// - Returns: The restored root, architecture, and manifest.
+    /// - Throws: ``RuntimeProvisioningError/rollbackUnavailable`` when no previous
+    ///   build exists, or ``RuntimeProvisioningError/rollbackFailed(_:)`` when the
+    ///   exchange cannot complete.
     public func rollback() throws -> RuntimeProvisioningResult {
         if let versioned = versionedRollbackRoot() {
             guard RuntimeLocator.isCompleteInstallation(
@@ -162,6 +181,17 @@ extension RuntimeProvisioner {
         }
     }
 
+    /// Publishes a staged installation as the active Runtime.
+    ///
+    /// Exactly one known-good previous installation is retained for rollback. The
+    /// exchange is done with explicit directory moves rather than
+    /// `replaceItemAt(_:withItemAt:backupItemName:options:)`, whose backup behaviour
+    /// differs across file-system providers, and every failure path restores the
+    /// directory it displaced.
+    ///
+    /// - Parameter staging: Completed installation to publish.
+    /// - Throws: ``RuntimeProvisioningError/installationFailed(_:)`` when the
+    ///   exchange fails.
     func publish(staging: URL) throws {
         let backup = RuntimeLocator.rollbackRoot(root: root)
         let displaced = root.deletingLastPathComponent()
@@ -215,6 +245,14 @@ extension RuntimeProvisioner {
         }
     }
 
+    /// Publishes a staged installation at an explicit destination.
+    ///
+    /// - Parameters:
+    ///   - staging: Completed installation to publish.
+    ///   - destination: Target root; publishing to ``root`` is delegated to
+    ///     ``publish(staging:)``.
+    /// - Throws: ``RuntimeProvisioningError/installationFailed(_:)`` when the move
+    ///   fails.
     func publish(staging: URL, to destination: URL) throws {
         guard destination.standardizedFileURL != root.standardizedFileURL else {
             try publish(staging: staging)
@@ -232,6 +270,9 @@ extension RuntimeProvisioner {
         }
     }
 
+    /// The support directory that owns this root, when the root is versioned.
+    ///
+    /// `nil` for the legacy `Runtime` layout, which has no versioned parent.
     var versionedSupportDirectory: URL? {
         guard root.deletingLastPathComponent().lastPathComponent == "Runtimes" else {
             return nil

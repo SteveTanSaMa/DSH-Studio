@@ -3,22 +3,29 @@ import XCTest
 @testable import DeepSeekRuntime
 @testable import DeepSeekHarness
 
+/// Guards the native side of the fixed dsh-market plugin.
+///
+/// The market's own inventory stays in its Web UI; these tests pin the install,
+/// repair, restart, and single-flight behavior the app owns.
 @MainActor
 final class PluginMarketManagerTests: XCTestCase {
     private var temporaryDirectory: URL!
 
+    /// Creates the isolated temporary directory each test installs into.
     override func setUpWithError() throws {
         temporaryDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent("DSHStudio-PluginMarketManager-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
     }
 
+    /// Removes the temporary directory, ignoring a missing one.
     override func tearDownWithError() throws {
         if let temporaryDirectory {
             try? FileManager.default.removeItem(at: temporaryDirectory)
         }
     }
 
+    /// An empty profile reports the plugin as not installed rather than corrupted.
     func testRefreshClassifiesEmptyProfileAsNotInstalled() async throws {
         let manager = makeManager()
 
@@ -28,6 +35,7 @@ final class PluginMarketManagerTests: XCTestCase {
         XCTAssertTrue(manager.state.compatibleHarness)
     }
 
+    /// A complete, correctly registered fixed package reports as installed.
     func testRefreshClassifiesCompleteFixedInstallationAsInstalled() async throws {
         let manager = makeManager()
         try writeCompleteFixture(in: manager.profileStore)
@@ -39,6 +47,7 @@ final class PluginMarketManagerTests: XCTestCase {
         XCTAssertTrue(manager.state.enabled)
     }
 
+    /// Materialized files without the bundle registration report as corrupted.
     func testRefreshClassifiesMissingBundleRegistrationAsCorrupted() async throws {
         let manager = makeManager()
         try writeCompleteFixture(in: manager.profileStore, includeBundle: false)
@@ -48,6 +57,7 @@ final class PluginMarketManagerTests: XCTestCase {
         XCTAssertEqual(manager.state.installState, .corrupted)
     }
 
+    /// A package manifest that cannot be parsed reports as corrupted.
     func testRefreshClassifiesMalformedPackageJSONAsCorrupted() async throws {
         let manager = makeManager()
         try manager.profileStore.ensureProfileDirectory()
@@ -61,6 +71,7 @@ final class PluginMarketManagerTests: XCTestCase {
         XCTAssertEqual(manager.state.installState, .corrupted)
     }
 
+    /// A Runtime older than the plugin requires reports as incompatible, not broken.
     func testRefreshClassifiesLegacyHarnessAsIncompatible() async throws {
         let manager = makeManager(harnessVersion: "0.1.0-rc.6")
 
@@ -70,6 +81,7 @@ final class PluginMarketManagerTests: XCTestCase {
         XCTAssertFalse(manager.state.compatibleHarness)
     }
 
+    /// A Runtime mid-transition suppresses the install state instead of guessing it.
     func testRefreshClassifiesRuntimeTransitionSeparatelyFromInstallState() async throws {
         let manager = makeManager()
         manager.runtime.setRuntimeOperationState(.starting)
@@ -79,6 +91,7 @@ final class PluginMarketManagerTests: XCTestCase {
         XCTAssertEqual(manager.state.installState, .runtimeUnavailable)
     }
 
+    /// The market is unavailable for any profile other than the web composition.
     func testPluginMarketIsUnavailableOutsideWebProfile() async throws {
         let manager = makeManager(profileName: "review")
 
@@ -94,6 +107,10 @@ final class PluginMarketManagerTests: XCTestCase {
         }
     }
 
+    /// The profile store re-resolves its root when the data home changes.
+    ///
+    /// Runtime updates can activate an isolated data home, so a cached store would
+    /// otherwise mutate the previous profile.
     func testProfileStoreFollowsRuntimeDataHomeChanges() throws {
         let manager = makeManager()
         let updatedHome = temporaryDirectory.appendingPathComponent("Updated-DSH_HOME", isDirectory: true)
@@ -107,6 +124,7 @@ final class PluginMarketManagerTests: XCTestCase {
         )
     }
 
+    /// A successful install writes the package and records it in the profile.
     func testInstallSuccessMaterializesAndRecordsFixedPackage() async throws {
         let store = PluginMarketProfileStore(
             dshHome: temporaryDirectory.appendingPathComponent("DSH_HOME", isDirectory: true)
@@ -128,6 +146,7 @@ final class PluginMarketManagerTests: XCTestCase {
         XCTAssertEqual(manager.state.lastOperation?.succeeded, true)
     }
 
+    /// The startup path installs the fixed package when it is missing.
     func testEnsureInstalledInstallsMissingFixedPackage() async throws {
         let store = PluginMarketProfileStore(
             dshHome: temporaryDirectory.appendingPathComponent("DSH_HOME", isDirectory: true)
@@ -148,6 +167,7 @@ final class PluginMarketManagerTests: XCTestCase {
         XCTAssertEqual(manager.state.installedVersion, PluginMarketRelease.packageVersion)
     }
 
+    /// A valid installation is left to dsh-market instead of being reinstalled.
     func testEnsureInstalledLeavesValidInstallationForMarketToManage() async throws {
         let manager = makeManager()
         try writeCompleteFixture(in: manager.profileStore)
@@ -158,6 +178,7 @@ final class PluginMarketManagerTests: XCTestCase {
         XCTAssertEqual(manager.state.installState, .installed)
     }
 
+    /// A failed command restores the profile and the pnpm materialization it changed.
     func testCommandFailureRestoresProfileAndPnpmMaterialization() async throws {
         let store = PluginMarketProfileStore(
             dshHome: temporaryDirectory.appendingPathComponent("DSH_HOME", isDirectory: true)
@@ -191,6 +212,7 @@ final class PluginMarketManagerTests: XCTestCase {
         XCTAssertNotNil(manager.state.statusError)
     }
 
+    /// A second operation is rejected while one is already running.
     func testConcurrentOperationIsRejectedBySingleFlightGuard() async throws {
         let manager = makeManager()
         let errors = await withTaskGroup(of: Error?.self, returning: [Error?].self) { group in
@@ -219,6 +241,7 @@ final class PluginMarketManagerTests: XCTestCase {
         )
     }
 
+    /// A failed restart restores the previous profile and surfaces the failure.
     func testRuntimeRestartFailureRestoresPreviousProfileAndReportsFailure() async throws {
         let process = FakeHarnessProcess()
         let health = SequencedPluginMarketHealthChecker(results: [true, false, false])
@@ -254,6 +277,7 @@ final class PluginMarketManagerTests: XCTestCase {
         XCTAssertNotNil(manager.state.statusError)
     }
 
+    /// Plugin commands disable install scripts, keeping installation offline-safe.
     func testPluginCommandDisablesInstallScripts() async throws {
         let runner = RecordingPluginMarketCommandRunner()
         let manager = makeManager(commandRunner: runner)

@@ -8,15 +8,33 @@ import Foundation
 import OSLog
 import UserNotifications
 
+/// The subset of `UNUserNotificationCenter` the coordinator uses.
+///
+/// Narrowing the surface keeps the coordinator testable without a real
+/// notification center or user authorization.
 protocol AppNotificationCenterClient: AnyObject {
+    /// Current authorization status.
+    ///
+    /// - Returns: The status reported by the system.
     func authorizationStatus() async -> UNAuthorizationStatus
+    /// Asks the user for authorization.
+    ///
+    /// - Parameter options: Authorization options to request.
+    /// - Returns: `true` when the user granted them.
+    /// - Throws: The system error when the request itself fails.
     func requestAuthorization(options: UNAuthorizationOptions) async throws -> Bool
+    /// Delivers one notification request.
+    ///
+    /// - Parameter request: Prepared request to deliver.
+    /// - Throws: The system error when delivery fails.
     func add(_ request: UNNotificationRequest) async throws
 }
 
+/// The production client, backed by `UNUserNotificationCenter`.
 final class SystemAppNotificationCenter: AppNotificationCenterClient {
     private let center = UNUserNotificationCenter.current()
 
+    /// Reads the current authorization status.
     func authorizationStatus() async -> UNAuthorizationStatus {
         await withCheckedContinuation { continuation in
             center.getNotificationSettings { settings in
@@ -25,6 +43,7 @@ final class SystemAppNotificationCenter: AppNotificationCenterClient {
         }
     }
 
+    /// Requests authorization and reports whether it was granted.
     func requestAuthorization(options: UNAuthorizationOptions) async throws -> Bool {
         try await withCheckedThrowingContinuation { continuation in
             center.requestAuthorization(options: options) { granted, error in
@@ -37,6 +56,7 @@ final class SystemAppNotificationCenter: AppNotificationCenterClient {
         }
     }
 
+    /// Delivers a notification request.
     func add(_ request: UNNotificationRequest) async throws {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             center.add(request) { error in
@@ -63,6 +83,12 @@ final class AppNotificationCoordinator {
     private var pendingNotifications: [AppNotificationKind] = []
     private var runtimeURL: URL?
 
+    /// Creates the coordinator and wires the event stream to ``handle(_:)``.
+    ///
+    /// - Parameters:
+    ///   - settings: Store providing the notification preferences.
+    ///   - notificationCenter: Delivery client; the system center by default.
+    ///   - isAppActive: Whether the app is frontmost, used by the focus policy.
     init(
         settings: SettingsStore,
         notificationCenter: any AppNotificationCenterClient = SystemAppNotificationCenter(),
@@ -77,6 +103,9 @@ final class AppNotificationCoordinator {
         }
     }
 
+    /// Points the event stream at the Runtime that is currently ready.
+    ///
+    /// - Parameter url: Ready URL, or `nil` to stop streaming.
     func updateRuntimeURL(_ url: URL?) {
         guard url != runtimeURL else { return }
         runtimeURL = url
@@ -88,12 +117,19 @@ final class AppNotificationCoordinator {
         }
     }
 
+    /// Stops streaming and forgets the delivered keys.
     func stop() {
         runtimeURL = nil
         eventStream.stop()
         pendingNotifications.removeAll()
     }
 
+    /// Applies preferences and dedup, then delivers or queues the notification.
+    ///
+    /// Delivery waits for authorization; a denied or undetermined state never blocks
+    /// later events.
+    ///
+    /// - Parameter event: Event decoded from the Runtime stream.
     func handle(_ event: HarnessNotificationEvent) {
         guard let kind = deduper.consume(
             event,

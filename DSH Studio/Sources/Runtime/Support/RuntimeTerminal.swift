@@ -7,14 +7,31 @@ import Foundation
 
 /// Launch-time values used to create the private macOS DSH terminal.
 public struct RuntimeTerminalConfiguration: Equatable, Sendable {
+    /// Directory that receives the generated shims and shell files.
     public let stateDirectory: URL
+    /// Node.js binary the generated shims invoke.
     public let nodeExecutable: URL
+    /// Harness entry point the `dsh` shim runs.
     public let harnessEntry: URL
+    /// pnpm binary used for profile commands, when the Runtime provides one.
     public let pnpmExecutable: URL?
+    /// Harness data home exported inside the terminal.
     public let dshHome: URL
+    /// Workspace directory the terminal starts in.
     public let workspace: URL
+    /// Harness profile the terminal is scoped to.
     public let profileName: String
 
+    /// Creates a terminal configuration, standardizing every file URL.
+    ///
+    /// - Parameters:
+    ///   - stateDirectory: Directory that will hold the generated files.
+    ///   - nodeExecutable: Node.js binary the shims invoke.
+    ///   - harnessEntry: Harness entry point the `dsh` shim runs.
+    ///   - pnpmExecutable: pnpm binary, when the Runtime provides one.
+    ///   - dshHome: Harness data home to export.
+    ///   - workspace: Directory the terminal starts in.
+    ///   - profileName: Harness profile to scope the terminal to.
     public init(
         stateDirectory: URL,
         nodeExecutable: URL,
@@ -34,14 +51,30 @@ public struct RuntimeTerminalConfiguration: Equatable, Sendable {
     }
 }
 
+/// Paths written for one generated terminal.
 public struct RuntimeTerminalFiles: Equatable, Sendable {
+    /// Directory holding the generated files.
     public let stateDirectory: URL
+    /// Directory holding the `dsh`, `node`, and `pnpm` shims.
     public let shimDirectory: URL
+    /// Shim that runs Harness with the exported environment.
     public let dshShim: URL
+    /// Shim that pins the Runtime's Node.js binary.
     public let nodeShim: URL
+    /// Shim that pins the Runtime's pnpm and profile directory.
     public let pnpmShim: URL
+    /// Double-clickable script that opens the configured shell.
     public let welcomeScript: URL
 
+    /// Creates the file list for one prepared terminal.
+    ///
+    /// - Parameters:
+    ///   - stateDirectory: Directory holding the generated files.
+    ///   - shimDirectory: Directory holding the command shims.
+    ///   - dshShim: Path of the `dsh` shim.
+    ///   - nodeShim: Path of the `node` shim.
+    ///   - pnpmShim: Path of the `pnpm` shim.
+    ///   - welcomeScript: Path of the launcher script.
     public init(
         stateDirectory: URL,
         shimDirectory: URL,
@@ -59,11 +92,16 @@ public struct RuntimeTerminalFiles: Equatable, Sendable {
     }
 }
 
+/// Failures raised while generating a terminal environment.
 public enum RuntimeTerminalError: Error, Equatable, LocalizedError, Sendable {
+    /// A configuration value is missing or unsafe; carries the rejected value.
     case invalidValue(String)
+    /// The state directory is not a private directory owned by DSH Studio.
     case unsafeStateDirectory
+    /// A generated file could not be written; carries the underlying detail.
     case writeFailed(String)
 
+    /// A localized, user-facing description of the failure.
     public var errorDescription: String? {
         switch self {
         case .invalidValue(let value):
@@ -84,10 +122,22 @@ public enum RuntimeTerminalError: Error, Equatable, LocalizedError, Sendable {
 public final class RuntimeTerminalFileGenerator: @unchecked Sendable {
     private let fileManager: FileManager
 
+    /// Creates a generator.
+    ///
+    /// - Parameter fileManager: File system seam used by tests.
     public init(fileManager: FileManager = .default) {
         self.fileManager = fileManager
     }
 
+    /// Writes the shims, private shell file, and welcome script for a terminal.
+    ///
+    /// Existing generated files are replaced in place; the user's shell rc files and
+    /// persistent `PATH` are never touched.
+    ///
+    /// - Parameter configuration: Launch-time values for the terminal.
+    /// - Returns: The paths that were written.
+    /// - Throws: ``RuntimeTerminalError`` when a value is unsafe, the state directory
+    ///   is not app-owned, or a file cannot be written.
     public func prepare(configuration: RuntimeTerminalConfiguration) throws -> RuntimeTerminalFiles {
         try validate(configuration)
         let stateDirectory = configuration.stateDirectory

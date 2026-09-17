@@ -9,6 +9,7 @@ import Foundation
 
 /// Validates URLs used to communicate with the local Harness process.
 public enum HarnessURLPolicy {
+    /// The only host the app talks to; a literal IPv4 address avoids DNS resolution.
     public static let loopbackHost = "127.0.0.1"
 
     /// Allows only explicit HTTP(S) loopback URLs with a port and no credentials.

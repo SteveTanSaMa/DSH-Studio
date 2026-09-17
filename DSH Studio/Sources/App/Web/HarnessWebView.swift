@@ -15,12 +15,18 @@ import WebKit
 /// below in the same module, while Session export lives in its own extension
 /// file to keep this integration surface readable.
 struct HarnessWebView: NSViewRepresentable {
+    /// Runtime whose ready URL the WebView attaches to.
     let runtime: RuntimeManager
+    /// Model that supplies the app settings projected into the page.
     let model: AppModel
+    /// Called when WebKit kills the content process so the host can recover.
     let onWebContentTerminated: () -> Void
 
     private static var liveWebViews: [WeakWebView] = []
 
+    /// Creates the coordinator that holds this view's delegate state.
+    ///
+    /// - Returns: A coordinator bound to the current runtime, model, and callback.
     func makeCoordinator() -> Coordinator {
         Coordinator(
             runtime: runtime,
@@ -29,6 +35,14 @@ struct HarnessWebView: NSViewRepresentable {
         )
     }
 
+    /// Builds the WebView, installs the bridges, and registers it as live.
+    ///
+    /// Every injected script is main-frame-only, so a page opened by the user cannot
+    /// inherit the app's native bridge.
+    ///
+    /// - Parameter context: SwiftUI context carrying the coordinator.
+    /// - Returns: A configured WebView, or one showing the failure page when the
+    ///   Runtime is not ready.
     func makeNSView(context: Context) -> WKWebView {
         // All scripts are main-frame-only so an external page opened by the
         // user cannot inherit DSH Studio's native bridge.
@@ -77,6 +91,11 @@ struct HarnessWebView: NSViewRepresentable {
         return webView
     }
 
+    /// Tears the WebView down and removes its message handler.
+    ///
+    /// - Parameters:
+    ///   - nsView: WebView being dismantled.
+    ///   - coordinator: Coordinator that owned its delegate state.
     static func dismantleNSView(_ nsView: WKWebView, coordinator: Coordinator) {
         unregister(nsView)
         nsView.stopLoading()
@@ -87,6 +106,9 @@ struct HarnessWebView: NSViewRepresentable {
         )
     }
 
+    /// Stops every live WebView before AppKit confirms termination.
+    ///
+    /// Stopping first keeps a WebKit callback from racing the Runtime shutdown.
     static func prepareForTermination() {
         // Stop navigation before AppKit confirms termination; this avoids a
         // WebKit callback racing RuntimeManager.stop().
@@ -95,12 +117,14 @@ struct HarnessWebView: NSViewRepresentable {
         }
     }
 
+    /// Reloads every live WebView, dropping the ones already deallocated.
     @MainActor
     static func reloadLiveWebViews() {
         liveWebViews = liveWebViews.filter { $0.value != nil }
         liveWebViews.forEach { $0.value?.reload() }
     }
 
+    /// Toggles the injected sidebar on every live WebView.
     @MainActor
     static func toggleSidebarOnLiveWebViews() {
         liveWebViews = liveWebViews.filter { $0.value != nil }
@@ -119,6 +143,15 @@ struct HarnessWebView: NSViewRepresentable {
         liveWebViews.removeAll { $0.value === webView }
     }
 
+    /// Re-points the coordinator at the current Runtime and settings.
+    ///
+    /// ``SwiftUI`` calls this for unrelated changes too, so the Harness endpoint is
+    /// compared instead of the full URL: WebKit may add a trailing slash or a route
+    /// after the first navigation.
+    ///
+    /// - Parameters:
+    ///   - webView: WebView being updated.
+    ///   - context: SwiftUI context carrying the coordinator.
     func updateNSView(_ webView: WKWebView, context: Context) {
         context.coordinator.runtime = runtime
         context.coordinator.webView = webView

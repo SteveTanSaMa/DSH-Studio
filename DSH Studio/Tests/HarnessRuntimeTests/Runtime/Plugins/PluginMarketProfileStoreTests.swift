@@ -2,21 +2,25 @@ import Foundation
 import XCTest
 @testable import DeepSeekRuntime
 
+/// Guards the plugin profile store's read and patch rules.
 final class PluginMarketProfileStoreTests: XCTestCase {
     private var temporaryDirectory: URL!
 
+    /// Creates the isolated home directory used by the tests.
     override func setUpWithError() throws {
         temporaryDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent("DSHStudio-PluginMarket-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
     }
 
+    /// Removes the isolated home directory.
     override func tearDownWithError() throws {
         if let temporaryDirectory {
             try? FileManager.default.removeItem(at: temporaryDirectory)
         }
     }
 
+    /// An empty profile with an insert-only patch is valid.
     func testEmptyProfileAndInsertOnlyPatchAreValid() throws {
         let store = makeStore()
         XCTAssertNil(try store.inspect().dependencySpec)
@@ -37,6 +41,7 @@ final class PluginMarketProfileStoreTests: XCTestCase {
         XCTAssertFalse(try store.isMarketEnabled())
     }
 
+    /// A patch containing only comments is valid.
     func testCommentedEmptyPatchIsValid() throws {
         let store = makeStore()
         try store.ensureProfileDirectory()

@@ -6,7 +6,12 @@
 import DeepSeekLogging
 import Foundation
 
+/// Rollback of an activated Runtime to the previously installed build.
 extension RuntimeUpdateCoordinator {
+    /// Restores the previous Runtime build and verifies it can start.
+    ///
+    /// - Throws: ``RuntimeUpdateError`` when no previous build is available, another
+    ///   operation is running, or the restored build does not become ready.
     public func rollback() async throws {
         guard let runtime else {
             throw RuntimeUpdateError.unavailable

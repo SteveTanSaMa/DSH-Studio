@@ -11,6 +11,7 @@ import XCTest
 
 /// Verifies safe Session ZIP URL creation and atomic file handling.
 final class SessionLogExportTests: XCTestCase {
+    /// The export URL encodes the session identifier and requests descendants.
     func testExportURLEncodesSessionIDAndIncludesDescendants() throws {
         let url = try SessionLogExport.exportURL(
             baseURL: URL(string: "http://127.0.0.1:43123")!,
@@ -23,6 +24,7 @@ final class SessionLogExportTests: XCTestCase {
         XCTAssertTrue(components.percentEncodedQuery?.contains("session%20id/a%26b%23c") == true)
     }
 
+    /// The generated file name is stable and cannot traverse out of the save directory.
     func testFilenameIsStableAndCannotEscapeTheSaveDirectory() {
         XCTAssertEqual(
             SessionLogExport.filename(sessionID: "session-123"),
@@ -34,6 +36,7 @@ final class SessionLogExportTests: XCTestCase {
         )
     }
 
+    /// A non-loopback base URL is rejected before any download.
     func testRemoteBaseURLIsRejected() {
         XCTAssertThrowsError(
             try SessionLogExport.exportURL(
@@ -45,6 +48,7 @@ final class SessionLogExportTests: XCTestCase {
         }
     }
 
+    /// An HTTP failure reports its status and removes the temporary response file.
     func testHTTPFailureReportsStatusAndCleansTemporaryResponse() async throws {
         let temporaryDirectory = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
@@ -69,6 +73,7 @@ final class SessionLogExportTests: XCTestCase {
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: temporaryDirectory.path), [])
     }
 
+    /// Empty and non-ZIP bodies are rejected instead of being saved.
     func testEmptyAndNonZIPResponsesAreRejected() async throws {
         let temporaryDirectory = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
@@ -103,6 +108,7 @@ final class SessionLogExportTests: XCTestCase {
         }
     }
 
+    /// A ZIP body commits atomically, never leaving a partial destination file.
     func testZIPStagesAndCommitsWithoutLeavingPartialDestination() async throws {
         let temporaryDirectory = try makeTemporaryDirectory()
         let destinationDirectory = try makeTemporaryDirectory()

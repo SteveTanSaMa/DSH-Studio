@@ -15,31 +15,54 @@ import Foundation
 /// to test without launching a real Harness process.
 @MainActor
 public final class RuntimeUpdateCoordinator {
+    /// Manager whose process is stopped around an activation.
+    ///
+    /// The reference is weak so the coordinator cannot extend its lifetime.
     weak var runtime: RuntimeManager?
+    /// Provisioner that owns the actual file and directory operations.
     let updater: any RuntimeUpdating
+    /// Guards the app-level sequence so two updates cannot interleave.
     var operationInProgress = false
 
+    /// Whether an update sequence is currently running.
     public var isBusy: Bool {
         operationInProgress
     }
 
+    /// Creates a coordinator for one manager and updater.
+    ///
+    /// - Parameters:
+    ///   - runtime: Manager whose process is coordinated.
+    ///   - updater: Provisioner that performs the installation steps.
     init(runtime: RuntimeManager, updater: any RuntimeUpdating) {
         self.runtime = runtime
         self.updater = updater
     }
 
+    /// Refreshes the version comparison and publishes it on the manager.
+    ///
+    /// - Returns: The comparison produced by the updater.
     public func checkVersion() -> RuntimeVersionStatus {
         let status = updater.versionStatus()
         runtime?.setRuntimeVersionStatus(status)
         return status
     }
 
+    /// Prepares and activates the available update against the current data profile.
+    ///
+    /// The first call prepares the candidate; a second call performs the profile
+    /// switch and activation together.
+    ///
+    /// - Throws: ``RuntimeUpdateError`` when no update is available, another
+    ///   operation is running, or preparation or activation fails.
     public func update() async throws {
         try await update(targetProfile: nil)
     }
 
-    /// Downloads and verifies an available candidate without stopping the
-    /// current Harness process. Activation remains a separate explicit step.
+    /// Downloads and verifies an available candidate.
+    ///
+    /// The current Harness process keeps running; activation remains a separate,
+    /// explicit step.
     public func prepare() async throws {
         guard let runtime else {
             throw RuntimeUpdateError.unavailable
@@ -78,9 +101,10 @@ public final class RuntimeUpdateCoordinator {
         )
     }
 
-    /// Activates a prepared Runtime against an explicitly selected data
-    /// profile. The first call still only prepares the candidate; the second
-    /// call performs the profile switch and activation together.
+    /// Activates a prepared Runtime against an explicitly selected data profile.
+    ///
+    /// The first call still only prepares the candidate; the second call performs
+    /// the profile switch and activation together.
     public func update(using profile: RuntimeDataProfile) async throws {
         try await update(targetProfile: profile)
     }

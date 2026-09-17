@@ -5,7 +5,12 @@
 
 import Foundation
 
+/// The behavior half of the presentation-only layout adjustments.
+///
+/// Aligns the hero and mirrors the sidebar's collapsed state without changing
+/// any Harness functionality.
 extension HarnessLayoutWebBridge {
+    /// The script that aligns the hero and mirrors the sidebar state.
     static let sourcePartTwo = #"""
       let heroAlignmentFrame = 0;
       let sidebarStateFrame = 0;

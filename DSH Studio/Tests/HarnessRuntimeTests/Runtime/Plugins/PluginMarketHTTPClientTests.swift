@@ -3,7 +3,9 @@ import XCTest
 @testable import DeepSeekHarness
 @testable import DeepSeekRuntime
 
+/// Guards the loopback-only HTTP client used by the plugin market.
 final class PluginMarketHTTPClientTests: XCTestCase {
+    /// Routes resolve against the allowed loopback endpoint.
     func testRoutesUseTheAllowedLoopbackEndpoint() async throws {
         let transport = RecordingPluginMarketTransport { request in
             XCTAssertEqual(request.url?.path, "/dsh-market/status")
@@ -20,6 +22,7 @@ final class PluginMarketHTTPClientTests: XCTestCase {
         XCTAssertEqual(transport.requests.count, 1)
     }
 
+    /// A non-loopback URL or a malformed response fails closed.
     func testNonLoopbackAndMalformedResponsesFailClosed() async {
         let transport = RecordingPluginMarketTransport { _ in
             PluginMarketHTTPResponse(statusCode: 200, data: Data("not-json".utf8))
@@ -45,6 +48,7 @@ final class PluginMarketHTTPClientTests: XCTestCase {
         }
     }
 
+    /// Check and log routes preserve the raw payload for diagnostics.
     func testCheckAndLogsPreserveRawDiagnosticPayloads() async throws {
         let transport = RecordingPluginMarketTransport { request in
             switch request.url?.path {

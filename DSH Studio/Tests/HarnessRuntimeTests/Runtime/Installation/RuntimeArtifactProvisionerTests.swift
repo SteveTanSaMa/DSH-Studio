@@ -14,6 +14,7 @@ final class RuntimeArtifactProvisionerTests: XCTestCase {
     private let architecture = "darwin-arm64"
     private let artifactFixtureSHA256 = "7d4090092b093f82826d57849faa8e9471059c6e5977ba484b8c4fa6e306c3d9"
 
+    /// A checksum failure leaves no partial Runtime behind.
     func testArtifactChecksumFailureDoesNotPublishPartialRuntime() async throws {
         let parent = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: parent) }
@@ -39,6 +40,7 @@ final class RuntimeArtifactProvisionerTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: root.path))
     }
 
+    /// The artifact is extracted and validated before anything is published.
     func testArtifactIsExtractedAndValidatedBeforePublication() async throws {
         let parent = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: parent) }
@@ -68,6 +70,7 @@ final class RuntimeArtifactProvisionerTests: XCTestCase {
         )
     }
 
+    /// An archive with traversal paths is rejected before extraction starts.
     func testArtifactTraversalIsRejectedBeforeExtraction() async throws {
         let parent = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: parent) }

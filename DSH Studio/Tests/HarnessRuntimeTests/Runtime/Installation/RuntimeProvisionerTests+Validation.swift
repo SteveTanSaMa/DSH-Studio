@@ -2,8 +2,10 @@ import Foundation
 import XCTest
 @testable import DeepSeekRuntime
 
+/// Validation cases: what must be true before a Runtime is published.
 extension RuntimeProvisionerTests {
 
+    /// The lockfile must pin Harness from the official registry.
     func testPackageLockRequiresOfficialRegistryAndPinnedHarness() throws {
         let lock = try packageLockData()
         XCTAssertNoThrow(try RuntimePackageLockValidator.validate(data: lock))
@@ -20,6 +22,7 @@ extension RuntimeProvisionerTests {
         }
     }
 
+    /// The lockfile must pin pnpm as well.
     func testPackageLockRequiresPinnedPnpm() throws {
         let lock = try packageLockData()
         let unpinned = Data(
@@ -35,6 +38,7 @@ extension RuntimeProvisionerTests {
         }
     }
 
+    /// An untrusted Node host is rejected before the download starts.
     func testDownloaderRejectsUntrustedNodeHostBeforeTransport() async {
         let downloader = URLSessionRuntimeAssetDownloader()
         let destination = FileManager.default.temporaryDirectory
@@ -56,6 +60,7 @@ extension RuntimeProvisionerTests {
         XCTAssertFalse(FileManager.default.fileExists(atPath: destination.path))
     }
 
+    /// A checksum failure publishes nothing.
     func testChecksumFailureDoesNotPublishPartialRuntime() async throws {
         let parent = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: parent) }
@@ -82,6 +87,7 @@ extension RuntimeProvisionerTests {
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: parent.path), [])
     }
 
+    /// A validated Runtime is published, and a second run is a no-op.
     func testProvisionerPublishesValidatedRuntimeAndIsIdempotent() async throws {
         let parent = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: parent) }

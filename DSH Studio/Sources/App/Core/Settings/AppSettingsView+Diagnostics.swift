@@ -7,6 +7,7 @@ import SwiftUI
 
 /// Diagnostics and the two support tools that live outside the app bundle.
 extension AppSettingsView {
+    /// The Diagnostics category: bundle export, logs, and the scoped terminal.
     @ViewBuilder
     var diagnosticPane: some View {
         SettingsGroup(

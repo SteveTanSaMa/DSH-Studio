@@ -11,13 +11,25 @@ import Foundation
 /// The payload is signed as raw bytes rather than re-encoded after decoding.
 /// This keeps verification independent of JSON whitespace and key ordering.
 public struct RuntimeSignedCatalog: Codable, Equatable, Sendable {
+    /// The envelope schema this app accepts; other versions fail verification.
     public static let currentSchemaVersion = 1
 
+    /// Schema version of the signed envelope.
     public let schemaVersion: Int
+    /// Identifier of the signing key, checked against the expected key.
     public let keyID: String
+    /// Base64-encoded catalog bytes, verified exactly as published.
     public let payload: String
+    /// Base64-encoded Ed25519 signature over ``payload``.
     public let signature: String
 
+    /// Creates a signed envelope.
+    ///
+    /// - Parameters:
+    ///   - schemaVersion: Envelope schema; defaults to ``currentSchemaVersion``.
+    ///   - keyID: Identifier of the signing key.
+    ///   - payload: Base64-encoded catalog bytes.
+    ///   - signature: Base64-encoded signature over the payload.
     public init(
         schemaVersion: Int = currentSchemaVersion,
         keyID: String,
@@ -30,6 +42,17 @@ public struct RuntimeSignedCatalog: Codable, Equatable, Sendable {
         self.signature = signature
     }
 
+    /// Verifies the signature and decodes the enclosed catalog.
+    ///
+    /// The signature is checked over the payload bytes as published, so JSON
+    /// whitespace and key order cannot affect the result.
+    ///
+    /// - Parameters:
+    ///   - publicKeyData: Raw Ed25519 public key.
+    ///   - expectedKeyID: Key identifier the envelope must carry, when known.
+    /// - Returns: The verified catalog.
+    /// - Throws: ``RuntimeCatalogError`` when the envelope is malformed, the key does
+    ///   not match, the signature is invalid, or the payload is not a valid catalog.
     public func verifiedCatalog(
         publicKeyData: Data,
         expectedKeyID: String? = nil
@@ -59,6 +82,14 @@ public struct RuntimeSignedCatalog: Codable, Equatable, Sendable {
     }
 
     #if DEBUG
+    /// Signs a catalog for tests and local tooling.
+    ///
+    /// - Parameters:
+    ///   - catalog: Catalog to sign.
+    ///   - privateKey: Ed25519 private key.
+    ///   - keyID: Identifier recorded in the envelope.
+    /// - Returns: A signed envelope containing the pretty-printed catalog.
+    /// - Throws: An error when the catalog cannot be encoded or signed.
     public static func signed(
         catalog: RuntimeReleaseCatalog,
         using privateKey: Curve25519.Signing.PrivateKey,
@@ -77,14 +108,22 @@ public struct RuntimeSignedCatalog: Codable, Equatable, Sendable {
     #endif
 }
 
+/// Failures raised while fetching and verifying a Runtime catalog.
 public enum RuntimeCatalogError: Error, Equatable, LocalizedError, Sendable {
+    /// The signed envelope is missing fields or has an unexpected schema.
     case invalidEnvelope
+    /// The embedded public key could not be read as an Ed25519 key.
     case invalidPublicKey
+    /// The signature does not match the payload.
     case signatureInvalid
+    /// The verified payload is not a decodable catalog.
     case invalidCatalog
+    /// No catalog source produced a usable release.
     case unavailable
+    /// The catalog download failed; carries the transport detail.
     case downloadFailed(String)
 
+    /// A localized, user-facing description of the failure.
     public var errorDescription: String? {
         switch self {
         case .invalidEnvelope:

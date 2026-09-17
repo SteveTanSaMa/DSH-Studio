@@ -12,6 +12,7 @@ import XCTest
 /// Verifies that a failed candidate Runtime is automatically rolled back.
 final class RuntimeUpdateCoordinatorTests: XCTestCase {
 
+    /// A Runtime that fails after an update is rolled back and restarted.
     @MainActor
     func testFailedUpdatedRuntimeAutomaticallyRollsBackAndRestarts() async {
         let initialProcess = FakeHarnessProcess()
@@ -68,6 +69,7 @@ final class RuntimeUpdateCoordinatorTests: XCTestCase {
         XCTAssertEqual(manager.state, .ready)
     }
 
+    /// Unknown data compatibility blocks the update before the Runtime stops.
     @MainActor
     func testUnknownDataCompatibilityBlocksUpdateBeforeStoppingRuntime() async {
         let initialProcess = FakeHarnessProcess()
@@ -107,6 +109,7 @@ final class RuntimeUpdateCoordinatorTests: XCTestCase {
         XCTAssertEqual(manager.state, .ready)
     }
 
+    /// The two-phase update prepares without stopping, then activates on the next call.
     @MainActor
     func testCandidateUpdatePreparesWithoutStoppingThenActivatesOnSecondRequest() async {
         let initialProcess = FakeHarnessProcess()
@@ -160,6 +163,7 @@ final class RuntimeUpdateCoordinatorTests: XCTestCase {
         XCTAssertEqual(manager.configuration.expectedHarnessVersion, RuntimeRelease.harnessVersion)
     }
 
+    /// An incompatible target profile blocks activation before the Runtime stops.
     @MainActor
     func testIncompatibleTargetProfileBlocksPreparedActivationBeforeStoppingRuntime() async throws {
         let initialProcess = FakeHarnessProcess()
@@ -208,6 +212,10 @@ final class RuntimeUpdateCoordinatorTests: XCTestCase {
         XCTAssertEqual(manager.state, .ready)
     }
 
+    /// Polls a condition until it holds or the timeout expires.
+    ///
+    /// - Parameter condition: Condition to poll.
+    /// - Returns: The condition's value at the last check.
     @MainActor
     func waitUntil(
         _ condition: @autoclosure @escaping () -> Bool,

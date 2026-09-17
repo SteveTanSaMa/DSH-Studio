@@ -11,6 +11,7 @@ import XCTest
 
 /// Verifies RPC envelopes, revisions, remote errors, and URL rejection.
 final class HarnessAPIClientTests: XCTestCase {
+    /// The describe call uses the official envelope and keeps the payload boundaries.
     func testSettingsDescribeUsesOfficialEnvelopeAndPreservesBoundaries() async throws {
         let transport = RecordingHarnessTransport { request in
             let requestObject = try XCTUnwrap(Self.jsonObject(from: request))
@@ -59,6 +60,7 @@ final class HarnessAPIClientTests: XCTestCase {
         XCTAssertEqual(snapshot.namespaces.first?.secrets.first?.isSet, true)
     }
 
+    /// Mutations carry the expected revision and path operations.
     func testSettingsMutateSendsExpectedRevisionAndPathOperations() async throws {
         let transport = RecordingHarnessTransport { request in
             let requestObject = try XCTUnwrap(Self.jsonObject(from: request))
@@ -97,6 +99,7 @@ final class HarnessAPIClientTests: XCTestCase {
         XCTAssertNil(operations[1]["value"])
     }
 
+    /// A remote error surfaces as a failure instead of a successful save.
     func testSettingsRemoteErrorIsReportedWithoutPretendingToSave() async throws {
         let transport = RecordingHarnessTransport { request in
             let requestObject = try XCTUnwrap(Self.jsonObject(from: request))
@@ -119,6 +122,7 @@ final class HarnessAPIClientTests: XCTestCase {
         }
     }
 
+    /// A non-loopback base URL is rejected before any request is made.
     func testRemoteBaseURLIsRejectedBeforeTransport() async throws {
         let transport = RecordingHarnessTransport { _ in
             XCTFail("remote URL should be rejected before transport")

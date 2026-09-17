@@ -8,14 +8,19 @@
 import XCTest
 @testable import DeepSeekRuntime
 
-/// Verifies architecture-specific Runtime and Application Support paths.
+/// Guards the on-disk layout the locator derives from a Runtime root.
+///
+/// The architecture directory, executable paths, and application support namespace
+/// are contracts other components already depend on.
 final class RuntimeLocatorTests: XCTestCase {
 
+    /// The architecture directory uses the Darwin spelling.
     func testArchitectureDirectoryIsDarwinStyle() {
         let arch = RuntimeLocator.architectureDirectory()
         XCTAssertTrue(arch == "darwin-arm64" || arch == "darwin-x64")
     }
 
+    /// The Node.js executable path includes the architecture directory.
     func testNodeExecutablePathUsesArchitectureDirectory() {
         let root = URL(fileURLWithPath: "/tmp/runtime")
         let node = RuntimeLocator.nodeExecutable(root: root, architecture: "darwin-arm64")
@@ -23,6 +28,7 @@ final class RuntimeLocatorTests: XCTestCase {
         XCTAssertTrue(node.path.contains("darwin-arm64"))
     }
 
+    /// The Harness entry point path includes the architecture directory.
     func testHarnessEntryUsesArchitectureDirectory() {
         let root = URL(fileURLWithPath: "/tmp/runtime")
         let entry = RuntimeLocator.harnessEntry(root: root, architecture: "darwin-x64")
@@ -30,6 +36,7 @@ final class RuntimeLocatorTests: XCTestCase {
         XCTAssertTrue(entry.path.hasSuffix("@deepseek-ai/dsh/lib/bin.js"))
     }
 
+    /// Versioned paths keep different Runtime versions apart.
     func testVersionedRuntimePathsAreSeparatedByRuntimeVersion() {
         let support = URL(fileURLWithPath: "/tmp/dsh-support", isDirectory: true)
 
@@ -53,6 +60,7 @@ final class RuntimeLocatorTests: XCTestCase {
         )
     }
 
+    /// A version containing path components is rejected.
     func testVersionedRuntimeRejectsPathComponents() {
         XCTAssertNil(
             RuntimeLocator.versionedRuntimeRoot(
@@ -64,6 +72,7 @@ final class RuntimeLocatorTests: XCTestCase {
         XCTAssertFalse(RuntimeLocator.isSafeRuntimeVersion(".."))
     }
 
+    /// Application support lives under the app's own namespace.
     func testApplicationSupportUsesDSHStudioNamespace() {
         let support = RuntimeLocator.applicationSupportDirectory()
         XCTAssertTrue(support?.path.hasSuffix("Application Support/DSH Studio") == true)
@@ -73,6 +82,15 @@ final class RuntimeLocatorTests: XCTestCase {
         XCTAssertTrue(dshHome?.path.hasSuffix("Application Support/DSH Studio/DSH_HOME") == true)
     }
 
+    /// Builds a Runtime fixture on disk for the locator tests.
+    ///
+    /// The architecture directory is fixed to the host's, matching what the locator
+    /// derives on this machine.
+    ///
+    /// - Parameters:
+    ///   - root: Root to populate.
+    ///   - runtimeVersion: Version recorded in the manifest.
+    ///   - harnessVersion: Harness version recorded in the manifest.
     func makeRuntimeFixture(
         root: URL,
         runtimeVersion: String,

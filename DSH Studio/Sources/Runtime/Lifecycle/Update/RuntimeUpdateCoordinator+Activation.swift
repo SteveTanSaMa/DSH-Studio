@@ -6,7 +6,19 @@
 import DeepSeekLogging
 import Foundation
 
+/// Two-phase update execution: prepare the candidate, then activate it.
 extension RuntimeUpdateCoordinator {
+    /// Downloads and verifies the candidate and publishes it as prepared.
+    ///
+    /// The running Runtime is left alone: the candidate lands in its own root and only
+    /// ``activatePreparedUpdate(...)`` makes it authoritative. A failure leaves the
+    /// active installation and the selected data profile untouched.
+    ///
+    /// - Parameters:
+    ///   - runtime: Manager whose state is updated around the work.
+    ///   - updater: Provisioner that performs the download and verification.
+    ///   - status: Version comparison the preparation was decided from.
+    /// - Throws: ``RuntimeUpdateError`` when the candidate cannot be prepared.
     func prepareUpdate(
         runtime: RuntimeManager,
         updater: any RuntimeCandidateUpdating,
@@ -30,6 +42,18 @@ extension RuntimeUpdateCoordinator {
         }
     }
 
+    /// Activates the prepared candidate against an optional data profile.
+    ///
+    /// The current process is stopped first; if the candidate does not become ready,
+    /// the previous installation and the previous data profile are restored before the
+    /// error is rethrown.
+    ///
+    /// - Parameters:
+    ///   - runtime: Manager whose process is stopped and restarted.
+    ///   - updater: Provisioner that activates the candidate.
+    ///   - status: Version comparison describing the prepared candidate.
+    ///   - targetProfile: Data profile to switch to, or `nil` to keep the current one.
+    /// - Throws: ``RuntimeUpdateError`` when activation or the restart fails.
     func activatePreparedUpdate(
         runtime: RuntimeManager,
         updater: any RuntimeCandidateUpdating,
@@ -130,6 +154,14 @@ extension RuntimeUpdateCoordinator {
         runtime.logs.log(component: "Runtime", level: "info", message: "Runtime update completed")
     }
 
+    /// Activates an update for an updater that has no separate prepare step.
+    ///
+    /// Used for installers that replace the Runtime in one call, so there is no
+    /// prepared candidate to fall back on.
+    ///
+    /// - Parameters:
+    ///   - runtime: Manager whose process is stopped and restarted.
+    ///   - status: Version comparison that reported the update.
     func activateLegacyUpdate(
         runtime: RuntimeManager,
         status: RuntimeVersionStatus

@@ -1,8 +1,10 @@
 import XCTest
 @testable import DeepSeekRuntime
 
+/// Migration cases: when a legacy Runtime root may move to a versioned one.
 extension RuntimeLocatorTests {
 
+    /// A complete legacy Runtime is moved into its versioned directory.
     func testCompleteLegacyRuntimeMovesToVersionedDirectory() throws {
         let support = FileManager.default.temporaryDirectory
             .appendingPathComponent("DeepSeekStudio.RuntimeMigration-\(UUID().uuidString)", isDirectory: true)
@@ -34,6 +36,7 @@ extension RuntimeLocatorTests {
         )
     }
 
+    /// A legacy Runtime matching the active state is migrated.
     func testLegacyRuntimeMatchingActiveStateCanBeMigrated() throws {
         let support = FileManager.default.temporaryDirectory
             .appendingPathComponent("DeepSeekStudio.RuntimeMigrationActiveState-\(UUID().uuidString)", isDirectory: true)
@@ -71,6 +74,7 @@ extension RuntimeLocatorTests {
         XCTAssertFalse(FileManager.default.fileExists(atPath: legacyRoot.path))
     }
 
+    /// A legacy Runtime that disagrees with the active state is left alone.
     func testLegacyRuntimeWithDifferentActiveStateIsNotMigrated() throws {
         let support = FileManager.default.temporaryDirectory
             .appendingPathComponent("DeepSeekStudio.RuntimeMigrationActiveStateConflict-\(UUID().uuidString)", isDirectory: true)
@@ -102,6 +106,7 @@ extension RuntimeLocatorTests {
         XCTAssertTrue(FileManager.default.fileExists(atPath: legacyRoot.path))
     }
 
+    /// An incomplete legacy Runtime is never moved.
     func testIncompleteLegacyRuntimeIsNotMoved() throws {
         let support = FileManager.default.temporaryDirectory
             .appendingPathComponent("DeepSeekStudio.RuntimeMigrationIncomplete-\(UUID().uuidString)", isDirectory: true)
@@ -123,6 +128,7 @@ extension RuntimeLocatorTests {
         XCTAssertTrue(FileManager.default.fileExists(atPath: legacyRoot.path))
     }
 
+    /// An existing versioned Runtime is not overwritten by a legacy one.
     func testExistingVersionedRuntimePreventsLegacyOverwrite() throws {
         let support = FileManager.default.temporaryDirectory
             .appendingPathComponent("DeepSeekStudio.RuntimeMigrationConflict-\(UUID().uuidString)", isDirectory: true)
@@ -159,6 +165,7 @@ extension RuntimeLocatorTests {
         )
     }
 
+    /// A legacy Runtime and its rollback backup stay paired during migration.
     func testLegacyRollbackPairRemainsTogether() throws {
         let support = FileManager.default.temporaryDirectory
             .appendingPathComponent("DeepSeekStudio.RuntimeMigrationRollback-\(UUID().uuidString)", isDirectory: true)

@@ -8,8 +8,13 @@
 import XCTest
 @testable import DeepSeekHarness
 
-/// Guards the stable selectors and behaviors used by injected WebView scripts.
+/// Guards the injected scripts and the native boundaries they must respect.
+///
+/// These are contract tests: they fail if a script stops matching the selectors the
+/// page depends on, starts touching app settings that must stay native, or if a
+/// native surface loses a required control.
 final class WebBridgeScriptTests: XCTestCase {
+    /// The sidebar script resizes the grid and follows later attribute changes.
     func testCollapsedSidebarScriptResizesGridAndTracksAttributeChanges() {
         let source = HarnessLayoutWebBridge.source
 
@@ -32,6 +37,7 @@ final class WebBridgeScriptTests: XCTestCase {
         XCTAssertTrue(source.contains("scheduleSidebarState();"))
     }
 
+    /// The hero controls follow the composer card's measured bounds.
     func testHeroControlsTrackRenderedComposerCardBounds() {
         let source = HarnessLayoutWebBridge.source
 
@@ -67,6 +73,7 @@ final class WebBridgeScriptTests: XCTestCase {
         XCTAssertFalse(source.contains("transform: translateX"))
     }
 
+    /// Assistant prose takes the native content width instead of Harness's own.
     func testAssistantProseUsesNativeContentWidth() {
         let source = HarnessLayoutWebBridge.source
 
@@ -77,6 +84,7 @@ final class WebBridgeScriptTests: XCTestCase {
         XCTAssertTrue(source.contains("max-width: none !important"))
     }
 
+    /// The conversation pane keeps its stacking order above the skin chrome.
     func testMaidAtelierConversationPaneIsAboveSkinChrome() {
         let source = HarnessLayoutWebBridge.source
 
@@ -87,6 +95,7 @@ final class WebBridgeScriptTests: XCTestCase {
         XCTAssertFalse(source.contains("body[data-dsh-maid-atelier] [id=\"root\"]"))
     }
 
+    /// Sidebar controls keep the native stacking order in the themed skin.
     func testMaidAtelierSidebarControlsKeepNativeStackingOrder() {
         let source = HarnessLayoutWebBridge.source
 
@@ -104,6 +113,10 @@ final class WebBridgeScriptTests: XCTestCase {
         XCTAssertTrue(source.contains("z-index: 1200 !important"))
     }
 
+    /// The WebView bridge projects only Harness's General settings.
+    ///
+    /// Profile, preset, Runtime, and diagnostics settings belong to the native window
+    /// and must not reappear in the page.
     func testAppSettingsBridgeProjectsOnlyGeneralSettings() throws {
         let sourceRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
@@ -206,6 +219,7 @@ final class WebBridgeScriptTests: XCTestCase {
 
     }
 
+    /// The native settings scene owns every app-level setting.
     func testNativeSettingsSceneOwnsAppLevelSettings() throws {
         let sourceRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
@@ -231,10 +245,11 @@ final class WebBridgeScriptTests: XCTestCase {
         XCTAssertTrue(settingsSource.contains("诊断与工具"))
     }
 
-    /// Guards the Settings window contract: one sidebar category per concern,
-    /// the macOS 26 settings metrics (46pt rows, 12pt group radius, 13/11pt
-    /// type) with no decoration layered on top of them, and no setting that
-    /// Harness's own settings page already projects.
+    /// Guards the Settings window contract.
+    ///
+    /// One sidebar category per concern, the macOS 26 settings metrics (46pt rows,
+    /// 12pt group radius, 13/11pt type) with no decoration layered on top, and no
+    /// setting that Harness's own settings page already projects.
     func testSettingsWindowUsesSystemSettingsMetricsAndNativeControls() throws {
         let appRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
@@ -310,6 +325,7 @@ final class WebBridgeScriptTests: XCTestCase {
         XCTAssertTrue(source.contains("initialPane: SettingsPane = .profiles"))
     }
 
+    /// The app menu covers the expected App, File, View, and Help actions.
     func testNativeMenuCommandsCoverAppFileViewAndHelpActions() throws {
         let sourceURL = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
@@ -336,6 +352,7 @@ final class WebBridgeScriptTests: XCTestCase {
         XCTAssertTrue(source.contains("复制诊断信息"))
     }
 
+    /// The menu bridge exposes the sidebar toggle and native controls.
     func testHarnessMenuBridgeExposesSidebarToggleAndNativeControls() throws {
         let behaviorURL = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
@@ -361,6 +378,7 @@ final class WebBridgeScriptTests: XCTestCase {
         XCTAssertTrue(webViewSource.contains("evaluateJavaScript"))
     }
 
+    /// The market's restart is routed through the app-owned Runtime.
     func testPluginMarketRestartIsRoutedThroughNativeRuntime() throws {
         let sourceRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
@@ -390,6 +408,7 @@ final class WebBridgeScriptTests: XCTestCase {
         XCTAssertTrue(handlerSource.contains("restartRuntimeForPluginMarket"))
     }
 
+    /// Workspace groups use the list width that remains beside the scrollbar.
     func testWorkspaceGroupsUseAvailableListWidthAroundScrollbar() {
         let source = HarnessLayoutWebBridge.source
 
@@ -403,6 +422,7 @@ final class WebBridgeScriptTests: XCTestCase {
         XCTAssertTrue(source.contains("box-sizing: border-box !important"))
     }
 
+    /// The export script suppresses only Harness's own download feedback.
     func testSessionExportScriptInterceptsOnlyHarnessDownloadFeedback() {
         let source = SessionLogExportWebBridge.interceptDialogScript
 
@@ -427,6 +447,7 @@ final class WebBridgeScriptTests: XCTestCase {
         XCTAssertFalse(source.contains("Session export failed"))
     }
 
+    /// Diagnostics evidence stays bounded and redacted at the exporter boundary.
     func testDiagnosticsExporterContractUsesBoundedRedactedEvidence() throws {
         let sourceRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()

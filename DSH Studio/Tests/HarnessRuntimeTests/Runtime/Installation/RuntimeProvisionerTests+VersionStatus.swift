@@ -2,8 +2,10 @@ import Foundation
 import XCTest
 @testable import DeepSeekRuntime
 
+/// Version-status cases: what the app reports as installed, prepared, or rollback.
 extension RuntimeProvisionerTests {
 
+    /// After an update the status reports current and keeps a rollback target.
     func testVersionStatusDetectsCurrentAndRetainsRollbackAfterUpdate() async throws {
         let parent = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: parent) }
@@ -49,6 +51,7 @@ extension RuntimeProvisionerTests {
         )
     }
 
+    /// A remote release installs into the versioned root when no legacy root exists.
     func testRemoteReleaseUsesVersionedRootWhenLegacyRootIsMissing() throws {
         let support = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: support) }
@@ -82,6 +85,7 @@ extension RuntimeProvisionerTests {
         XCTAssertEqual(provisioner.root, expectedRoot)
     }
 
+    /// A missing versioned root moves to the selected release version.
     func testMissingVersionedRootMovesToSelectedReleaseVersion() throws {
         let support = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: support) }
@@ -109,6 +113,7 @@ extension RuntimeProvisionerTests {
         )
     }
 
+    /// An installed manifest can rebuild the release contract without a network.
     func testInstalledManifestCanReconstructOfflineReleaseContract() throws {
         let manifest = RuntimeInstallationManifest(
             runtimeVersion: "offline-runtime",
@@ -134,6 +139,7 @@ extension RuntimeProvisionerTests {
         XCTAssertNil(release.artifact)
     }
 
+    /// A newer installed Runtime is never downgraded to an older available release.
     func testNewerInstalledRuntimeIsNotDowngradedToOlderAvailableRelease() throws {
         let parent = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: parent) }

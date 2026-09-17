@@ -5,11 +5,21 @@
 
 import Foundation
 
+/// The outcome of one child command.
 public struct RuntimeCommandResult: Sendable {
+    /// Process termination status; `0` means success.
     public let status: Int32
+    /// Standard output captured for the caller.
     public let stdout: String
+    /// Standard error, trimmed and capped at 100 000 characters.
     public let stderr: String
 
+    /// Creates a command result.
+    ///
+    /// - Parameters:
+    ///   - status: Process termination status.
+    ///   - stdout: Captured standard output.
+    ///   - stderr: Captured standard error.
     public init(status: Int32, stdout: String, stderr: String) {
         self.status = status
         self.stdout = stdout
@@ -17,7 +27,19 @@ public struct RuntimeCommandResult: Sendable {
     }
 }
 
+/// Runs child commands on behalf of the installer and market manager.
+///
+/// The seam exists so tests can answer commands without executing them.
 public protocol RuntimeCommandRunning: Sendable {
+    /// Runs one command and waits for it to exit.
+    ///
+    /// - Parameters:
+    ///   - executable: Command to run.
+    ///   - arguments: Arguments passed to the command.
+    ///   - currentDirectory: Working directory for the child.
+    ///   - environment: Complete environment for the child.
+    /// - Returns: The termination status and captured output.
+    /// - Throws: When the command cannot be started or its output read.
     func run(
         executable: URL,
         arguments: [String],
@@ -26,9 +48,25 @@ public protocol RuntimeCommandRunning: Sendable {
     ) throws -> RuntimeCommandResult
 }
 
+/// The production command runner, backed by Foundation's `Process`.
 public struct SystemRuntimeCommandRunner: RuntimeCommandRunning, Sendable {
+    /// Creates a runner with no shared state.
     public init() {}
 
+    /// Runs a command and waits for it to exit.
+    ///
+    /// Output is redirected to temporary files instead of pipes, which keeps the
+    /// call blocking only on the child process rather than on utility-QoS drain
+    /// queues. Standard error is trimmed and capped before it is returned.
+    ///
+    /// - Parameters:
+    ///   - executable: Command to run.
+    ///   - arguments: Arguments passed to the command.
+    ///   - currentDirectory: Working directory for the child.
+    ///   - environment: Complete environment for the child.
+    /// - Returns: The termination status and captured output.
+    /// - Throws: An error from `Process` when the command cannot be started or its
+    ///   output cannot be read.
     public func run(
         executable: URL,
         arguments: [String],

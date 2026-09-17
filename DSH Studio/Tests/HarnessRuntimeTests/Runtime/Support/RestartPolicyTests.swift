@@ -10,6 +10,7 @@ import XCTest
 
 /// Verifies bounded exponential-style restart attempts.
 final class RestartPolicyTests: XCTestCase {
+    /// Delays are handed out in order and stop after the attempt limit.
     func testDelaysAreBoundedAndStopAfterMax() {
         let policy = RestartPolicy(maxAttempts: 3, delays: [1, 2, 4])
         XCTAssertEqual(policy.delay(forAttempt: 1), 1)
@@ -18,6 +19,7 @@ final class RestartPolicyTests: XCTestCase {
         XCTAssertNil(policy.delay(forAttempt: 4))
     }
 
+    /// Extra delays do not extend the attempt limit.
     func testMaxAttemptsIsAppliedEvenWhenMoreDelaysAreProvided() {
         let policy = RestartPolicy(maxAttempts: 1, delays: [1, 2, 4])
 

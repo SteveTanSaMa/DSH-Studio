@@ -2,8 +2,10 @@ import Foundation
 import XCTest
 @testable import DeepSeekRuntime
 
+/// Activation cases: publishing a versioned Runtime and rolling it back.
 extension RuntimeProvisionerTests {
 
+    /// Activation and rollback move the Runtime and profile pair together.
     func testVersionedRuntimeActivationAndRollbackUseActiveStatePair() throws {
         let support = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: support) }
@@ -82,6 +84,7 @@ extension RuntimeProvisionerTests {
         )
     }
 
+    /// A failed update leaves the active Runtime exactly as it was.
     func testFailedUpdateLeavesActiveRuntimeUntouched() async throws {
         let parent = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: parent) }
@@ -119,6 +122,7 @@ extension RuntimeProvisionerTests {
         XCTAssertFalse(FileManager.default.fileExists(atPath: RuntimeLocator.rollbackRoot(root: root).path))
     }
 
+    /// Cancellation cleans the staging directory without publishing anything.
     func testCancellationCleansStagingWithoutPublishingRuntime() async throws {
         let parent = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: parent) }

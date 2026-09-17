@@ -6,9 +6,11 @@
 import DeepSeekRuntime
 import SwiftUI
 
-/// Agent Presets: moving user presets in and out of the app, plus what is
-/// currently installed.
+/// The Agent Presets category of the settings window.
+///
+/// It moves user presets in and out of the app and lists what is installed.
 extension AppSettingsView {
+    /// The Agent Presets category: import, export, and what is installed.
     @ViewBuilder
     var presetPane: some View {
         SettingsGroup(
@@ -63,6 +65,7 @@ extension AppSettingsView {
         }
     }
 
+    /// Summaries of the installed user presets.
     var userPresets: [AgentPresetSummary] {
         model.presetTransfer.summaries()
     }

@@ -6,9 +6,12 @@
 import DeepSeekRuntime
 import SwiftUI
 
-/// Harness Profiles: which composition is active, what else is installed, and
-/// the two operations that change the set of profiles.
+/// The Harness Profiles category of the settings window.
+///
+/// It shows which composition is active, what else is installed, and the two
+/// operations that change the set of profiles.
 extension AppSettingsView {
+    /// The Harness Profiles category: active profile, installed set, and actions.
     @ViewBuilder
     var profilePane: some View {
         SettingsGroup(
@@ -82,6 +85,7 @@ extension AppSettingsView {
         }
     }
 
+    /// Every profile the store knows about, in the order it reports them.
     var harnessProfiles: [HarnessProfile] {
         model.harnessProfiles.profiles()
     }

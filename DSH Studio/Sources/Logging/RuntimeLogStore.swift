@@ -10,11 +10,22 @@ import Foundation
 
 /// A structured runtime log entry.
 public struct RuntimeLogEntry: Equatable, Sendable {
+    /// When the entry was recorded.
     public let timestamp: Date
+    /// Severity label, for example `info`, `warn`, `error`, or `stderr`.
     public let level: String
+    /// Subsystem that produced the entry, for example `Runtime` or `Harness`.
     public let component: String
+    /// Already-redacted message text.
     public let message: String
 
+    /// Creates a log entry.
+    ///
+    /// - Parameters:
+    ///   - timestamp: Time of the event; defaults to now.
+    ///   - level: Severity label.
+    ///   - component: Subsystem that produced the entry.
+    ///   - message: Message text; callers should pass redacted text.
     public init(
         timestamp: Date = Date(),
         level: String,
@@ -37,6 +48,13 @@ public final class RuntimeLogStore: ObservableObject {
     private let maxFileBytes: Int
     private let fileManager: FileManager
 
+    /// Creates a log store.
+    ///
+    /// - Parameters:
+    ///   - logFileURL: File that receives appended entries; `nil` keeps the store in memory only.
+    ///   - maxInMemoryEntries: Number of entries retained for the UI and diagnostics.
+    ///   - maxFileBytes: Size at which the log file is rotated before appending.
+    ///   - fileManager: File system seam used by tests.
     public init(
         logFileURL: URL? = nil,
         maxInMemoryEntries: Int = 500,
@@ -49,6 +67,15 @@ public final class RuntimeLogStore: ObservableObject {
         self.fileManager = fileManager
     }
 
+    /// Records one entry in memory and appends it to the log file.
+    ///
+    /// The message is redacted here, so both the in-memory history and the file are
+    /// safe to share in diagnostics.
+    ///
+    /// - Parameters:
+    ///   - component: Subsystem producing the entry; defaults to `Runtime`.
+    ///   - level: Severity label.
+    ///   - message: Message text to redact and store.
     public func log(
         component: String = "Runtime",
         level: String,
@@ -65,6 +92,10 @@ public final class RuntimeLogStore: ObservableObject {
         write(entry)
     }
 
+    /// The last 40 Harness `stderr` and `error` messages, oldest first.
+    ///
+    /// Used by crash diagnostics, which need the child process's own output rather
+    /// than the app's.
     public var recentStderr: [String] {
         entries
             .filter { $0.component == "Harness" && ($0.level == "stderr" || $0.level == "error") }
@@ -118,6 +149,10 @@ public final class RuntimeLogStore: ObservableObject {
 
 /// Redacts credential-shaped values before they enter logs or user-visible UI.
 public enum LogRedactor {
+    /// Redacts sensitive values from arbitrary text.
+    ///
+    /// - Parameter text: Text to sanitize.
+    /// - Returns: The sanitized text.
     public static func redact(_ text: String) -> String {
         var result = text
         let patterns: [(pattern: String, replacement: String)] = [
@@ -138,8 +173,9 @@ public enum LogRedactor {
         return redactHomeDirectory(in: result)
     }
 
-    /// Keeps logs useful without exposing the user's account name or arbitrary
-    /// absolute paths when the output is shared.
+    /// Keeps logs useful without exposing the user's account name or paths.
+    ///
+    /// Arbitrary absolute paths are replaced when the output is shared.
     public static func redactPath(_ path: String) -> String {
         let standardized = URL(fileURLWithPath: path).standardizedFileURL.path
         let redacted = redactHomeDirectory(in: standardized)

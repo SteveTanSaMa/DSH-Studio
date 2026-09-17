@@ -5,7 +5,11 @@
 
 import Foundation
 
+/// The behavior half of the injected settings sections.
+///
+/// Installs the DOM, requests state from Swift, and posts user edits back.
 extension AppSettingsWebBridge {
+    /// The script that requests state and posts user edits back to Swift.
     static let sourcePartTwo = #"""
       const text = (root, selector, value, fallback = "未知") => {
         const element = root.querySelector(selector);

@@ -7,20 +7,29 @@
 
 import Foundation
 
-/// The signed index of immutable Runtime artifacts published by the
-/// independent Runtime repository.
+/// The signed index of immutable Runtime artifacts.
 ///
 /// The Runtime Builder creates this file from the two architecture-specific
-/// artifact manifests. DSH Studio verifies it before using any release data,
-/// so users never resolve npm `latest`, execute a remote install script, or
-/// trust mutable update JSON.
+/// artifact manifests. DSH Studio verifies it before using any release data, so
+/// users never resolve npm `latest`, execute a remote install script, or trust
+/// mutable update JSON.
 public struct RuntimeReleaseCatalog: Codable, Equatable, Sendable {
+    /// The catalog schema this app accepts; other versions are treated as unavailable.
     public static let currentSchemaVersion = 1
 
+    /// Schema version of the published catalog.
     public let schemaVersion: Int
+    /// Runtime version the whole catalog describes; every entry must match it.
     public let runtimeVersion: String
+    /// One release per supported architecture.
     public let releases: [RuntimeReleaseDescriptor]
 
+    /// Creates a catalog.
+    ///
+    /// - Parameters:
+    ///   - schemaVersion: Schema to record; defaults to ``currentSchemaVersion``.
+    ///   - runtimeVersion: Runtime version shared by every release.
+    ///   - releases: Releases, one per architecture.
     public init(
         schemaVersion: Int = currentSchemaVersion,
         runtimeVersion: String,
@@ -31,8 +40,10 @@ public struct RuntimeReleaseCatalog: Codable, Equatable, Sendable {
         self.releases = releases
     }
 
-    /// Returns a release only when all catalog invariants and URL restrictions
-    /// hold. A malformed or cross-version entry is treated as unavailable.
+    /// Returns the release for one architecture after validating the catalog.
+    ///
+    /// Every invariant and URL restriction must hold; a malformed or cross-version
+    /// entry is treated as unavailable.
     public func release(for architecture: String) -> RuntimeReleaseDescriptor? {
         guard schemaVersion == Self.currentSchemaVersion,
               RuntimeLocator.isSafeRuntimeVersion(runtimeVersion) else {
@@ -59,6 +70,13 @@ public struct RuntimeReleaseCatalog: Codable, Equatable, Sendable {
         return release
     }
 
+    /// Loads the bundled catalog and returns the release for an architecture.
+    ///
+    /// - Parameters:
+    ///   - bundle: Bundle containing `RuntimeManifest/runtime-release.json`.
+    ///   - architecture: Architecture to resolve; defaults to this host's.
+    /// - Returns: The verified release, or `nil` when the catalog is missing or the
+    ///   entry fails validation.
     public static func load(
         bundle: Bundle = .main,
         architecture: String = RuntimeLocator.architectureDirectory()
@@ -69,6 +87,11 @@ public struct RuntimeReleaseCatalog: Codable, Equatable, Sendable {
         return catalog.release(for: architecture)
     }
 
+    /// Loads the catalog shipped inside the app bundle.
+    ///
+    /// - Parameter bundle: Bundle containing the catalog resource.
+    /// - Returns: The decoded catalog, or `nil` when the resource is absent.
+    /// - Throws: A `DecodingError` when the bundled catalog is malformed.
     public static func loadCatalog(bundle: Bundle = .main) throws -> Self? {
         guard let url = bundle.url(
             forResource: "runtime-release",
@@ -80,10 +103,26 @@ public struct RuntimeReleaseCatalog: Codable, Equatable, Sendable {
         return try JSONDecoder().decode(Self.self, from: data)
     }
 
+    /// Decodes a catalog from signed payload bytes.
+    ///
+    /// - Parameter data: JSON bytes of the catalog, already signature-checked by the
+    ///   caller.
+    /// - Returns: The decoded catalog.
+    /// - Throws: A `DecodingError` when the payload does not match the schema.
     public static func decode(_ data: Data) throws -> Self {
         try JSONDecoder().decode(Self.self, from: data)
     }
 
+    /// Whether an artifact URL is the expected release asset for a version.
+    ///
+    /// Requires HTTPS on `github.com`, no credentials and no explicit port, and the
+    /// exact path of the Runtime repository's release asset.
+    ///
+    /// - Parameters:
+    ///   - url: Artifact URL taken from the catalog.
+    ///   - runtimeVersion: Runtime version the asset must belong to.
+    ///   - architecture: Architecture the asset must target.
+    /// - Returns: `true` when the URL is the expected trusted asset.
     public static func isTrustedArtifactURL(
         _ url: URL,
         runtimeVersion: String,
@@ -101,6 +140,10 @@ public struct RuntimeReleaseCatalog: Codable, Equatable, Sendable {
         return url.path == expectedPath
     }
 
+    /// Whether a URL is the expected signed-catalog location.
+    ///
+    /// - Parameter url: URL to test.
+    /// - Returns: `true` when the URL is the Runtime repository's catalog asset.
     public static func isTrustedCatalogURL(_ url: URL) -> Bool {
         guard url.scheme == "https",
               url.host == "github.com",

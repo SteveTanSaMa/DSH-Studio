@@ -15,10 +15,13 @@ import UniformTypeIdentifiers
 /// Coordinates user settings with the RuntimeManager used by the main window.
 @MainActor
 final class AppModel: ObservableObject {
+    /// The Runtime whose process, versions, and profiles this model owns.
     @Published var runtime: RuntimeManager
 
+    /// App-owned preferences shared with the Harness settings page.
     var settings = SettingsStore()
     private(set) var harnessProfiles: HarnessProfileStore
+    /// Native lifecycle manager for the fixed dsh-market plugin.
     let pluginMarket: PluginMarketManager
     private(set) var presetTransfer: AgentPresetTransferManager
     private(set) var currentDataHomeURL: URL
@@ -37,6 +40,11 @@ final class AppModel: ObservableObject {
     private var pluginMarketRestartInProgress = false
     private let terminalFileGenerator = RuntimeTerminalFileGenerator()
 
+    /// Wires the stores, resolves the Runtime root, and binds runtime updates.
+    ///
+    /// The data home is taken from the last health-checked data profile when one is
+    /// recorded, so an interrupted update cannot silently point the app at the wrong
+    /// `DSH_HOME`.
     init() {
         let support = RuntimeLocator.applicationSupportDirectory()
             ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -99,13 +107,15 @@ final class AppModel: ObservableObject {
             .sink { [weak self] _ in self?.objectWillChange.send() }
     }
 
+    /// Cancels the pending plugin-market refresh when the model goes away.
     deinit {
         pluginMarketRefreshTask?.cancel()
     }
 
-    /// Handles dsh-market's restart request inside the app-owned Runtime
-    /// lifecycle. This prevents the market from forking an unmanaged Harness
-    /// replacement and avoids reporting its intentional SIGTERM as a crash.
+    /// Handles dsh-market's restart request inside the app-owned lifecycle.
+    ///
+    /// This prevents the market from forking an unmanaged Harness replacement and
+    /// keeps its intentional SIGTERM from being reported as a crash.
     func restartRuntimeForPluginMarket() {
         guard !pluginMarketRestartInProgress else { return }
         guard runtime.state == .ready else {
@@ -132,6 +142,7 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// Stops the notification stream; called while the app is terminating.
     func stopNotifications() {
         notificationCoordinator.stop()
     }
@@ -180,6 +191,10 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// Waits until the Runtime leaves every transition state.
+    ///
+    /// Polls rather than observing, so a caller can sequence work after a
+    /// stop/start pair without holding a subscription.
     private func waitForRuntimeOperationToFinish() async {
         while true {
             switch runtime.state {
@@ -191,9 +206,10 @@ final class AppModel: ObservableObject {
         }
     }
 
-    /// Performs online catalog discovery without interrupting the current
-    /// Harness process. Only a verified signed release changes the next update
-    /// target or the latest-version text shown in settings.
+    /// Performs online catalog discovery without interrupting Harness.
+    ///
+    /// Only a verified signed release changes the next update target or the
+    /// latest-version text shown in Settings.
     func refreshRuntimeCatalog(prepareCandidate: Bool = true) async {
         do {
             let resolution = try await runtimeCatalogService.signedResolution()
@@ -214,8 +230,9 @@ final class AppModel: ObservableObject {
         }
     }
 
-    /// The settings bridge uses this path for an explicit check so the remote
-    /// catalog is consulted before comparing installed and available versions.
+    /// Checks for a Runtime update after consulting the remote catalog.
+    ///
+    /// Used by the explicit check in the app menu and the settings window.
     @discardableResult
     func checkRuntimeVersion() async -> RuntimeVersionStatus? {
         await waitForRuntimeOperationToFinish()
@@ -241,6 +258,9 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// Applies settings that are enforced rather than user-configurable.
+    ///
+    /// Runtime recovery is an app reliability mechanism, so it is always enabled.
     func applySettings() {
         // Runtime recovery is an app reliability mechanism, not a user-facing toggle.
         runtime.restartPolicy.enabled = true
@@ -274,8 +294,9 @@ final class AppModel: ObservableObject {
     }
 
     /// Performs the two-phase Runtime update against a selected data profile.
-    /// Settings are updated only when the profile has actually become active;
-    /// the first call may merely prepare the Runtime candidate.
+    ///
+    /// Settings are updated only when the profile actually became active; the first
+    /// call may merely prepare the candidate.
     func updateRuntime() async throws {
         guard let coordinator = runtime.runtimeUpdateCoordinator else {
             throw RuntimeUpdateError.unavailable
@@ -297,10 +318,12 @@ final class AppModel: ObservableObject {
         schedulePluginMarketRefresh()
     }
 
+    /// Harness version of the newest verified catalog release, when one was found.
     var latestSignedHarnessVersion: String? {
         latestSignedRuntimeRelease?.harnessVersion
     }
 
+    /// Whether a verified release is both known and newer than the installation.
     var hasVerifiedRuntimeUpdate: Bool {
         latestSignedRuntimeRelease != nil
             && runtime.runtimeVersionStatus?.updateAvailable == true
@@ -331,6 +354,9 @@ final class AppModel: ObservableObject {
         return NSWorkspace.shared.open(logs)
     }
 
+    /// Reveals the current data home in Finder, creating it when missing.
+    ///
+    /// - Returns: `true` when Finder accepted the request.
     @discardableResult
     func openDataFolder() -> Bool {
         let dataFolder = currentDataHomeURL
@@ -345,8 +371,10 @@ final class AppModel: ObservableObject {
         return NSWorkspace.shared.open(dataFolder)
     }
 
-    /// Opens a terminal whose DSH commands are scoped to the current app state.
-    /// The generated PATH and DSH_HOME exist only in the launched terminal tree.
+    /// Opens a terminal scoped to the current app state.
+    ///
+    /// The generated `PATH` and `DSH_HOME` exist only inside the launched terminal
+    /// tree; the user's shell configuration is untouched.
     @discardableResult
     func openRuntimeTerminal() -> Bool {
         let stateDirectory = supportDirectory
@@ -378,6 +406,14 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// Prompts for a workspace and restarts Harness against it.
+    ///
+    /// The previous workspace is restored when the Runtime fails to start with the new
+    /// one, so a bad choice cannot leave the app unable to launch.
+    ///
+    /// - Returns: `true` when a workspace was admitted, `false` when the panel was
+    ///   cancelled.
+    /// - Throws: ``RuntimeError/workspaceFailure(_:)`` after a failed rollback.
     func chooseWorkspace() async throws -> Bool {
         let panel = NSOpenPanel()
         panel.title = "选择工作区目录"
@@ -410,11 +446,22 @@ final class AppModel: ObservableObject {
         return true
     }
 
+    /// Creates a profile directory and republishes the model.
+    ///
+    /// - Parameter name: Profile name; validated by the profile store.
+    /// - Throws: ``HarnessProfileStoreError`` when the name is invalid or taken.
     func createHarnessProfile(name: String) throws {
         _ = try harnessProfiles.create(name: name)
         objectWillChange.send()
     }
 
+    /// Switches the active profile, restarting Harness when it is running.
+    ///
+    /// A profile that fails to start is rolled back to the last known good one.
+    ///
+    /// - Parameter name: Profile to activate.
+    /// - Returns: `true` when the profile is active.
+    /// - Throws: ``RuntimeError/processLaunchFailed(_:)`` after a failed rollback.
     func selectHarnessProfile(name: String) async throws -> Bool {
         guard name != runtime.configuration.profileName else { return true }
         try harnessProfiles.select(name: name)
@@ -440,11 +487,19 @@ final class AppModel: ObservableObject {
         return true
     }
 
+    /// Deletes a profile directory and republishes the model.
+    ///
+    /// - Parameter name: Profile to delete; protected profiles are rejected by the store.
+    /// - Throws: ``HarnessProfileStoreError`` when the profile is protected or missing.
     func deleteHarnessProfile(name: String) throws {
         try harnessProfiles.delete(name: name)
         objectWillChange.send()
     }
 
+    /// Exports one user preset to a `.dshpreset` archive.
+    ///
+    /// - Returns: The written archive, or `nil` when either panel was cancelled.
+    /// - Throws: ``AgentPresetTransferError`` when the preset cannot be exported.
     func exportAgentPreset() async throws -> URL? {
         let openPanel = NSOpenPanel()
         openPanel.title = "选择要导出的 Agent Preset"
@@ -475,6 +530,10 @@ final class AppModel: ObservableObject {
         return destination
     }
 
+    /// Imports a preset archive after confirming the target identifier.
+    ///
+    /// - Returns: The installed identifier, or `nil` when the flow was cancelled.
+    /// - Throws: ``AgentPresetTransferError`` when the archive is invalid or conflicts.
     func importAgentPreset() async throws -> String? {
         let openPanel = NSOpenPanel()
         openPanel.title = "选择 Agent Preset 压缩包"
@@ -515,6 +574,10 @@ final class AppModel: ObservableObject {
         return installed.targetID
     }
 
+    /// Restores the previously installed Runtime build.
+    ///
+    /// - Throws: ``RuntimeUpdateError`` when no rollback target exists or the restore
+    ///   fails.
     func rollbackRuntime() async throws {
         guard let coordinator = runtime.runtimeUpdateCoordinator else {
             throw RuntimeUpdateError.unavailable
@@ -523,6 +586,10 @@ final class AppModel: ObservableObject {
         syncCurrentDataHomeURL()
     }
 
+    /// Writes a redacted diagnostics archive.
+    ///
+    /// - Returns: The written archive URL.
+    /// - Throws: ``DiagnosticsExportError`` when the bundle cannot be produced.
     func exportDiagnostics() async throws -> URL {
         let support = RuntimeLocator.applicationSupportDirectory()!
         let lines = await diagnosticLines()
@@ -610,6 +677,10 @@ final class AppModel: ObservableObject {
         return evidence
     }
 
+    /// Builds the redacted diagnostics summary.
+    ///
+    /// - Returns: One line per fact, in the order the settings page and the copied
+    ///   summary present them.
     @discardableResult
     func diagnosticLines() async -> [String] {
         let status = runtime.runtimeVersionStatus
@@ -642,6 +713,9 @@ final class AppModel: ObservableObject {
         return lines
     }
 
+    /// Copies the diagnostics summary to the general pasteboard.
+    ///
+    /// - Returns: `true` when the pasteboard accepted the text.
     @discardableResult
     func copyDiagnostics() async -> Bool {
         let diagnosticText = (await diagnosticLines()).joined(separator: "\n")

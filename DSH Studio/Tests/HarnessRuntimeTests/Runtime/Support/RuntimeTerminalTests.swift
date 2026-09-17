@@ -3,7 +3,9 @@ import XCTest
 
 @testable import DeepSeekRuntime
 
+/// Guards the generated terminal files and their scoped environment.
 final class RuntimeTerminalTests: XCTestCase {
+    /// Terminal files are created privately and scoped to the profile.
     func testPrepareCreatesPrivateProfileAwareTerminalFilesWithoutGlobalPathMutation() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("DSHStudio-RuntimeTerminal-\(UUID().uuidString)", isDirectory: true)
@@ -35,6 +37,7 @@ final class RuntimeTerminalTests: XCTestCase {
         XCTAssertFalse(welcome.contains("/etc/paths"))
     }
 
+    /// An unsafe profile name or path value is refused.
     func testPrepareRejectsUnsafeProfileAndGeneratedPathValues() {
         let configuration = RuntimeTerminalConfiguration(
             stateDirectory: URL(fileURLWithPath: "/tmp/terminal"),
@@ -55,6 +58,7 @@ final class RuntimeTerminalTests: XCTestCase {
         }
     }
 
+    /// The pnpm shim fails closed when the Runtime provides no pnpm.
     func testPnpmShimFailsClosedWhenRuntimeDoesNotProvidePnpm() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("DSHStudio-RuntimeTerminal-pnpm-\(UUID().uuidString)", isDirectory: true)
@@ -75,6 +79,7 @@ final class RuntimeTerminalTests: XCTestCase {
         XCTAssertTrue(pnpm.contains("pnpm is unavailable"))
     }
 
+    /// The DSH shim runs Node with the default profile and a scoped data home.
     func testDshShimExecutesNodeWithDefaultProfileAndScopedHome() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("DSHStudio-RuntimeTerminal-exec-\(UUID().uuidString)", isDirectory: true)

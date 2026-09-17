@@ -7,12 +7,21 @@ import AppKit
 import DeepSeekLogging
 import Foundation
 
+/// Failures raised while assembling a diagnostics bundle.
+///
+/// The bundle is built in a temporary staging directory, so every failure here
+/// leaves the user's disk untouched.
 enum DiagnosticsExportError: Error, LocalizedError {
+    /// Zipping the staged files failed; carries the tool's output.
     case archiveFailed(String)
+    /// One staged file or the whole staging directory exceeds its size limit.
     case evidenceTooLarge
+    /// An input path or file name failed validation; carries the rejected value.
     case unsafeInput(String)
+    /// The user dismissed the save panel.
     case saveCancelled
 
+    /// A localized, user-facing description of the failure.
     var errorDescription: String? {
         switch self {
         case .archiveFailed(let detail):
@@ -27,6 +36,10 @@ enum DiagnosticsExportError: Error, LocalizedError {
     }
 }
 
+/// Assembles a redacted diagnostics bundle for support requests.
+///
+/// Every input is bounded and redacted, and the bundle is staged in a temporary
+/// directory so a failure never leaves partial output in the user's folders.
 @MainActor
 enum DiagnosticsExporter {
     private static let maxSystemInfoBytes = 512 * 1024
@@ -42,6 +55,19 @@ enum DiagnosticsExporter {
         "lifecycle.json"
     ]
 
+    /// Builds the diagnostics bundle and asks the user where to save it.
+    ///
+    /// Staging and the temporary archive are always removed, including when the save
+    /// panel is cancelled.
+    ///
+    /// - Parameters:
+    ///   - systemInfo: Diagnostics summary; redacted before it is written.
+    ///   - logsDirectory: Directory whose log files are copied in.
+    ///   - supportDirectory: App support directory holding the Runtime manifest.
+    ///   - evidence: Extra structured evidence, keyed by its staging file name.
+    ///   - fileManager: File system seam used by tests.
+    /// - Returns: The file the user chose.
+    /// - Throws: ``DiagnosticsExportError`` when staging, archiving, or the copy fails.
     static func export(
         systemInfo: String,
         logsDirectory: URL,
@@ -75,6 +101,19 @@ enum DiagnosticsExporter {
         return destination
     }
 
+    /// Stages every input into one temporary directory.
+    ///
+    /// Inputs are bounded by per-file and total size limits, and log or evidence
+    /// entries that fail validation are skipped rather than included.
+    ///
+    /// - Parameters:
+    ///   - systemInfo: Diagnostics summary; redacted before it is written.
+    ///   - logsDirectory: Directory whose log files are copied in.
+    ///   - supportDirectory: App support directory holding the Runtime manifest.
+    ///   - evidence: Extra structured evidence, keyed by its staging file name.
+    ///   - fileManager: File system seam used by tests.
+    /// - Returns: The staging directory, owned by the caller until it is removed.
+    /// - Throws: ``DiagnosticsExportError`` when a size limit is exceeded.
     static func prepareStaging(
         systemInfo: String,
         logsDirectory: URL,

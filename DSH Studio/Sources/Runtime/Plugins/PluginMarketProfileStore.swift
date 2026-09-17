@@ -5,18 +5,45 @@
 
 import Foundation
 
+/// A read-only audit of one profile's market footprint.
+///
+/// Every flag is derived from file contents, so a caller can tell "not
+/// installed" apart from "installed but broken" without re-reading the profile.
 public struct PluginMarketProfileInspection: Equatable, Sendable {
+    /// The profile directory that was inspected.
     public let profileDirectory: URL
+    /// The version spec listed for the market in `package.json`, when present.
     public let dependencySpec: String?
+    /// The version materialised under the profile's `node_modules`, when present.
     public let installedVersion: String?
+    /// Whether the profile has a `package.json` at all.
     public let packageJSONPresent: Bool
+    /// Whether that manifest parses and describes the expected package.
     public let packageManifestValid: Bool
+    /// Whether the manifest registers the market bundle.
     public let bundleListed: Bool
+    /// Whether the profile patch holds exactly one well-formed market entry.
     public let bundlePatchValid: Bool
+    /// Whether the installed package exposes its entry point.
     public let entryPointValid: Bool
+    /// Whether `pnpm-lock.yaml` pins the expected version and integrity.
     public let lockIntegrityValid: Bool
+    /// Whether the profile patch currently activates the market.
     public let enabled: Bool
 
+    /// Creates an inspection result.
+    ///
+    /// - Parameters:
+    ///   - profileDirectory: Profile directory that was inspected.
+    ///   - dependencySpec: Version spec listed in `package.json`, if any.
+    ///   - installedVersion: Version found under `node_modules`, if any.
+    ///   - packageJSONPresent: Whether the profile has a manifest.
+    ///   - packageManifestValid: Whether that manifest is valid for the market.
+    ///   - bundleListed: Whether the manifest registers the market bundle.
+    ///   - bundlePatchValid: Whether the patch holds one valid market entry.
+    ///   - entryPointValid: Whether the installed package exposes its entry point.
+    ///   - lockIntegrityValid: Whether the lockfile pins version and integrity.
+    ///   - enabled: Whether the patch activates the market.
     public init(
         profileDirectory: URL,
         dependencySpec: String?,
@@ -42,6 +69,11 @@ public struct PluginMarketProfileInspection: Equatable, Sendable {
     }
 }
 
+/// A byte-for-byte copy of the profile files a market operation may change.
+///
+/// The snapshot is taken before a mutation and handed back to
+/// ``PluginMarketProfileStore/restore(_:)`` when that mutation fails, which is
+/// what keeps a failed install from leaving the profile half-edited.
 public struct PluginMarketProfileSnapshot: Sendable {
     fileprivate let files: [String: Data?]
     fileprivate let packageName: String?
@@ -67,12 +99,20 @@ public struct PluginMarketProfileSnapshot: Sendable {
     }
 }
 
+/// Owns the fixed `DSH_HOME/profiles/web` contract used by dsh-market.
+///
+/// The store rejects symlinks that resolve outside the managed profile and edits
+/// one narrowly-scoped patch entry rather than treating YAML as a command
+/// surface.
 /// Owns only the fixed `DSH_HOME/profiles/web` contract used by dsh-market.
 /// It rejects symlinks that resolve outside the managed Profile and edits one
 /// narrowly-scoped patch entry rather than treating YAML as a command surface.
 public final class PluginMarketProfileStore: @unchecked Sendable {
+    /// The standardized `DSH_HOME` this store operates in.
     public let dshHome: URL
+    /// The managed profile name; the market ships for `web` only.
     public let profileName: String
+    /// `DSH_HOME/profiles/<profileName>`, the only directory this store edits.
     public let profileDirectory: URL
 
     private let fileManager: FileManager
@@ -86,6 +126,12 @@ public final class PluginMarketProfileStore: @unchecked Sendable {
         ".dsh-market/state.json",
     ]
 
+    /// Creates a store for one profile.
+    ///
+    /// - Parameters:
+    ///   - dshHome: Harness data home; a non-standardized value is standardized here.
+    ///   - profileName: Profile to manage; defaults to the market's supported profile.
+    ///   - fileManager: File system seam used by tests.
     public init(
         dshHome: URL,
         profileName: String = PluginMarketRelease.profileName,
@@ -99,6 +145,13 @@ public final class PluginMarketProfileStore: @unchecked Sendable {
         self.fileManager = fileManager
     }
 
+    /// Verifies that the profile path stays inside `DSH_HOME`.
+    ///
+    /// Both the literal path and the symlink-resolved path are checked, and every
+    /// existing component must be a real directory rather than a link.
+    ///
+    /// - Throws: ``PluginMarketManagerError/unsafeProfile(_:)`` when the name is
+    ///   invalid or any path escapes `DSH_HOME`.
     public func validatePath() throws {
         guard Self.isSafeProfileName(profileName) else {
             throw PluginMarketManagerError.unsafeProfile("Profile 名称无效")
@@ -118,6 +171,10 @@ public final class PluginMarketProfileStore: @unchecked Sendable {
         }
     }
 
+    /// Creates the profile directory when it is missing and re-validates the path.
+    ///
+    /// - Throws: ``PluginMarketManagerError/unsafeProfile(_:)`` when the path fails
+    ///   validation before or after creation.
     public func ensureProfileDirectory() throws {
         try validatePath()
         try fileManager.createDirectory(
@@ -127,6 +184,15 @@ public final class PluginMarketProfileStore: @unchecked Sendable {
         try validatePath()
     }
 
+    /// Audits the profile's market footprint without modifying it.
+    ///
+    /// A missing profile directory is reported as an empty inspection with
+    /// ``PluginMarketProfileInspection/enabled`` set, so callers do not need to
+    /// special-case a profile that was never created.
+    ///
+    /// - Returns: The inspection result.
+    /// - Throws: ``PluginMarketManagerError`` when a file is unreadable, oversized,
+    ///   or the profile path is unsafe.
     public func inspect() throws -> PluginMarketProfileInspection {
         try validatePath()
         guard fileManager.fileExists(atPath: profileDirectory.path) else {
@@ -253,6 +319,11 @@ public final class PluginMarketProfileStore: @unchecked Sendable {
         )
     }
 
+    /// Captures the profile files a mutation may overwrite.
+    ///
+    /// - Returns: A snapshot suitable for ``restore(_:)``.
+    /// - Throws: ``PluginMarketManagerError`` when a file cannot be read or the
+    ///   profile path is unsafe.
     public func snapshot() throws -> PluginMarketProfileSnapshot {
         try validatePath()
         var files: [String: Data?] = [:]
@@ -273,6 +344,12 @@ public final class PluginMarketProfileStore: @unchecked Sendable {
         )
     }
 
+    /// Whether `pnpm-lock.yaml` pins the expected market version and integrity.
+    ///
+    /// - Returns: `true` when the lockfile references the pinned package together
+    ///   with its expected integrity.
+    /// - Throws: ``PluginMarketManagerError/malformedProfile(_:)`` when the lockfile
+    ///   exceeds the size limit.
     public func hasExpectedLockIntegrity() throws -> Bool {
         try validatePath()
         let url = try safeFileURL("pnpm-lock.yaml")
@@ -288,6 +365,11 @@ public final class PluginMarketProfileStore: @unchecked Sendable {
             && text.contains(PluginMarketRelease.packageIntegrity)
     }
 
+    /// Verifies that the profile holds exactly the installation the app expects.
+    ///
+    /// - Returns: The inspection that was validated.
+    /// - Throws: ``PluginMarketManagerError/malformedProfile(_:)`` when the pinned
+    ///   version, manifest, patch, entry point, or lockfile does not match.
     public func validateExpectedInstallation() throws -> PluginMarketProfileInspection {
         let inspection = try inspect()
         guard inspection.dependencySpec == PluginMarketRelease.packageVersion else {
@@ -324,6 +406,13 @@ public final class PluginMarketProfileStore: @unchecked Sendable {
         return inspection
     }
 
+    /// Verifies that no trace of the market remains in the profile.
+    ///
+    /// Used after an uninstall: a leftover dependency, bundle entry, patch block, or
+    /// `node_modules` directory is reported as a malformed profile.
+    ///
+    /// - Throws: ``PluginMarketManagerError/malformedProfile(_:)`` when any market
+    ///   footprint is still present.
     public func validateMarketAbsent() throws {
         let inspection = try inspect()
         guard inspection.dependencySpec == nil else {
@@ -355,6 +444,11 @@ public final class PluginMarketProfileStore: @unchecked Sendable {
         try validateManagedPackageAbsent()
     }
 
+    /// Restores the profile to a previously captured snapshot.
+    ///
+    /// - Parameter snapshot: Snapshot taken before the failed mutation.
+    /// - Throws: ``PluginMarketManagerError`` when a file cannot be removed or
+    ///   rewritten, or a path fails validation.
     public func restore(_ snapshot: PluginMarketProfileSnapshot) throws {
         try ensureProfileDirectory()
         try removeManagedPackageMaterialization()
@@ -560,6 +654,14 @@ public final class PluginMarketProfileStore: @unchecked Sendable {
             || name.hasPrefix("dsh-market@")
     }
 
+    /// Whether the profile patch activates the market.
+    ///
+    /// A profile without a patch file counts as enabled, matching the Runtime's
+    /// default for a profile that never disabled the plugin.
+    ///
+    /// - Returns: `true` when the market entry is present and not disabled.
+    /// - Throws: ``PluginMarketManagerError/malformedProfile(_:)`` when the patch is
+    ///   oversized or holds duplicate market entries.
     public func isMarketEnabled() throws -> Bool {
         try validatePath()
         let url = try safeFileURL(patchFileName)
@@ -572,6 +674,14 @@ public final class PluginMarketProfileStore: @unchecked Sendable {
             .first(where: { $0.isMarket })?.disabled != true
     }
 
+    /// Enables or disables the market with a single targeted patch edit.
+    ///
+    /// Only the existing market block is rewritten (or removed when disabling); the
+    /// rest of the patch file is preserved line by line.
+    ///
+    /// - Parameter enabled: `true` to activate the market, `false` to disable it.
+    /// - Throws: ``PluginMarketManagerError/malformedProfile(_:)`` when duplicate
+    ///   market entries are found or the patch is oversized.
     public func setMarketEnabled(_ enabled: Bool) throws {
         try ensureProfileDirectory()
         let url = try safeFileURL(patchFileName)
@@ -622,6 +732,12 @@ public final class PluginMarketProfileStore: @unchecked Sendable {
             .write(to: url, options: .atomic)
     }
 
+    /// Removes the market block from the profile patch.
+    ///
+    /// The call is a no-op when the patch file or the market entry is already absent.
+    ///
+    /// - Throws: ``PluginMarketManagerError/malformedProfile(_:)`` when duplicate
+    ///   market entries are found or the patch is oversized.
     public func removeMarketEntry() throws {
         try ensureProfileDirectory()
         let url = try safeFileURL(patchFileName)
@@ -686,6 +802,11 @@ public final class PluginMarketProfileStore: @unchecked Sendable {
         return hasAnotherEntry ? block.start..<block.end : containerStart..<block.end
     }
 
+    /// Whether `name` may be used as a single profile directory component.
+    ///
+    /// - Parameter name: Candidate profile name.
+    /// - Returns: `true` when the name is non-empty, is not `.`, `..`, or
+    ///   `node_modules`, and contains no path separator or null byte.
     public static func isSafeProfileName(_ name: String) -> Bool {
         !name.isEmpty
             && name != "."

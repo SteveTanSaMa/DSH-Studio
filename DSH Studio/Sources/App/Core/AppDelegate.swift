@@ -12,6 +12,7 @@ import UserNotifications
 /// Bridges AppKit application lifecycle events to the shared app model.
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
+    /// The one app model the window, delegate, and settings all share.
     static let sharedModel = AppModel()
 
     /// Activates the app after launch so the local Harness window is foregrounded.

@@ -7,16 +7,23 @@ import Combine
 import Foundation
 
 /// Native lifecycle and recovery coordinator for the fixed dsh-market plugin.
+///
+/// The community plugin inventory and all third-party plugin operations stay in
+/// dsh-market's own Web UI; this type only installs, enables, repairs, and removes
+/// the pinned package inside the managed profile.
+/// Native lifecycle and recovery coordinator for the fixed dsh-market plugin.
 /// The community plugin inventory and all third-party plugin operations remain
 /// in dsh-market's own Web UI.
 @MainActor
 public final class PluginMarketManager: ObservableObject {
     @Published public private(set) var state: PluginMarketState
 
+    /// The Runtime whose profile and process this manager drives.
     public let runtime: RuntimeManager
-    /// Resolves against the current Runtime data home. Runtime updates can
-    /// activate an isolated DSH_HOME, so retaining one store instance would
-    /// make later market operations mutate the previous data profile.
+    /// A store resolved against the current Runtime data home.
+    ///
+    /// Runtime updates can activate an isolated `DSH_HOME`, so retaining one store
+    /// instance would make later market operations mutate the previous data profile.
     public var profileStore: PluginMarketProfileStore {
         PluginMarketProfileStore(
             dshHome: runtime.configuration.dshHome,
@@ -30,6 +37,16 @@ public final class PluginMarketManager: ObservableObject {
     private let fileManager: FileManager
     private var activeOperation: PluginMarketOperation?
 
+    /// Creates a manager bound to one Runtime.
+    ///
+    /// The initial state is `checking`; call ``refresh()`` to inspect the profile.
+    ///
+    /// - Parameters:
+    ///   - runtime: Runtime whose profile hosts the market.
+    ///   - commandRunner: Command seam used for pnpm operations.
+    ///   - httpClient: Client for the market's own HTTP routes.
+    ///   - supportDirectory: App support directory for the last-operation record.
+    ///   - fileManager: File system seam used by tests.
     public init(
         runtime: RuntimeManager,
         commandRunner: any RuntimeCommandRunning = SystemRuntimeCommandRunner(),
@@ -58,10 +75,15 @@ public final class PluginMarketManager: ObservableObject {
         )
     }
 
+    /// Whether an operation started by this manager is still running.
     public var isBusy: Bool {
         activeOperation != nil
     }
 
+    /// Re-inspects the profile and the market's routes, then publishes the result.
+    ///
+    /// While another operation is running the state is only marked busy, so a
+    /// refresh can never interleave with a profile mutation.
     public func refresh() async {
         guard activeOperation == nil else {
             state = stateCopy(busy: true)
@@ -163,6 +185,11 @@ public final class PluginMarketManager: ObservableObject {
         }
     }
 
+    /// Installs the pinned market package into the managed profile.
+    ///
+    /// - Throws: ``PluginMarketManagerError`` when the profile is unsupported or
+    ///   malformed, or the Runtime is not ready; the command's own failure is
+    ///   surfaced as ``PluginMarketManagerError/commandFailed(_:)``.
     public func install() async throws {
         try await perform(.install) { [weak self] in
             guard let self else { return }
@@ -175,7 +202,8 @@ public final class PluginMarketManager: ObservableObject {
         }
     }
 
-    /// Installs the fixed market package after Runtime becomes available.
+    /// Installs the fixed market package once the Runtime is available.
+    ///
     /// Existing valid installations are left to dsh-market to manage.
     @discardableResult
     public func ensureInstalled() async throws -> Bool {
@@ -192,6 +220,10 @@ public final class PluginMarketManager: ObservableObject {
         }
     }
 
+    /// Reinstalls the pinned version, replacing whatever the profile holds.
+    ///
+    /// - Throws: ``PluginMarketManagerError`` when the profile is unsupported or
+    ///   malformed, or the install cannot be validated afterwards.
     public func update() async throws {
         try await perform(.update) { [weak self] in
             guard let self else { return }
@@ -204,6 +236,10 @@ public final class PluginMarketManager: ObservableObject {
         }
     }
 
+    /// Reinstalls a corrupted or incomplete market installation.
+    ///
+    /// - Throws: ``PluginMarketManagerError`` when the profile is unsupported or
+    ///   malformed, or the repaired install cannot be validated.
     public func repair() async throws {
         try await perform(.repair) { [weak self] in
             guard let self else { return }
@@ -216,6 +252,10 @@ public final class PluginMarketManager: ObservableObject {
         }
     }
 
+    /// Activates the market in the profile patch and verifies the write.
+    ///
+    /// - Throws: ``PluginMarketManagerError`` when the patch cannot be written or the
+    ///   new state is not readable afterwards.
     public func enable() async throws {
         try await perform(.enable) { [weak self] in
             guard let self else { return }
@@ -226,6 +266,10 @@ public final class PluginMarketManager: ObservableObject {
         }
     }
 
+    /// Disables the market in the profile patch and verifies the write.
+    ///
+    /// - Throws: ``PluginMarketManagerError`` when the patch cannot be written or the
+    ///   new state is not readable afterwards.
     public func disable() async throws {
         try await perform(.disable) { [weak self] in
             guard let self else { return }
@@ -236,6 +280,10 @@ public final class PluginMarketManager: ObservableObject {
         }
     }
 
+    /// Removes the package and its profile entry, then verifies no trace remains.
+    ///
+    /// - Throws: ``PluginMarketManagerError`` when the removal or the absence check
+    ///   fails, in which case the profile is restored from its snapshot.
     public func uninstall() async throws {
         try await perform(.uninstall) { [weak self] in
             guard let self else { return }

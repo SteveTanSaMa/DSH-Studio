@@ -9,10 +9,19 @@ import Foundation
 
 /// Conservative automatic restart policy for unexpected Harness crashes.
 public struct RestartPolicy: Equatable, Sendable {
+    /// Whether automatic restarts are allowed at all.
     public var enabled: Bool
+    /// Maximum number of restarts inside one crash cycle.
     public var maxAttempts: Int
+    /// Delay before each restart, indexed by one-based attempt number.
     public var delays: [TimeInterval]
 
+    /// Creates a restart policy.
+    ///
+    /// - Parameters:
+    ///   - enabled: Whether restarts are allowed; defaults to `true`.
+    ///   - maxAttempts: Restart limit per crash cycle; defaults to 3.
+    ///   - delays: Backoff seconds per attempt; defaults to 1, 2, and 4 seconds.
     public init(
         enabled: Bool = true,
         maxAttempts: Int = 3,
@@ -32,11 +41,14 @@ public struct RestartPolicy: Equatable, Sendable {
     }
 }
 
-/// Tracks one crash/restart cycle.
+/// Tracks one crash and restart cycle for the supervisor.
 public final class RestartTracker {
+    /// Crashes recorded since the last ``reset()``.
     public private(set) var attempts = 0
+    /// When the most recent crash was recorded.
     public private(set) var lastCrashDate: Date?
 
+    /// Creates an empty tracker.
     public init() {}
 
     /// Clears the crash budget after a stable Runtime becomes ready.

@@ -5,9 +5,16 @@
 
 import Foundation
 
-/// Small host-side bridge for suppressing the Harness-owned browser download
-/// feedback modal when the native shell takes over the download.
+/// Suppresses Harness's browser download feedback during a native export.
+///
+/// The native shell performs the download, so the page's own modal would be a
+/// duplicate.
 public enum SessionLogExportWebBridge {
+    /// Hides Harness's browser download feedback while the native shell saves.
+    ///
+    /// The script installs itself once per page, watches for the Harness download
+    /// dialog, and closes it only for the session-export flow so no other Harness
+    /// feedback is affected.
     public static let interceptDialogScript = #"""
     (() => {
       if (window.__deepseekStudioSessionExportInterceptInstalled) return;

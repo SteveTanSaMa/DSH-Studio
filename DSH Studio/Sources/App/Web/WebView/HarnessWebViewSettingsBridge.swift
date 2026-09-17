@@ -8,7 +8,20 @@ import DeepSeekLogging
 import Foundation
 import WebKit
 
+/// Native side of the settings bridge injected into the Harness page.
+///
+/// The WebView owns only the app preferences projected into Harness's General
+/// settings; profile, preset, Runtime, and diagnostics operations stay in the
+/// native settings window.
 extension HarnessWebView.Coordinator: WKScriptMessageHandler {
+    /// Handles one message posted by the injected settings script.
+    ///
+    /// The body is untrusted input: only the expected dictionary shape is parsed, and
+    /// the request is handled on the main actor.
+    ///
+    /// - Parameters:
+    ///   - userContentController: Controller that delivered the message.
+    ///   - message: Message whose name and body are validated before use.
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         // JavaScript messages are untrusted input. Parse only the expected
         // dictionary shape, then handle the request on the main actor.
@@ -135,6 +148,10 @@ extension HarnessWebView.Coordinator: WKScriptMessageHandler {
         }
     }
 
+    /// Pushes the current app settings to the page without a request.
+    ///
+    /// Called after navigation and whenever the model changes, so the page never
+    /// shows a stale value for a native edit.
     @MainActor
     func broadcastAppSettingsState() {
         guard let webView else { return }
@@ -181,6 +198,13 @@ extension HarnessWebView.Coordinator: WKScriptMessageHandler {
         )
     }
 
+    /// Whether a navigation target is the Runtime this WebView was created for.
+    ///
+    /// Scheme, host, and port must all match the allowed URL, so a valid loopback URL
+    /// for a different local service is rejected.
+    ///
+    /// - Parameter url: Navigation target to check.
+    /// - Returns: `true` when the URL points at the same local Runtime.
     func isAllowed(_ url: URL) -> Bool {
         // Matching host, scheme, and port prevents a valid loopback URL
         // from being used to reach a different local service.

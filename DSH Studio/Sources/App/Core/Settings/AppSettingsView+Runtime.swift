@@ -6,10 +6,12 @@
 import DeepSeekRuntime
 import SwiftUI
 
-/// Runtime: what is installed, what is running, and the maintenance actions.
+/// The Runtime category of the settings window.
+///
 /// Versions and status are read-only rows; every state change stays behind an
 /// explicit button.
 extension AppSettingsView {
+    /// The Runtime category: installed and running state, plus maintenance.
     @ViewBuilder
     var runtimePane: some View {
         SettingsGroup(header: "版本") {

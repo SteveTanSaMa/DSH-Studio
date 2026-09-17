@@ -8,7 +8,12 @@
 import XCTest
 @testable import DeepSeekRuntime
 
+/// Guards the data-contract rules that decide whether a Runtime may take over.
+///
+/// The tests pin the fail-closed behavior: an unknown format must never be read as
+/// compatible, and a format is never inferred from the installed Runtime.
 final class RuntimeDataCompatibilityTests: XCTestCase {
+    /// The same format identifier is compatible.
     func testMatchingFormatIsCompatible() {
         let format = RuntimeDataFormatDescriptor(
             id: "sqlite-v2",
@@ -19,18 +24,21 @@ final class RuntimeDataCompatibilityTests: XCTestCase {
         XCTAssertEqual(format.compatibility(with: "sqlite-v1"), .compatible)
     }
 
+    /// Without a stored format the verdict is unknown, not compatible.
     func testMissingCurrentFormatIsUnknown() {
         let format = RuntimeDataFormatDescriptor(id: "sqlite-v2")
 
         XCTAssertEqual(format.compatibility(with: nil), .unknown)
     }
 
+    /// A different format with no migration offered is incompatible.
     func testDifferentFormatWithoutMigrationIsIncompatible() {
         let format = RuntimeDataFormatDescriptor(id: "sqlite-v2")
 
         XCTAssertEqual(format.compatibility(with: "sqlite-v1"), .incompatible)
     }
 
+    /// A different format with a migration offered requires the migration.
     func testDifferentFormatWithMigrationRequiresMigration() {
         let format = RuntimeDataFormatDescriptor(
             id: "sqlite-v2",
@@ -40,11 +48,13 @@ final class RuntimeDataCompatibilityTests: XCTestCase {
         XCTAssertEqual(format.compatibility(with: "sqlite-v1"), .requiresMigration)
     }
 
+    /// A blank format identifier fails validation.
     func testEmptyFormatIDIsInvalid() {
         XCTAssertFalse(RuntimeDataFormatDescriptor(id: " ").isValid)
         XCTAssertTrue(RuntimeDataFormatDescriptor(id: "sqlite-v2").isValid)
     }
 
+    /// The active profile's format decides, not the installed Runtime's.
     func testStatusUsesActiveDataProfileFormatBeforeInstalledRuntimeFormat() {
         let release = RuntimeReleaseDescriptor(
             architecture: "darwin-arm64",
@@ -78,6 +88,7 @@ final class RuntimeDataCompatibilityTests: XCTestCase {
         XCTAssertEqual(status.dataCompatibility, .compatible)
     }
 
+    /// A format without a profile identity is not trusted.
     func testStatusDoesNotTrustFormatWithoutActiveProfileIdentity() {
         let release = RuntimeReleaseDescriptor(
             architecture: "darwin-arm64",
@@ -102,6 +113,7 @@ final class RuntimeDataCompatibilityTests: XCTestCase {
         XCTAssertEqual(status.dataCompatibility, .unknown)
     }
 
+    /// An unknown profile keeps an unknown verdict despite the Runtime's format.
     func testStatusDoesNotInferUnknownProfileFromInstalledRuntimeFormat() {
         let release = RuntimeReleaseDescriptor(
             architecture: "darwin-arm64",
@@ -135,6 +147,7 @@ final class RuntimeDataCompatibilityTests: XCTestCase {
         XCTAssertEqual(status.dataCompatibility, .unknown)
     }
 
+    /// A missing profile keeps an unknown verdict despite the Runtime's format.
     func testStatusDoesNotInferMissingProfileFromInstalledRuntimeFormat() {
         let release = RuntimeReleaseDescriptor(
             architecture: "darwin-arm64",

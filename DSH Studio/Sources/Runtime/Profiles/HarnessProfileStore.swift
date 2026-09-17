@@ -6,23 +6,37 @@
 import CryptoKit
 import Foundation
 
-/// Manages Harness composition Profiles separately from Runtime data homes.
-/// Only profile manifests and selection state are owned here; user data stays
-/// in the existing DSH_HOME and Runtime Data Profile stores.
+/// Manages Harness composition profiles separately from Runtime data homes.
+///
+/// Only profile manifests and selection state are owned here; user data stays in
+/// the existing `DSH_HOME` and Runtime data-profile stores.
 public final class HarnessProfileStore: @unchecked Sendable {
+    /// The profile every installation can fall back to; it is never deleted.
     public static let defaultProfileName = "web"
+    /// The bundle that must come first in a launchable profile.
     public static let baseBundle = "@deepseek-ai/dsh-base"
+    /// The bundle that must follow ``baseBundle`` for the Web UI to start.
     public static let webBundle = "@deepseek-ai/dsh-web-app"
 
+    /// The standardized `DSH_HOME` whose `profiles` directory is managed.
     public let dshHome: URL
+    /// `DSH_HOME/profiles`, the only directory this store creates profiles in.
     public let profilesDirectory: URL
+    /// Where the active, pending, and last-known-good selection is persisted.
     public let selectionStateURL: URL
+    /// Where the recently used profile names are persisted.
     public let recentStateURL: URL
 
     private let fileManager: FileManager
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
 
+    /// Creates a store for one `DSH_HOME`.
+    ///
+    /// - Parameters:
+    ///   - dshHome: Harness data home; a non-standardized value is standardized here.
+    ///   - supportDirectory: App support directory that holds this store's state.
+    ///   - fileManager: File system seam used by tests.
     public init(
         dshHome: URL,
         supportDirectory: URL,
@@ -43,6 +57,12 @@ public final class HarnessProfileStore: @unchecked Sendable {
         migrateLegacyStateIfNeeded(from: supportDirectory.standardizedFileURL)
     }
 
+    /// Lists every profile discovered under ``profilesDirectory``.
+    ///
+    /// The default profile is added as a virtual entry when it has no directory yet,
+    /// so callers always see at least one selectable profile.
+    ///
+    /// - Returns: Profiles sorted by localized name.
     public func profiles() -> [HarnessProfile] {
         var discovered: [HarnessProfile] = []
         if let entries = try? fileManager.contentsOfDirectory(
@@ -63,6 +83,10 @@ public final class HarnessProfileStore: @unchecked Sendable {
         return discovered.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
 
+    /// Returns one profile by name.
+    ///
+    /// - Parameter name: Profile name; unsafe names return `nil`.
+    /// - Returns: The profile, or `nil` when no such profile exists.
     public func profile(named name: String) -> HarnessProfile? {
         guard Self.isSafeName(name) else { return nil }
         if name == Self.defaultProfileName,
@@ -72,6 +96,12 @@ public final class HarnessProfileStore: @unchecked Sendable {
         return profiles().first { $0.name == name }
     }
 
+    /// Lists profiles matching a case-insensitive query.
+    ///
+    /// The query is matched against the name, the bundle list, and any problem text.
+    ///
+    /// - Parameter query: Text to match; empty or `nil` returns every profile.
+    /// - Returns: Matching profiles sorted by localized name.
     public func search(query: String? = nil) -> [HarnessProfile] {
         let normalized = query?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
         guard !normalized.isEmpty else { return profiles() }
@@ -82,6 +112,11 @@ public final class HarnessProfileStore: @unchecked Sendable {
         }
     }
 
+    /// Describes how a profile relates to the current selection.
+    ///
+    /// - Parameter name: Profile name.
+    /// - Returns: The status, or ``HarnessProfileStatus/invalid`` when the profile is
+    ///   missing or not selectable.
     public func status(for name: String) -> HarnessProfileStatus {
         guard let profile = profile(named: name), profile.selectable else { return .invalid }
         let selection = selection()
@@ -91,6 +126,12 @@ public final class HarnessProfileStore: @unchecked Sendable {
         return .ready
     }
 
+    /// Lists profiles with recently used ones first.
+    ///
+    /// - Parameters:
+    ///   - limit: Maximum number of profiles to return; values below zero yield none.
+    ///   - query: Optional filter applied before ordering.
+    /// - Returns: Recent profiles first, then the remaining matches by localized name.
     public func recentProfiles(limit: Int = 5, query: String? = nil) -> [HarnessProfile] {
         let candidates = search(query: query)
         let byName = Dictionary(uniqueKeysWithValues: candidates.map { ($0.name, $0) })
@@ -101,10 +142,20 @@ public final class HarnessProfileStore: @unchecked Sendable {
         return Array((recent + remaining).prefix(max(0, limit)))
     }
 
+    /// Whether a profile appears in the persisted recent list.
+    ///
+    /// - Parameter name: Profile name.
+    /// - Returns: `true` when the name was recorded recently.
     public func isRecentlyUsed(name: String) -> Bool {
         recentNames().contains(name)
     }
 
+    /// Moves a profile to the front of the recent list, keeping the newest 20.
+    ///
+    /// Unknown names are ignored and a failed write is swallowed: usage history is a
+    /// convenience, not a precondition for selecting a profile.
+    ///
+    /// - Parameter name: Profile name to record.
     public func recordUsage(name: String) {
         guard profile(named: name) != nil else { return }
         var names = recentNames().filter { $0 != name }
@@ -113,6 +164,10 @@ public final class HarnessProfileStore: @unchecked Sendable {
         try? persistRecentNames(names)
     }
 
+    /// Reads the persisted selection.
+    ///
+    /// - Returns: The stored selection, or a default selection naming the default
+    ///   profile when the file is missing or invalid.
     public func selection() -> HarnessProfileSelection {
         guard let data = try? Data(contentsOf: selectionStateURL),
               let value = try? decoder.decode(HarnessProfileSelection.self, from: data),
@@ -125,6 +180,13 @@ public final class HarnessProfileStore: @unchecked Sendable {
         return value
     }
 
+    /// Resolves which profile the next launch should use and persists the decision.
+    ///
+    /// A pending selection wins over the active one; when the requested profile is
+    /// not selectable the last known good profile, or the default profile, is used
+    /// instead.
+    ///
+    /// - Returns: The selection that startup should honor.
     public func startupProfile() -> HarnessProfileSelection {
         let current = selection()
         let requested = current.pending ?? current.active
@@ -143,6 +205,16 @@ public final class HarnessProfileStore: @unchecked Sendable {
         return next
     }
 
+    /// Creates a new profile directory with a minimal launcher manifest.
+    ///
+    /// The manifest, user patch, and workspace file are written into a staging
+    /// directory first and then moved into place, so a failure cannot leave a
+    /// half-created profile behind.
+    ///
+    /// - Parameter name: Profile name; must pass ``isSafeName(_:)``.
+    /// - Returns: The created profile.
+    /// - Throws: ``HarnessProfileStoreError`` when the name is invalid, the profile
+    ///   already exists, or the manifest cannot be persisted.
     @discardableResult
     public func create(name: String) throws -> HarnessProfile {
         guard Self.isSafeName(name) else { throw HarnessProfileStoreError.invalidName }
@@ -181,6 +253,11 @@ public final class HarnessProfileStore: @unchecked Sendable {
         return created
     }
 
+    /// Requests a profile for the next launch by recording it as pending.
+    ///
+    /// - Parameter name: Profile name to select.
+    /// - Throws: ``HarnessProfileStoreError`` when the profile does not exist, is not
+    ///   selectable, or the selection cannot be persisted.
     public func select(name: String) throws {
         guard let profile = profile(named: name) else { throw HarnessProfileStoreError.notFound }
         guard profile.selectable else {
@@ -195,6 +272,14 @@ public final class HarnessProfileStore: @unchecked Sendable {
         recordUsage(name: name)
     }
 
+    /// Records a profile as both active and last known good.
+    ///
+    /// Called after a successful start, so a later failure can fall back to a profile
+    /// that is known to work.
+    ///
+    /// - Parameter name: Profile that started successfully.
+    /// - Throws: ``HarnessProfileStoreError`` when the profile is not selectable or
+    ///   the selection cannot be persisted.
     public func markHealthy(name: String) throws {
         guard profile(named: name)?.selectable == true else {
             throw HarnessProfileStoreError.notSelectable("配置不存在")
@@ -203,6 +288,10 @@ public final class HarnessProfileStore: @unchecked Sendable {
         recordUsage(name: name)
     }
 
+    /// Restores the last known good profile as the active selection.
+    ///
+    /// - Returns: The name of the profile that was restored.
+    /// - Throws: ``HarnessProfileStoreError`` when the selection cannot be persisted.
     public func rollbackToLastKnownGood() throws -> String {
         let current = selection()
         let fallback = profile(named: current.lastKnownGood)?.selectable == true
@@ -212,6 +301,15 @@ public final class HarnessProfileStore: @unchecked Sendable {
         return fallback
     }
 
+    /// Deletes a profile directory.
+    ///
+    /// The default profile and any profile referenced by the current selection are
+    /// rejected. Deletion moves the directory aside first, so a failed removal can be
+    /// rolled back.
+    ///
+    /// - Parameter name: Profile name to delete.
+    /// - Throws: ``HarnessProfileStoreError`` when the profile is protected, missing,
+    ///   or the directory cannot be removed.
     public func delete(name: String) throws {
         guard Self.isSafeName(name), name != Self.defaultProfileName else {
             throw HarnessProfileStoreError.cannotDeleteActive
@@ -240,6 +338,14 @@ public final class HarnessProfileStore: @unchecked Sendable {
         }
     }
 
+    /// Whether a name may be used as a single profile directory component.
+    ///
+    /// Accepted form: 1–255 characters from `A-Z`, `a-z`, `0-9`, `-`, `_`, and `.`,
+    /// starting with a letter or digit. Reserved names such as `..` and
+    /// `node_modules` are rejected.
+    ///
+    /// - Parameter name: Candidate profile name.
+    /// - Returns: `true` when the name is safe to use as a directory name.
     public static func isSafeName(_ name: String) -> Bool {
         guard !name.isEmpty,
               name != ".",

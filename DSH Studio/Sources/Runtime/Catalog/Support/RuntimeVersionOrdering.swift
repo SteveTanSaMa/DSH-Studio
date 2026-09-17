@@ -5,7 +5,21 @@
 
 import Foundation
 
+/// Orders Runtime and Harness version strings for comparison and sorting.
+///
+/// Runtime builds follow `<harness>-ver<n>`; two of those are compared by their
+/// Harness part first and their revision second, so `-ver10` correctly sorts after
+/// `-ver9`. Anything else falls back to numeric-then-lexical component ordering.
 public enum RuntimeVersionOrdering {
+    /// Compares two version strings.
+    ///
+    /// A standardized Runtime version always sorts after a plain version, so a
+    /// recognizable build outranks an unrecognized string.
+    ///
+    /// - Parameters:
+    ///   - lhs: Left version string.
+    ///   - rhs: Right version string.
+    /// - Returns: The ordering of `lhs` relative to `rhs`.
     public static func compare(_ lhs: String, _ rhs: String) -> ComparisonResult {
         if let left = standardizedRuntimeVersion(lhs),
            let right = standardizedRuntimeVersion(rhs) {

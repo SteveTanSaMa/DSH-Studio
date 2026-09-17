@@ -5,7 +5,12 @@
 
 import Foundation
 
+/// The environment and copy for the injected settings sections.
+///
+/// State is supplied by Swift; the page never reads user defaults or
+/// receives credentials through this bridge.
 extension AppSettingsWebBridge {
+    /// The script that installs the sections and owns their copy.
     static let sourcePartOne = #"""
     (() => {
       if (window.__deepseekStudioAppSettingsInstalled) return;

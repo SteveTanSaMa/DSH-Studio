@@ -5,9 +5,12 @@
 
 import XCTest
 
-/// Guards the native WebView boundary against regressions that reopen external
-/// URLs in Safari during startup.
+/// Guards the native WebView boundary.
+///
+/// A regression here would reopen external URLs in Safari during startup instead
+/// of keeping navigation inside the embedded view.
 final class HarnessWebViewNavigationTests: XCTestCase {
+    /// An external URL is cancelled and never handed to the default browser.
     func testExternalNavigationIsCancelledWithoutOpeningDefaultBrowser() throws {
         let sourceURL = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()

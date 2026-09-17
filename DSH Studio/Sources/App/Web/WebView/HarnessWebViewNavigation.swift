@@ -8,7 +8,17 @@ import DeepSeekLogging
 import Foundation
 import WebKit
 
+/// Enforces the native navigation boundary around the embedded Harness UI.
 extension HarnessWebView.Coordinator: WKNavigationDelegate, WKUIDelegate {
+        /// Decides whether an in-flight navigation may proceed.
+        ///
+        /// Session export is the one Harness download handled natively, and every other
+        /// external navigation is cancelled rather than escaping to the system browser.
+        ///
+        /// - Parameters:
+        ///   - webView: WebView asking for a decision.
+        ///   - navigationAction: Action describing the requested navigation.
+        ///   - decisionHandler: Called exactly once with the decision.
         func webView(
             _ webView: WKWebView,
             decidePolicyFor navigationAction: WKNavigationAction,
@@ -37,6 +47,12 @@ extension HarnessWebView.Coordinator: WKNavigationDelegate, WKUIDelegate {
             decisionHandler(.cancel)
         }
 
+        /// Applies the same boundary to responses that were not caught in flight.
+        ///
+        /// - Parameters:
+        ///   - webView: WebView asking for a decision.
+        ///   - navigationResponse: Response about to be committed.
+        ///   - decisionHandler: Called exactly once with the decision.
         func webView(
             _ webView: WKWebView,
             decidePolicyFor navigationResponse: WKNavigationResponse,
@@ -60,6 +76,14 @@ extension HarnessWebView.Coordinator: WKNavigationDelegate, WKUIDelegate {
             }
         }
 
+        /// Refuses to create new windows: Harness runs inside the single app WebView.
+        ///
+        /// - Parameters:
+        ///   - webView: WebView requesting the new window.
+        ///   - configuration: Configuration the new WebView would use.
+        ///   - navigationAction: Action that requested the window.
+        ///   - windowFeatures: Requested window features.
+        /// - Returns: Always `nil`, which cancels the request.
         func webView(
             _ webView: WKWebView,
             createWebViewWith configuration: WKWebViewConfiguration,
@@ -69,6 +93,9 @@ extension HarnessWebView.Coordinator: WKNavigationDelegate, WKUIDelegate {
             return nil
         }
 
+        /// Reloads once after a content-process crash, then reports the failure.
+        ///
+        /// - Parameter webView: WebView whose content process was terminated.
         func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
             runtime.logs.log(component: "WebView", level: "warn", message: "WebView content process terminated")
             reloadAttempts += 1
@@ -79,6 +106,11 @@ extension HarnessWebView.Coordinator: WKNavigationDelegate, WKUIDelegate {
             }
         }
 
+        /// Resets the reload budget and publishes the current settings to the page.
+        ///
+        /// - Parameters:
+        ///   - webView: WebView that finished loading.
+        ///   - navigation: The completed navigation.
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             reloadAttempts = 0
             self.webView = webView

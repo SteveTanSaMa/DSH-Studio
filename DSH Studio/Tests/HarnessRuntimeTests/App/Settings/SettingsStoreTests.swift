@@ -11,6 +11,7 @@ import XCTest
 
 /// Verifies app-owned settings persistence and CSS width normalization.
 final class SettingsStoreTests: XCTestCase {
+    /// A restored workspace is kept, while the data home stays app-owned.
     @MainActor
     func testWorkspaceCanBeRestoredWhileDataHomeRemainsAppOwned() {
         let suiteName = "DeepSeekStudio.SettingsStoreTests.\(UUID().uuidString)"
@@ -29,6 +30,7 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertNil(defaults.object(forKey: "automaticRestart"))
     }
 
+    /// The chat width falls back to its default and clamps out-of-range values.
     @MainActor
     func testChatContentMaxWidthDefaultsAndNormalizesBounds() {
         let suiteName = "DeepSeekStudio.SettingsStoreTests.\(UUID().uuidString)"
@@ -53,6 +55,7 @@ final class SettingsStoreTests: XCTestCase {
         )
     }
 
+    /// A stored width that is not a number falls back to the default.
     @MainActor
     func testInvalidPersistedChatContentMaxWidthFallsBackToDefault() {
         let suiteName = "DeepSeekStudio.SettingsStoreTests.\(UUID().uuidString)"
@@ -65,6 +68,7 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(store.chatContentMaxWidth, SettingsStore.chatContentMaxWidthDefault)
     }
 
+    /// Notification preferences start at their defaults and persist changes.
     @MainActor
     func testNotificationSettingsUseDefaultsAndPersist() {
         let suiteName = "DeepSeekStudio.SettingsStoreTests.notifications.\(UUID().uuidString)"
@@ -89,6 +93,7 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertFalse(reloaded.questionNotificationsEnabled)
     }
 
+    /// An unrecognized stored preference falls back to the default.
     @MainActor
     func testInvalidPersistedTurnCompletionNotificationFallsBackToDefault() {
         let suiteName = "DeepSeekStudio.SettingsStoreTests.invalidNotifications.\(UUID().uuidString)"

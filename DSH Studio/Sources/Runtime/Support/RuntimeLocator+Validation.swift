@@ -5,6 +5,11 @@
 
 import Foundation
 
+/// Validation helpers for Runtime installations.
+///
+/// Every check treats the installation manifest as the publication marker: a
+/// missing or mismatched manifest makes the directory unusable, no matter what
+/// executables it contains.
 extension RuntimeLocator {
     /// The single retained previous installation used by the rollback path.
     public static func rollbackRoot(root: URL) -> URL {
@@ -12,8 +17,10 @@ extension RuntimeLocator {
             .appendingPathComponent("\(root.lastPathComponent).backup", isDirectory: true)
     }
 
-    /// Candidate installations are kept outside the active Runtime directory
-    /// until the user explicitly activates them.
+    /// Directory for a candidate installation awaiting explicit activation.
+    ///
+    /// Candidates stay outside the active Runtime directory until the user
+    /// activates them.
     public static func candidateRoot(root: URL, runtimeVersion: String) -> URL {
         if root.deletingLastPathComponent().lastPathComponent == "Runtimes",
            isSafeRuntimeVersion(runtimeVersion) {
@@ -29,6 +36,11 @@ extension RuntimeLocator {
             .appendingPathComponent(".Runtime-candidate-\(String(safeVersion))", isDirectory: true)
     }
 
+    /// Whether a version string may be used as a directory name.
+    ///
+    /// - Parameter value: Candidate version, for example `0.1.1-rc.2-ver1`.
+    /// - Returns: `true` for a non-empty name of ASCII letters, digits, `.`, `-`, and
+    ///   `_` that is not `.` or `..`.
     public static func isSafeRuntimeVersion(_ value: String) -> Bool {
         value != "." && value != ".."
             && !value.isEmpty && value.allSatisfy {
@@ -36,6 +48,10 @@ extension RuntimeLocator {
             }
     }
 
+    /// Reads the installation manifest for a Runtime root.
+    ///
+    /// - Parameter root: Runtime root directory.
+    /// - Returns: The decoded manifest, or `nil` when it is missing or malformed.
     public static func installationManifest(root: URL) -> RuntimeInstallationManifest? {
         guard let data = try? Data(contentsOf: runtimeManifestURL(root: root)) else {
             return nil
@@ -43,6 +59,22 @@ extension RuntimeLocator {
         return try? JSONDecoder().decode(RuntimeInstallationManifest.self, from: data)
     }
 
+    /// Whether a Runtime root holds the complete installation this app expects.
+    ///
+    /// The manifest, the executables, and the dependency versions must all match.
+    /// When `expectedRelease` is supplied every pinned field is compared with it,
+    /// otherwise the app's compiled-in release is used.
+    ///
+    /// - Parameters:
+    ///   - root: Runtime root to validate.
+    ///   - architecture: Architecture the installation must target.
+    ///   - fileManager: File system seam used by tests.
+    ///   - expectedNodeVersion: Node.js version the installation must report.
+    ///   - expectedHarnessVersion: Harness version the installation must contain.
+    ///   - expectedPnpmVersion: pnpm version the installation must contain.
+    ///   - expectedNodeSHA256: Node archive checksum to require, overriding the release.
+    ///   - expectedRelease: Release every pinned field is compared against.
+    /// - Returns: `true` when the root is a complete, matching installation.
     public static func isComplete(
         root: URL,
         architecture: String = architectureDirectory(),
@@ -88,8 +120,10 @@ extension RuntimeLocator {
             && manifest.pnpmPackageIntegrity == RuntimeRelease.pnpmPackageIntegrity
     }
 
-    /// Validates a complete installation without requiring it to be the current
-    /// app release. This is what makes an older backup eligible for rollback.
+    /// Validates a complete installation of any release.
+    ///
+    /// The current app release is not required, which is what makes an older
+    /// backup eligible for rollback.
     public static func isCompleteInstallation(
         root: URL,
         architecture: String = architectureDirectory(),

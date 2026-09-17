@@ -10,10 +10,15 @@ import SwiftUI
 
 /// Renders the native loading/error states around the Harness WebView.
 struct ContentView: View {
+    /// Model whose Runtime state selects the visible native surface.
     @ObservedObject var model: AppModel
     @State private var webContentCrashed = false
     @State private var recoveryNotice: String?
 
+    /// Shows loading and failure states, and mounts the WebView once ready.
+    ///
+    /// The WebView is only mounted after the Runtime reports readiness, so navigation
+    /// cannot race the local server's startup.
     var body: some View {
         // The WebView is mounted only after RuntimeManager reports readiness;
         // this prevents navigation from racing the local server startup.

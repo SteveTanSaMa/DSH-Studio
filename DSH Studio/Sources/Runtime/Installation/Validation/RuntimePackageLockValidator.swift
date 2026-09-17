@@ -7,6 +7,22 @@ import Foundation
 
 /// Validates the npm lockfile before npm is allowed to install dependencies.
 public enum RuntimePackageLockValidator {
+    /// Verifies the lockfile pins exactly the expected dependency graph.
+    ///
+    /// Every locked package must carry an integrity value and resolve to the official
+    /// npm registry over HTTPS without credentials, so installation cannot quietly
+    /// pull a tarball from somewhere else.
+    ///
+    /// - Parameters:
+    ///   - data: Lockfile bytes to validate.
+    ///   - expectedHarnessVersion: Harness version the lockfile must pin.
+    ///   - expectedHarnessIntegrity: Integrity string required for Harness.
+    ///   - expectedPnpmVersion: pnpm version the lockfile must pin.
+    ///   - expectedPnpmIntegrity: Integrity string required for pnpm.
+    ///   - expectedRegistryHost: Only registry host accepted for resolved URLs.
+    /// - Throws: ``RuntimeProvisioningError/invalidPackageLock(_:)`` when the
+    ///   lockfile version, a pinned dependency, an integrity value, or a resolved URL
+    ///   does not match.
     public static func validate(
         data: Data,
         expectedHarnessVersion: String = RuntimeRelease.harnessVersion,

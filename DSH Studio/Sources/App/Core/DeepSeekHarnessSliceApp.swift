@@ -13,6 +13,7 @@ import SwiftUI
 struct DeepSeekHarnessSliceApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
+    /// Declares the single window that hosts the Harness Web UI.
     var body: some Scene {
         WindowGroup {
             ContentView(model: AppDelegate.sharedModel)

@@ -8,9 +8,26 @@ import Foundation
 
 /// Deterministic discovery of the installed Node and Harness runtime.
 public enum RuntimeLocator {
+    /// npm package name of the Harness distribution.
     public static let dshPackageName = "@deepseek-ai/dsh"
+    /// Harness version this app is built against.
     public static let harnessVersion = "0.1.1-rc.2"
 
+    /// Resolves the Runtime root the app should use.
+    ///
+    /// Resolution order: an explicit `DSH_RUNTIME_ROOT` override, the versioned root
+    /// named by the durable activation record (falling back to a matching legacy
+    /// root), the legacy `Runtime` directory, and finally a versioned root for
+    /// `runtimeVersion` when one is passed.
+    ///
+    /// - Parameters:
+    ///   - bundle: Bundle used to detect a bundled Runtime.
+    ///   - environment: Environment providing the development override.
+    ///   - fileManager: File system seam used by tests.
+    ///   - runtimeVersion: Version to prefer when no activation record exists.
+    ///   - supportDirectory: App support directory; resolved from the file manager
+    ///     when omitted.
+    /// - Returns: The Runtime root the caller should validate and launch.
     public static func runtimeRoot(
         bundle: Bundle = .main,
         environment: [String: String] = ProcessInfo.processInfo.environment,
@@ -79,9 +96,11 @@ public enum RuntimeLocator {
         return URL(fileURLWithPath: "Runtime", isDirectory: true)
     }
 
-    /// Restores the last health-checked Runtime if the process was terminated
-    /// after a directory swap but before `active-state.json` could be updated.
-    /// The operation is deliberately limited to the app-owned Runtime and its
+    /// Restores the last health-checked Runtime after an interrupted activation.
+    ///
+    /// Recovery applies when the process was terminated after a directory swap but
+    /// before `active-state.json` could be updated; it is deliberately limited to
+    /// the app-owned Runtime and its
     /// single rollback copy.
     @discardableResult
     public static func recoverIncompleteActivation(
@@ -142,6 +161,10 @@ public enum RuntimeLocator {
         }
     }
 
+    /// Whether a development Runtime override is active.
+    ///
+    /// - Parameter environment: Environment to inspect.
+    /// - Returns: `true` when `DSH_RUNTIME_ROOT` is set to a non-empty value.
     public static func usesDevelopmentOverride(
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) -> Bool {
@@ -149,6 +172,12 @@ public enum RuntimeLocator {
         return !root.isEmpty
     }
 
+    /// Whether a root is the Runtime shipped inside the app bundle.
+    ///
+    /// - Parameters:
+    ///   - root: Root directory to test.
+    ///   - bundle: Bundle whose resources are compared against.
+    /// - Returns: `true` when the root is the bundled `Runtime` directory.
     public static func isBundledRuntimeRoot(
         _ root: URL,
         bundle: Bundle = .main
@@ -159,14 +188,28 @@ public enum RuntimeLocator {
             .standardizedFileURL
     }
 
+    /// Path of the installation manifest for a Runtime root.
+    ///
+    /// - Parameter root: Runtime root directory.
+    /// - Returns: The expected `manifest.json` URL.
     public static func runtimeManifestURL(root: URL) -> URL {
         root.appendingPathComponent("manifest.json", isDirectory: false)
     }
 
+    /// Directory that holds every versioned Runtime installation.
+    ///
+    /// - Parameter supportDirectory: App support directory.
+    /// - Returns: The `Runtimes` directory URL.
     public static func runtimesDirectory(supportDirectory: URL) -> URL {
         supportDirectory.standardizedFileURL.appendingPathComponent("Runtimes", isDirectory: true)
     }
 
+    /// Root directory of one versioned Runtime installation.
+    ///
+    /// - Parameters:
+    ///   - supportDirectory: App support directory.
+    ///   - runtimeVersion: Runtime version naming the directory.
+    /// - Returns: The versioned root, or `nil` when the version string is unsafe.
     public static func versionedRuntimeRoot(
         supportDirectory: URL,
         runtimeVersion: String
@@ -176,6 +219,12 @@ public enum RuntimeLocator {
             .appendingPathComponent(runtimeVersion, isDirectory: true)
     }
 
+    /// Whether a root sits directly under the versioned Runtimes directory.
+    ///
+    /// - Parameters:
+    ///   - root: Root directory to test.
+    ///   - supportDirectory: App support directory.
+    /// - Returns: `true` when the root is a direct child of `Runtimes`.
     public static func isVersionedRuntimeRoot(
         _ root: URL,
         supportDirectory: URL
@@ -184,8 +233,9 @@ public enum RuntimeLocator {
             == runtimesDirectory(supportDirectory: supportDirectory).standardizedFileURL
     }
 
-    /// Moves one complete legacy Runtime into its immutable versioned
-    /// directory. User data is intentionally outside this operation.
+    /// Moves one complete legacy Runtime into its immutable versioned directory.
+    ///
+    /// User data is intentionally outside this operation.
     ///
     /// A legacy installation is left untouched when it is incomplete, its
     /// manifest is unsafe, or the destination already exists. This keeps a

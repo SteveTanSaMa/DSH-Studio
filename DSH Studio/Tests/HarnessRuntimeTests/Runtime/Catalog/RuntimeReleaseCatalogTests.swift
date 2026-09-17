@@ -9,12 +9,15 @@ import Foundation
 import XCTest
 @testable import DeepSeekRuntime
 
-/// Verifies that only the app's own immutable Runtime release assets can be
-/// selected from a catalog.
+/// Guards catalog selection.
+///
+/// Only the app's own immutable Runtime release assets may be selected, and a
+/// version that could escape its directory is refused.
 final class RuntimeReleaseCatalogTests: XCTestCase {
     private let architecture = "darwin-arm64"
     private let runtimeVersion = "2026.08.20.test"
 
+    /// A matching trusted artifact is selected from the catalog.
     func testCatalogSelectsMatchingTrustedArtifact() throws {
         let catalog = try makeCatalog()
 
@@ -24,6 +27,7 @@ final class RuntimeReleaseCatalogTests: XCTestCase {
         XCTAssertEqual(release?.artifact?.architecture, architecture)
     }
 
+    /// An artifact URL outside GitHub is rejected.
     func testCatalogRejectsNonGitHubArtifactURL() throws {
         var release = try makeRelease()
         release = RuntimeReleaseDescriptor(
@@ -47,6 +51,7 @@ final class RuntimeReleaseCatalogTests: XCTestCase {
         XCTAssertNil(catalog.release(for: architecture))
     }
 
+    /// An artifact for a different Runtime version is rejected.
     func testCatalogRejectsMismatchedArtifactVersion() throws {
         let release = try makeRelease()
         let mismatchedArtifact = RuntimeArtifactDescriptor(
@@ -71,6 +76,7 @@ final class RuntimeReleaseCatalogTests: XCTestCase {
         XCTAssertNil(catalog.release(for: architecture))
     }
 
+    /// A Runtime version that could escape a directory is rejected.
     func testCatalogRejectsUnsafeRuntimeVersion() throws {
         let release = RuntimeReleaseDescriptor(
             architecture: architecture,

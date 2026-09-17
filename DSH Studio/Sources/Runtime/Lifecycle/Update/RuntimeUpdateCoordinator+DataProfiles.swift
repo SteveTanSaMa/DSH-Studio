@@ -5,7 +5,15 @@
 
 import Foundation
 
+/// Data-profile handling for an update: compatibility, switching, and restore.
 extension RuntimeUpdateCoordinator {
+    /// Whether a Runtime left in this state should be running again afterwards.
+    ///
+    /// A Runtime that was mid-transition is not restarted, because the interrupted
+    /// operation owns that decision.
+    ///
+    /// - Parameter state: State observed before the update started.
+    /// - Returns: `true` when the caller should bring the Runtime back up.
     func shouldResume(after state: RuntimeState) -> Bool {
         switch state {
         case .idle, .terminated:
@@ -17,6 +25,12 @@ extension RuntimeUpdateCoordinator {
         }
     }
 
+    /// Starts the activated Runtime and confirms it becomes ready.
+    ///
+    /// - Parameters:
+    ///   - runtime: Manager to start and verify.
+    ///   - keepRunning: Whether to leave the Runtime running once it is ready.
+    /// - Returns: `true` when the Runtime reached the ready state.
     func verifyActivatedRuntime(
         _ runtime: RuntimeManager,
         keepRunning: Bool
@@ -30,6 +44,13 @@ extension RuntimeUpdateCoordinator {
         return true
     }
 
+    /// Turns a compatibility verdict into a decision, failing closed.
+    ///
+    /// Every verdict other than ``RuntimeDataCompatibility/compatible`` blocks the
+    /// update, so an unknown or migrated format never silently inherits existing data.
+    ///
+    /// - Parameter compatibility: Verdict produced from the release's data contract.
+    /// - Throws: ``RuntimeUpdateError`` matching the verdict.
     func validateCompatibility(_ compatibility: RuntimeDataCompatibility) throws {
         switch compatibility {
         case .compatible:
@@ -44,8 +65,9 @@ extension RuntimeUpdateCoordinator {
     }
 
     /// Data format changes are an implementation detail of Runtime updates.
-    /// When the current profile cannot be reused, create an isolated profile
-    /// automatically and leave the old data directory untouched.
+    ///
+    /// When the current profile cannot be reused, an isolated profile is created
+    /// automatically and the old data directory is left untouched.
     func automaticDataProfileIfNeeded(
         runtime: RuntimeManager,
         status: RuntimeVersionStatus
@@ -77,6 +99,16 @@ extension RuntimeUpdateCoordinator {
         }
     }
 
+    /// Checks that an update may reuse the selected data profile.
+    ///
+    /// A profile without a recorded format may only adopt one when its data home is
+    /// empty; anything else is treated as unknown compatibility.
+    ///
+    /// - Parameters:
+    ///   - profile: Profile the update would activate.
+    ///   - runtimeFormat: Data contract declared by the candidate release.
+    ///   - store: Store used to inspect the profile's data home.
+    /// - Throws: ``RuntimeUpdateError`` when the profile or the compatibility is invalid.
     func validateDataProfile(
         _ profile: RuntimeDataProfile,
         against runtimeFormat: RuntimeDataFormatDescriptor?,
@@ -101,6 +133,15 @@ extension RuntimeUpdateCoordinator {
         }
     }
 
+    /// Puts the selected profile and data home back after a failed activation.
+    ///
+    /// The state is first made explicitly stopped, because the child process is already
+    /// gone while the coordinator still marks the manager as updating.
+    ///
+    /// - Parameters:
+    ///   - runtime: Manager whose configuration is restored.
+    ///   - profile: Profile to restore, or `nil` to fall back to the plain data home.
+    ///   - homeURL: Data home recorded before the update.
     func restoreDataProfile(
         runtime: RuntimeManager,
         profile: RuntimeDataProfile?,
@@ -122,6 +163,11 @@ extension RuntimeUpdateCoordinator {
         try? runtime.selectDataProfile(profile)
     }
 
+    /// Brings the previous Runtime back after a failed activation.
+    ///
+    /// - Parameters:
+    ///   - runtime: Manager to restart.
+    ///   - shouldResume: Whether the Runtime was running before the update.
     func relaunchOldRuntime(_ runtime: RuntimeManager, shouldResume: Bool) async {
         guard shouldResume else {
             runtime.setRuntimeOperationState(.terminated)
@@ -132,6 +178,10 @@ extension RuntimeUpdateCoordinator {
         _ = await waitUntilReady(runtime)
     }
 
+    /// Waits for the Runtime to report ready, bounded by its startup timeout.
+    ///
+    /// - Parameter runtime: Manager to observe.
+    /// - Returns: `true` when the Runtime became ready before the deadline.
     func waitUntilReady(_ runtime: RuntimeManager) async -> Bool {
         let timeout = max(runtime.configuration.startupTimeout + 1, 2)
         let deadline = Date().addingTimeInterval(timeout)

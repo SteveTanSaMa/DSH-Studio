@@ -5,12 +5,18 @@
 
 import Foundation
 
+/// Reasons a selected workspace is rejected.
 enum WorkspaceAdmissionError: Error, Equatable, LocalizedError {
+    /// The path is empty after normalization.
     case emptyPath
+    /// The path does not exist or is not a directory.
     case notDirectory
+    /// The directory cannot be read.
     case notReadable
+    /// The directory cannot be written to.
     case notWritable
 
+    /// A localized, user-facing description of the rejection.
     var errorDescription: String? {
         switch self {
         case .emptyPath:
@@ -25,7 +31,22 @@ enum WorkspaceAdmissionError: Error, Equatable, LocalizedError {
     }
 }
 
+/// Validates workspace directories before the app commits to using one.
+///
+/// Validation happens on the resolved path, while the URL that is returned and
+/// persisted keeps the user's spelling so the displayed path stays recognizable.
 enum WorkspaceAdmission {
+    /// Validates a directory chosen in the open panel.
+    ///
+    /// Symlinks are resolved for the checks only: the returned URL is the standardized
+    /// original, so the persisted value matches what the user selected.
+    ///
+    /// - Parameters:
+    ///   - url: Directory the user selected.
+    ///   - fileManager: File system seam used by tests.
+    /// - Returns: The standardized URL to persist.
+    /// - Throws: ``WorkspaceAdmissionError`` when the directory is missing, not a
+    ///   directory, unreadable, or unwritable.
     static func validateSelectedDirectory(
         _ url: URL,
         fileManager: FileManager = .default
@@ -52,6 +73,16 @@ enum WorkspaceAdmission {
         return candidate
     }
 
+    /// Re-validates a workspace path read from settings.
+    ///
+    /// A path that no longer exists is kept when its parent is a writable directory,
+    /// because Runtime creates the default workspace on first launch; anything else
+    /// is discarded rather than handed to the Runtime.
+    ///
+    /// - Parameters:
+    ///   - path: Stored path, or `nil` when nothing was saved.
+    ///   - fileManager: File system seam used by tests.
+    /// - Returns: The URL to use, or `nil` when the stored value is unusable.
     static func persistedURL(
         from path: String?,
         fileManager: FileManager = .default

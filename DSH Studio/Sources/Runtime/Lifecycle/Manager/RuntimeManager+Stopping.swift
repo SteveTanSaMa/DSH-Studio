@@ -5,9 +5,12 @@
 
 import Foundation
 
+/// Intentional shutdown and process control for the Harness child.
 extension RuntimeManager {
     /// Restarts the app-owned Harness process without entering the crash path.
-    /// Callers must initiate this only for an intentional Runtime restart.
+    ///
+    /// Only call this for an intentional restart; an unexpected exit is handled by
+    /// the restart policy instead.
     @discardableResult
     public func restart() async -> Bool {
         guard state == .ready else { return false }
@@ -17,6 +20,12 @@ extension RuntimeManager {
         return true
     }
 
+    /// Stops the Harness child, escalating when it does not exit in time.
+    ///
+    /// The call is a no-op once the Runtime is already stopped, and concurrent
+    /// callers await the same shutdown task instead of starting a second one.
+    /// Stopping during provisioning cancels that work and marks the Runtime
+    /// terminated without launching a process.
     public func stop() async {
         if state == .terminated || state == .idle {
             return
@@ -42,6 +51,10 @@ extension RuntimeManager {
         await task.value
     }
 
+    /// Stops immediately, without waiting for a graceful exit.
+    ///
+    /// Pending startup, provisioning, and restart work is cancelled and the child is
+    /// killed, which is the path used when the app must not block on shutdown.
     public func forceStop() {
         guard state != .terminated else { return }
         stopRequested = true

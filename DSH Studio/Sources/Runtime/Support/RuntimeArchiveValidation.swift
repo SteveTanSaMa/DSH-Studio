@@ -15,6 +15,15 @@ import Foundation
 public enum RuntimeArchiveListingValidator {
     private static let allowedRootDirectories = ["node", "harness"]
 
+    /// Validates the member list of an archive before extraction.
+    ///
+    /// Every entry must be relative, free of backslashes and traversal segments, and
+    /// inside one of the allowed root directories, and the listing must contain the
+    /// manifest plus the `node` and `harness` roots.
+    ///
+    /// - Parameter listing: Newline-separated `tar -t` output.
+    /// - Throws: ``RuntimeProvisioningError/installationFailed(_:)`` when an entry is
+    ///   unsafe or a required root is missing.
     public static func validate(_ listing: String) throws {
         var foundManifest = false
         var foundNodeDirectory = false

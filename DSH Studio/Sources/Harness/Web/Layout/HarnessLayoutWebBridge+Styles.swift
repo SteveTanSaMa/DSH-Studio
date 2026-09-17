@@ -5,7 +5,9 @@
 
 import Foundation
 
+/// The stylesheet half of the presentation-only layout adjustments.
 extension HarnessLayoutWebBridge {
+    /// The stylesheet applied to the Harness page.
     static let sourcePartOne = #"""
     (() => {
       if (window.__deepseekStudioLayoutInstalled) return;

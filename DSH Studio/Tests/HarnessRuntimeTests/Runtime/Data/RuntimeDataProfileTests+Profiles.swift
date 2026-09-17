@@ -3,7 +3,9 @@ import XCTest
 
 @testable import DeepSeekRuntime
 
+/// Profile cases: identity, isolation, and what an unreadable state means.
 extension RuntimeDataProfileTests {
+    /// A legacy profile keeps a stable identity and never moves existing data.
     func testLegacyProfileIsStableAndDoesNotMoveExistingData() throws {
         let support = temporaryRoot.appendingPathComponent("support", isDirectory: true)
         let legacyHome = temporaryRoot.appendingPathComponent("existing-dsh-home", isDirectory: true)
@@ -21,6 +23,7 @@ extension RuntimeDataProfileTests {
         XCTAssertTrue(FileManager.default.fileExists(atPath: first.homeURL.path))
     }
 
+    /// A new profile gets its own isolated data home.
     func testNewProfileUsesAnIsolatedDataHome() throws {
         let store = RuntimeDataProfileStore(supportDirectory: temporaryRoot)
         let legacyHome = temporaryRoot.appendingPathComponent("legacy", isDirectory: true)
@@ -35,6 +38,7 @@ extension RuntimeDataProfileTests {
         XCTAssertEqual(store.profiles().count, 2)
     }
 
+    /// A malformed active-state file is ignored rather than partially trusted.
     func testMalformedActiveStateIsIgnored() throws {
         let store = RuntimeDataProfileStore(supportDirectory: temporaryRoot)
         try FileManager.default.createDirectory(at: temporaryRoot, withIntermediateDirectories: true)
@@ -45,11 +49,13 @@ extension RuntimeDataProfileTests {
         XCTAssertNil(store.activeProfile())
     }
 
+    /// Profile identifiers containing path components are rejected.
     func testProfileIdentifiersRejectPathComponents() {
         XCTAssertFalse(RuntimeDataProfileStore.isSafeIdentifier("."))
         XCTAssertFalse(RuntimeDataProfileStore.isSafeIdentifier(".."))
     }
 
+    /// An existing unknown profile is not upgraded by what the Runtime declares.
     func testExistingUnknownProfileIsNotUpgradedByRuntimeDeclaration() throws {
         let store = RuntimeDataProfileStore(supportDirectory: temporaryRoot)
         let home = temporaryRoot.appendingPathComponent("legacy-data", isDirectory: true)

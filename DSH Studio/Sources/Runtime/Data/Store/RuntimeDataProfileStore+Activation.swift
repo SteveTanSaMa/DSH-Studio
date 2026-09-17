@@ -5,9 +5,15 @@
 
 import Foundation
 
+/// Activation and compatibility checks for data profiles.
+///
+/// Activation is recorded only after the Runtime passed its health check, so a
+/// Runtime that fails to start can never become the authoritative data owner.
 extension RuntimeDataProfileStore {
-    /// Registers the existing user-selected DSH_HOME without copying it. The
-    /// stable id lets later launches find the same legacy profile.
+    /// Registers the existing user-selected `DSH_HOME` without copying it.
+    ///
+    /// The identifier is derived from the path, so later launches find the same
+    /// legacy profile.
     @discardableResult
     public func ensureLegacyProfile(
         homeURL: URL,
@@ -28,8 +34,9 @@ extension RuntimeDataProfileStore {
         return profile
     }
 
-    /// Creates a new isolated data environment. No existing data is reused or
-    /// migrated by this operation.
+    /// Creates a new isolated data environment.
+    ///
+    /// No existing data is reused or migrated by this operation.
     @discardableResult
     public func createProfile(
         name: String,
@@ -58,8 +65,9 @@ extension RuntimeDataProfileStore {
         return profile
     }
 
-    /// Records a successful Runtime/profile activation. It never changes the
-    /// contents of the profile's data directory.
+    /// Records a successful Runtime and profile activation.
+    ///
+    /// The contents of the profile's data directory are never changed.
     @discardableResult
     public func activate(
         profile: RuntimeDataProfile,

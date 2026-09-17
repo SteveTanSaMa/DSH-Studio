@@ -2,10 +2,12 @@ import Foundation
 import XCTest
 @testable import DeepSeekRuntime
 
+/// Guards preset export, preview, and install safety.
 final class AgentPresetTransferTests: XCTestCase {
     private var root: URL!
     private var dshHome: URL!
 
+    /// Creates the isolated data home and temporary directory used by the tests.
     override func setUpWithError() throws {
         root = FileManager.default.temporaryDirectory
             .appendingPathComponent("DSHStudio-AgentPresetTransfer-\(UUID().uuidString)", isDirectory: true)
@@ -13,10 +15,12 @@ final class AgentPresetTransferTests: XCTestCase {
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
     }
 
+    /// Removes the isolated directories.
     override func tearDownWithError() throws {
         try? FileManager.default.removeItem(at: root)
     }
 
+    /// Export, preview, and install round-trip through an atomic install.
     func testExportPreviewAndAtomicInstallRoundTrip() throws {
         let source = dshHome
             .appendingPathComponent(".agent-presets/custom", isDirectory: true)
@@ -49,6 +53,7 @@ final class AgentPresetTransferTests: XCTestCase {
         )
     }
 
+    /// A symlink inside the preset content is refused instead of being exported.
     func testExportRejectsSymlinkedPresetContent() throws {
         let source = dshHome
             .appendingPathComponent(".agent-presets/custom", isDirectory: true)
@@ -71,6 +76,7 @@ final class AgentPresetTransferTests: XCTestCase {
         }
     }
 
+    /// An import without a composition is refused and leaves existing presets intact.
     func testImportRejectsMissingCompositionAndPreservesExistingPreset() throws {
         let archive = try makeArchive(
             manifest: """

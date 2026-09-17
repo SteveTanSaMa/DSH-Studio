@@ -5,7 +5,20 @@
 
 import Foundation
 
+/// Installs a Runtime from the verified artifact the app ships with.
 extension RuntimeProvisioner {
+    /// Verifies the pinned artifact and installs it into the given root.
+    ///
+    /// The artifact description must be complete for this architecture and version,
+    /// and a trusted URL plus a 64-character hex digest are required before anything
+    /// is downloaded. An already-complete installation is reused unless `force` is set.
+    ///
+    /// - Parameters:
+    ///   - force: Reinstalls even when the destination already validates.
+    ///   - destinationRoot: Root to install into; defaults to ``RuntimeProvisioner/root``.
+    /// - Returns: The installed root, architecture, and manifest.
+    /// - Throws: ``RuntimeProvisioningError`` when the description is incomplete, the
+    ///   download or extraction fails, or the result does not validate.
     func installArtifact(
         force: Bool,
         destinationRoot: URL? = nil

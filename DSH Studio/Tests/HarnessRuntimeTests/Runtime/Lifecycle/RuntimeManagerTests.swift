@@ -13,12 +13,14 @@ import XCTest
 /// Exercises RuntimeManager lifecycle, restart, provisioning, and cancellation.
 final class RuntimeManagerTests: XCTestCase {
 
+    /// A freshly created manager has not started anything.
     @MainActor
     func testInitialStateIsIdle() {
         let manager = makeManager()
         XCTAssertEqual(manager.state, .idle)
     }
 
+    /// The ready line from the child moves the manager to ready and exposes its URL.
     @MainActor
     func testSuccessfulLaunchReachesReady() async {
         let fake = FakeHarnessProcess()
@@ -30,6 +32,9 @@ final class RuntimeManagerTests: XCTestCase {
         XCTAssertEqual(manager.readyURL?.absoluteString, "http://127.0.0.1:43210")
     }
 
+    /// The printed process token survives into ``RuntimeManager/readyURL``.
+    ///
+    /// The WebView needs the token to authenticate its first request.
     @MainActor
     func testSuccessfulLaunchPreservesHarnessProcessTokenForWebView() async {
         let fake = FakeHarnessProcess()
@@ -46,6 +51,7 @@ final class RuntimeManagerTests: XCTestCase {
         XCTAssertFalse(manager.logs.entries.contains { $0.message.contains("process-secret") })
     }
 
+    /// A child that becomes ready but fails its health check ends in the failed state.
     @MainActor
     func testFailedHealthCheckFails() async {
         let fake = FakeHarnessProcess()
@@ -56,6 +62,7 @@ final class RuntimeManagerTests: XCTestCase {
         XCTAssertTrue(failed)
     }
 
+    /// A child that never prints the ready line fails once the startup timeout elapses.
     @MainActor
     func testStartupTimeoutFails() async {
         let fake = FakeHarnessProcess()
@@ -69,6 +76,7 @@ final class RuntimeManagerTests: XCTestCase {
         }
     }
 
+    /// An unexpected exit after readiness is reported as a crash, not a stop.
     @MainActor
     func testProcessCrashAfterReady() async {
         let fake = FakeHarnessProcess()
@@ -83,6 +91,7 @@ final class RuntimeManagerTests: XCTestCase {
         XCTAssertEqual(manager.lastTerminationStatus, 1)
     }
 
+    /// Crash output is redacted before it reaches the log store.
     @MainActor
     func testCrashLogsRedactSecrets() async {
         let fake = FakeHarnessProcess()
@@ -103,6 +112,7 @@ final class RuntimeManagerTests: XCTestCase {
         XCTAssertTrue(redactedStderr.contains("<redacted>"))
     }
 
+    /// The restart policy brings Harness back after an unexpected exit.
     @MainActor
     func testAutomaticRestartAfterUnexpectedCrash() async {
         let fake = FakeHarnessProcess()
@@ -122,6 +132,7 @@ final class RuntimeManagerTests: XCTestCase {
         _ = await waitUntil(manager.state == .ready)
     }
 
+    /// An intentional restart stops and starts without entering the crash path.
     @MainActor
     func testIntentionalRestartUsesNormalLifecycle() async {
         let first = FakeHarnessProcess()
@@ -150,6 +161,7 @@ final class RuntimeManagerTests: XCTestCase {
         XCTAssertEqual(manager.lastError, nil)
     }
 
+    /// A termination callback from a superseded process cannot change the new state.
     @MainActor
     func testLateTerminationFromPreviousProcessIsIgnored() async {
         let first = FakeHarnessProcess()
@@ -178,6 +190,7 @@ final class RuntimeManagerTests: XCTestCase {
         XCTAssertTrue(ready)
     }
 
+    /// A health result belonging to a previous generation cannot mark the new one ready.
     @MainActor
     func testLateHealthCheckFromPreviousProcessCannotReadyNewProcess() async {
         let first = FakeHarnessProcess()
@@ -213,6 +226,16 @@ final class RuntimeManagerTests: XCTestCase {
         XCTAssertEqual(manager.readyURL?.port, 43222)
     }
 
+    /// Builds a manager wired to the fakes, with validation disabled.
+    ///
+    /// - Parameters:
+    ///   - process: Process double the manager launches.
+    ///   - healthResult: Answer returned by the health checker.
+    ///   - startupTimeout: Seconds allowed before a launch is failed.
+    ///   - gracefulTimeout: Seconds allowed for a graceful stop.
+    ///   - restartPolicy: Policy applied to unexpected exits.
+    ///   - provisioner: Installer used when the Runtime is missing.
+    /// - Returns: A manager configured for tests.
     @MainActor
     func makeManager(
         process: FakeHarnessProcess = FakeHarnessProcess(),
@@ -237,6 +260,12 @@ final class RuntimeManagerTests: XCTestCase {
         )
     }
 
+    /// Builds a launch configuration rooted in temporary-looking paths.
+    ///
+    /// - Parameters:
+    ///   - startupTimeout: Seconds allowed before a launch is failed.
+    ///   - gracefulTimeout: Seconds allowed for a graceful stop.
+    /// - Returns: A configuration that never touches the real Runtime.
     @MainActor
     func testConfiguration(
         startupTimeout: TimeInterval = 0.5,
@@ -252,6 +281,12 @@ final class RuntimeManagerTests: XCTestCase {
         )
     }
 
+    /// Polls a condition until it holds or the timeout expires.
+    ///
+    /// - Parameters:
+    ///   - condition: Condition to poll on the main actor.
+    ///   - timeout: Seconds to keep polling.
+    /// - Returns: The condition's value at the last check.
     @MainActor
     func waitUntil(
         _ condition: @autoclosure @escaping () -> Bool,

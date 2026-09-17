@@ -5,7 +5,12 @@
 
 import Foundation
 
+/// Stylesheet for the injected sections.
+///
+/// The rules reuse Harness's own design tokens, so the native sections do not
+/// look foreign inside its settings page.
 extension AppSettingsWebBridge {
+    /// The stylesheet applied to the injected settings sections.
     static let appSettingsCSS = #"""
         .dsh-studio-app-settings {
           color: var(--dsw-alias-label-primary);

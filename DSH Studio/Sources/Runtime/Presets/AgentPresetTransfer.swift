@@ -5,18 +5,39 @@
 
 import Foundation
 
+/// The `manifest.json` header that describes one exported preset archive.
+///
+/// The manifest covers the archive itself; the composition files under `preset/`
+/// stay owned by the Runtime.
 public struct AgentPresetPackageManifest: Codable, Equatable, Sendable {
+    /// The archive format identifier written into every export.
     public static let format = "dsh-preset"
+    /// The manifest schema version this app writes and accepts.
     public static let currentVersion = 1
 
+    /// The format identifier read from an imported manifest.
     public let format: String
+    /// The schema version read from an imported manifest.
     public let version: Int
+    /// The preset identifier, which also names the exported directory.
     public let id: String
+    /// The display name recorded at export time.
     public let name: String
+    /// An optional description carried by the archive; local exports leave it empty.
     public let description: String?
+    /// The Harness version that produced the archive, when the exporter knew it.
     public let sourceHarnessVersion: String?
+    /// The ISO-8601 timestamp of the export.
     public let exportedAt: String
 
+    /// Creates a manifest, stamping the current format and schema version.
+    ///
+    /// - Parameters:
+    ///   - id: Preset identifier; becomes the directory name inside the archive.
+    ///   - name: Display name shown to the user.
+    ///   - description: Optional note stored alongside the preset.
+    ///   - sourceHarnessVersion: Harness version that produced the preset.
+    ///   - exportedAt: ISO-8601 export time; defaults to now.
     public init(
         id: String,
         name: String,
@@ -34,14 +55,36 @@ public struct AgentPresetPackageManifest: Codable, Equatable, Sendable {
     }
 }
 
+/// What an import would do, computed before anything is written to disk.
+///
+/// A successful import returns the same preview, so callers can report the
+/// installed identifier and any non-fatal findings.
 public struct AgentPresetImportPreview: Equatable, Sendable {
+    /// The manifest read from the archive.
     public let manifest: AgentPresetPackageManifest
+    /// The identifier the preset would be installed under.
+    ///
+    /// A requested identifier is sanitised first; otherwise the archive's own
+    /// identifier is used.
     public let targetID: String
+    /// Whether a preset with ``targetID`` already exists.
     public let conflict: Bool
+    /// The number of regular files the archive would install.
     public let fileCount: Int
+    /// The summed size of those files after extraction.
     public let uncompressedBytes: Int64
+    /// Non-fatal findings collected while validating the archive.
     public let warnings: [String]
 
+    /// Creates a preview for one inspected archive.
+    ///
+    /// - Parameters:
+    ///   - manifest: Manifest read from the archive.
+    ///   - targetID: Identifier the preset would be installed under.
+    ///   - conflict: Whether that identifier is already taken.
+    ///   - fileCount: Number of files that would be installed.
+    ///   - uncompressedBytes: Total size of those files.
+    ///   - warnings: Non-fatal findings to surface to the user.
     public init(
         manifest: AgentPresetPackageManifest,
         targetID: String,
@@ -59,10 +102,14 @@ public struct AgentPresetImportPreview: Equatable, Sendable {
     }
 }
 
+/// Whether a discovered user preset can be composed by the Runtime.
 public enum AgentPresetStatus: String, Codable, Equatable, Sendable {
+    /// The preset has a readable composition file.
     case ready
+    /// The preset is present but unusable; see ``AgentPresetSummary/problem``.
     case invalid
 
+    /// A localized label for the status.
     public var displayName: String {
         switch self {
         case .ready:
@@ -73,15 +120,33 @@ public enum AgentPresetStatus: String, Codable, Equatable, Sendable {
     }
 }
 
+/// A read-only description of one user preset directory.
 public struct AgentPresetSummary: Codable, Equatable, Sendable {
+    /// The preset identifier, equal to its directory name.
     public let id: String
+    /// The display name from the preset metadata, falling back to the identifier.
     public let name: String
+    /// The preset directory under `DSH_HOME/.agent-presets`.
     public let directory: URL
+    /// The number of regular files found in the preset.
     public let fileCount: Int
+    /// The summed size of those files.
     public let totalBytes: Int64
+    /// Whether the Runtime can compose this preset.
     public let status: AgentPresetStatus
+    /// Why the preset is unusable, when ``status`` is ``AgentPresetStatus/invalid``.
     public let problem: String?
 
+    /// Creates a summary for one inspected preset directory.
+    ///
+    /// - Parameters:
+    ///   - id: Preset identifier, equal to the directory name.
+    ///   - name: Display name read from the preset metadata, falling back to the id.
+    ///   - directory: Absolute preset directory.
+    ///   - fileCount: Number of regular files in the preset.
+    ///   - totalBytes: Total size of those files.
+    ///   - status: Whether the Runtime can compose the preset.
+    ///   - problem: Reason the preset is unusable, when it is.
     public init(
         id: String,
         name: String,
@@ -101,23 +166,43 @@ public struct AgentPresetSummary: Codable, Equatable, Sendable {
     }
 }
 
+/// Failures raised while exporting or importing a preset archive.
+///
+/// Associated values carry the offending path, identifier, or diagnostic detail;
+/// the user-facing sentence is produced by ``errorDescription``.
 public enum AgentPresetTransferError: Error, Equatable, LocalizedError, Sendable {
+    /// The user dismissed a file panel before choosing a location.
     case cancelled
+    /// The preset identifier is not a safe directory name.
     case invalidPresetID
+    /// No user preset directory exists for the requested identifier.
     case presetNotFound
+    /// The preset is shipped with the Runtime and cannot be exported.
     case builtInPreset
+    /// A file already exists at the chosen export destination.
     case destinationExists
+    /// The preset has no readable `agent.cordis.yml`.
     case missingComposition
+    /// The archive contains an absolute or escaping path.
     case unsafeArchiveEntry(String)
+    /// `manifest.json` is missing, undecodable, or of an unknown format or version.
     case invalidManifest(String)
+    /// The archive format could not be recognised.
     case unsupportedArchive
+    /// The archive or its extracted tree exceeds the configured size limits.
     case archiveTooLarge
+    /// The archive contains more files than ``AgentPresetTransferManager/maxFileCount``.
     case tooManyFiles
+    /// The archive contains a symbolic link.
     case symlinkNotAllowed(String)
+    /// The archive contains a file type the preset contract does not allow.
     case unsupportedFile(String)
+    /// A preset with the target identifier already exists.
     case conflict(String)
+    /// The zip tool failed while packing or unpacking the archive.
     case archiveFailed(String)
 
+    /// A localized, user-facing description of the failure.
     public var errorDescription: String? {
         switch self {
         case .cancelled:
@@ -160,20 +245,35 @@ public enum AgentPresetTransferError: Error, Equatable, LocalizedError, Sendable
 /// only a portable archive contract: it never includes credentials, Sessions,
 /// workspace files, or the app's other DSH_HOME data.
 public final class AgentPresetTransferManager: @unchecked Sendable {
+    /// The directory under `DSH_HOME` that holds user presets.
     public static let userPresetDirectoryName = ".agent-presets"
+    /// The composition file every exportable preset must contain.
     public static let compositionFileName = "agent.cordis.yml"
+    /// The Runtime-owned metadata file that travels with a preset.
     public static let metadataFileName = "preset.yml"
+    /// Upper bound for a produced archive; checked before the file is handed back.
     public static let maxCompressedBytes: Int64 = 16 * 1024 * 1024
+    /// Upper bound for an archive's extracted tree.
     public static let maxUncompressedBytes: Int64 = 32 * 1024 * 1024
+    /// Upper bound for a single file inside an archive.
     public static let maxFileBytes: Int64 = 12 * 1024 * 1024
+    /// Upper bound for the number of files inside an archive.
     public static let maxFileCount = 256
 
+    /// The standardized `DSH_HOME` this manager reads and writes.
     public let dshHome: URL
+    /// `DSH_HOME/.agent-presets`; the only directory imports are installed into.
     public let userPresetRoot: URL
+    /// Where the most-recently-used preset list is persisted.
     public let recentStateURL: URL
 
     private let fileManager: FileManager
 
+    /// Creates a manager rooted at `dshHome`.
+    ///
+    /// - Parameters:
+    ///   - dshHome: Harness data home; a non-standardized value is standardized here.
+    ///   - fileManager: File system seam used by tests.
     public init(dshHome: URL, fileManager: FileManager = .default) {
         self.dshHome = dshHome.standardizedFileURL
         self.userPresetRoot = self.dshHome
@@ -184,6 +284,14 @@ public final class AgentPresetTransferManager: @unchecked Sendable {
         self.fileManager = fileManager
     }
 
+    /// Whether `id` is usable as a preset directory name.
+    ///
+    /// Accepted form: 1–64 characters from `a-z`, `0-9`, and `-`, starting with a
+    /// letter or digit. The check keeps discovery and import inside one directory
+    /// level and rejects path separators or dot names.
+    ///
+    /// - Parameter id: Candidate identifier.
+    /// - Returns: `true` when the identifier may be used as a directory name.
     public static func isSafePresetID(_ id: String) -> Bool {
         guard !id.isEmpty, id.utf8.count <= 64,
               let first = id.utf8.first,
@@ -195,6 +303,13 @@ public final class AgentPresetTransferManager: @unchecked Sendable {
         }
     }
 
+    /// Lists installed presets, optionally filtered by a case-insensitive query.
+    ///
+    /// The query is matched against the identifier, the display name, and any
+    /// problem text, which makes a failing preset findable by its error.
+    ///
+    /// - Parameter query: Text to match; an empty or `nil` query returns everything.
+    /// - Returns: Matching presets sorted by localized name.
     public func search(query: String? = nil) -> [AgentPresetSummary] {
         let normalized = query?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
         let values = summaries()
@@ -206,6 +321,12 @@ public final class AgentPresetTransferManager: @unchecked Sendable {
         }
     }
 
+    /// Lists presets with recently used ones first.
+    ///
+    /// - Parameters:
+    ///   - limit: Maximum number of presets to return; values below zero yield none.
+    ///   - query: Optional filter applied before ordering.
+    /// - Returns: Recent presets first, then the remaining matches by localized name.
     public func recentPresets(limit: Int = 5, query: String? = nil) -> [AgentPresetSummary] {
         let candidates = search(query: query)
         let byID = Dictionary(uniqueKeysWithValues: candidates.map { ($0.id, $0) })
@@ -216,10 +337,21 @@ public final class AgentPresetTransferManager: @unchecked Sendable {
         return Array((recent + remaining).prefix(max(0, limit)))
     }
 
+    /// Whether `id` appears in the persisted recent list.
+    ///
+    /// - Parameter id: Preset identifier.
+    /// - Returns: `true` when the identifier was recorded recently.
     public func isRecentlyUsed(id: String) -> Bool {
         recentIDs().contains(id)
     }
 
+    /// Moves `id` to the front of the recent list, keeping the newest 20 entries.
+    ///
+    /// Unsafe identifiers and presets that are not installed are ignored, and a
+    /// failed write is swallowed: usage history is a convenience, never a
+    /// precondition for preset operations.
+    ///
+    /// - Parameter id: Preset identifier to record.
     public func recordUsage(id: String) {
         guard Self.isSafePresetID(id), summaries().contains(where: { $0.id == id }) else { return }
         var ids = recentIDs().filter { $0 != id }
@@ -232,6 +364,12 @@ public final class AgentPresetTransferManager: @unchecked Sendable {
         try? JSONEncoder().encode(ids).write(to: recentStateURL, options: .atomic)
     }
 
+    /// Describes every installed user preset.
+    ///
+    /// Entries that are not plain directories, or whose names fail
+    /// ``isSafePresetID(_:)``, are skipped rather than reported.
+    ///
+    /// - Returns: Presets sorted by localized name.
     public func summaries() -> [AgentPresetSummary] {
         guard isNonSymlinkDirectory(userPresetRoot),
               let entries = try? fileManager.contentsOfDirectory(
@@ -250,6 +388,18 @@ public final class AgentPresetTransferManager: @unchecked Sendable {
         .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
 
+    /// Writes `presetID` to `destination` as a `.dshpreset` archive.
+    ///
+    /// The archive is staged in the temporary directory and only copied to
+    /// `destination` after the manifest is written and the compressed size passes
+    /// ``maxCompressedBytes``; the staging directory is removed either way.
+    ///
+    /// - Parameters:
+    ///   - presetID: Identifier of the user preset to export.
+    ///   - destination: File URL to create; it must not exist yet.
+    ///   - sourceHarnessVersion: Harness version recorded in the manifest.
+    /// - Throws: ``AgentPresetTransferError`` when the preset is missing, the
+    ///   destination exists, or the tree exceeds the size and file-count limits.
     public func exportArchive(
         presetID: String,
         to destination: URL,
@@ -322,12 +472,34 @@ public final class AgentPresetTransferManager: @unchecked Sendable {
         recordUsage(id: presetID)
     }
 
+    /// Validates an archive and reports what importing it would do.
+    ///
+    /// Nothing is written to `DSH_HOME`: the archive is extracted into a temporary
+    /// directory that is deleted before returning.
+    ///
+    /// - Parameters:
+    ///   - archive: Archive to inspect.
+    ///   - requestedID: Identifier to install under; sanitised when omitted.
+    /// - Returns: The preview, including conflicts and warnings.
+    /// - Throws: ``AgentPresetTransferError`` when the archive is unreadable or unsafe.
     public func previewImport(from archive: URL, requestedID: String? = nil) throws -> AgentPresetImportPreview {
         try withExtractedArchive(archive) { root in
             try inspectExtractedArchive(root, requestedID: requestedID)
         }
     }
 
+    /// Installs a preset archive into `DSH_HOME/.agent-presets`.
+    ///
+    /// The archive is validated first and never overwrites an existing preset: a
+    /// conflicting identifier throws instead of merging. The recorded usage history
+    /// is updated on success.
+    ///
+    /// - Parameters:
+    ///   - archive: Archive to install.
+    ///   - requestedID: Identifier to install under; sanitised when omitted.
+    /// - Returns: The preview describing what was installed.
+    /// - Throws: ``AgentPresetTransferError`` when validation fails or the target
+    ///   identifier already exists.
     @discardableResult
     public func installImport(from archive: URL, requestedID: String? = nil) throws -> AgentPresetImportPreview {
         try withExtractedArchive(archive) { root in

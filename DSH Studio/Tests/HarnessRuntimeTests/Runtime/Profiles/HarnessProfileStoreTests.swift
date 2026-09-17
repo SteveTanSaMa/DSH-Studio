@@ -8,11 +8,13 @@ import XCTest
 
 @testable import DeepSeekRuntime
 
+/// Guards profile creation, selection, and the persisted state around them.
 final class HarnessProfileStoreTests: XCTestCase {
     private var root: URL!
     private var dshHome: URL!
     private var support: URL!
 
+    /// Creates an isolated support root and data home for each test.
     override func setUpWithError() throws {
         root = FileManager.default.temporaryDirectory
             .appendingPathComponent("DSHStudio.HarnessProfileStoreTests-\(UUID().uuidString)", isDirectory: true)
@@ -21,10 +23,12 @@ final class HarnessProfileStoreTests: XCTestCase {
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
     }
 
+    /// Removes the isolated root; a missing root is ignored.
     override func tearDownWithError() throws {
         try? FileManager.default.removeItem(at: root)
     }
 
+    /// The virtual web profile is selectable but never written as a directory.
     func testVirtualWebProfileIsSelectableAndCustomProfileIsCreatedAtomically() throws {
         let store = HarnessProfileStore(dshHome: dshHome, supportDirectory: support)
 
@@ -42,6 +46,7 @@ final class HarnessProfileStoreTests: XCTestCase {
         XCTAssertFalse(store.profiles().contains { $0.name.contains("creating-") })
     }
 
+    /// Selection is recorded as pending and only promoted after a healthy start.
     func testSelectionUsesPendingStateThenPromotesHealthyProfile() throws {
         let store = HarnessProfileStore(dshHome: dshHome, supportDirectory: support)
         _ = try store.create(name: "review")
@@ -57,6 +62,7 @@ final class HarnessProfileStoreTests: XCTestCase {
         XCTAssertEqual(selection.lastKnownGood, "review")
     }
 
+    /// An invalid selection rolls back, and the active profile cannot be deleted.
     func testInvalidProfileRollsBackAndActiveProfileCannotBeDeleted() throws {
         let store = HarnessProfileStore(dshHome: dshHome, supportDirectory: support)
         _ = try store.create(name: "review")
@@ -78,6 +84,7 @@ final class HarnessProfileStoreTests: XCTestCase {
         XCTAssertEqual(store.selection().active, "review")
     }
 
+    /// A profile with an unreadable manifest is not offered for selection.
     func testMalformedManifestIsNotSelectable() throws {
         let directory = dshHome.appendingPathComponent("profiles/broken", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -90,6 +97,7 @@ final class HarnessProfileStoreTests: XCTestCase {
         XCTAssertThrowsError(try store.select(name: "broken"))
     }
 
+    /// A symlinked profile directory is rejected, so a link cannot redirect the store.
     func testSymlinkedProfileIsNotAdmitted() throws {
         let profiles = dshHome.appendingPathComponent("profiles", isDirectory: true)
         let outside = root.appendingPathComponent("outside", isDirectory: true)
@@ -111,6 +119,7 @@ final class HarnessProfileStoreTests: XCTestCase {
         }
     }
 
+    /// Search, recent order, and status persist independently of each other.
     func testProfileSearchRecentOrderAndStatusArePersistedSeparately() throws {
         let store = HarnessProfileStore(dshHome: dshHome, supportDirectory: support)
         _ = try store.create(name: "review")
@@ -131,6 +140,7 @@ final class HarnessProfileStoreTests: XCTestCase {
         XCTAssertNotEqual(store.recentStateURL, store.selectionStateURL)
     }
 
+    /// Two data homes keep separate selection and recent state.
     func testSelectionAndRecentStateAreIsolatedPerDataHome() throws {
         let firstHome = root.appendingPathComponent("first-home", isDirectory: true)
         let secondHome = root.appendingPathComponent("second-home", isDirectory: true)

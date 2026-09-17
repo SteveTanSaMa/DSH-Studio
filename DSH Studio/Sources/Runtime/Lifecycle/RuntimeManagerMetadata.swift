@@ -8,15 +8,19 @@
 import DeepSeekLogging
 import Foundation
 
-/// RuntimeManager helpers for adopting versioned installations and exposing
-/// their metadata to the update coordinator and settings bridge.
+/// RuntimeManager helpers for adopting versioned installations.
+///
+/// The metadata these helpers expose feeds the update coordinator, the settings
+/// bridge, and diagnostics.
 extension RuntimeManager {
+    /// The data directory the Runtime currently uses.
     public var dataHomeURL: URL {
         configuration.dshHome
     }
 
-    /// Selects a persisted data profile for the next Runtime launch. The
-    /// caller must stop the Runtime first so no Harness process can continue
+    /// Selects a persisted data profile for the next Runtime launch.
+    ///
+    /// The caller must stop the Runtime first so no Harness process can keep
     /// writing to the old data directory during the switch.
     public func selectDataProfile(_ profile: RuntimeDataProfile) throws {
         guard profile.isValid else {
@@ -33,9 +37,11 @@ extension RuntimeManager {
         runtimeVersionStatus = runtimeUpdater?.versionStatus()
     }
 
-    /// Loads the profile that owns the current DSH_HOME without changing any
-    /// persisted active state. Activation is deferred until health-check
-    /// success so a Runtime that fails to start cannot become authoritative.
+    /// Loads the profile that owns the current `DSH_HOME`.
+    ///
+    /// No persisted active state is changed: activation is deferred until the
+    /// health check succeeds, so a Runtime that fails to start cannot become
+    /// authoritative.
     func loadSelectedDataProfile() {
         guard let dataProfileStore else { return }
         activeDataProfile = dataProfileStore.profile(forHomeURL: configuration.dshHome)
@@ -45,10 +51,11 @@ extension RuntimeManager {
         runtimeVersionStatus = runtimeUpdater?.versionStatus()
     }
 
-    /// Prevents a known Runtime from opening a data profile whose format is
-    /// unknown or incompatible. A legacy Runtime with no format declaration
-    /// remains usable; a declared-format update is checked separately before
-    /// it can reuse the existing data home.
+    /// Whether the current Runtime may open the selected data profile.
+    ///
+    /// A legacy Runtime with no format declaration remains usable; a declared
+    /// format must be compatible, and an update is checked separately before it
+    /// may reuse the existing data home.
     func validateDataProfileForCurrentRuntime() -> Bool {
         guard let provisioner,
               let manifest = RuntimeLocator.installationManifest(root: provisioner.root) else {
@@ -89,9 +96,10 @@ extension RuntimeManager {
         }
     }
 
-    /// Records a Runtime/profile pair only after the selected Runtime has
-    /// passed the normal Harness health check. Existing profiles without an
-    /// explicit format remain unknown and are never assigned one by inference.
+    /// Records the Runtime and profile pair after a successful health check.
+    ///
+    /// Existing profiles without an explicit format stay unknown and are never
+    /// assigned one by inference.
     @discardableResult
     func activateSelectedDataProfileIfPossible() -> Bool {
         guard let dataProfileStore,
@@ -125,11 +133,17 @@ extension RuntimeManager {
         }
     }
 
+    /// Re-reads the Node.js and Harness versions from the configured paths.
     func refreshRuntimeVersions() {
         nodeVersion = RuntimeLocator.nodeVersion(nodeExecutable: configuration.nodeExecutable)
         harnessVersion = RuntimeLocator.packageJSONVersion(at: configuration.harnessEntry)
     }
 
+    /// Adopts the versions of a complete installation already on disk.
+    ///
+    /// Called during initialization so a valid installation is used as-is instead of
+    /// being reinstalled; incomplete or missing installations leave the configuration
+    /// untouched.
     func adoptInstalledRuntimeIfAvailable() {
         guard let provisioner,
               let manifest = RuntimeLocator.installationManifest(root: provisioner.root),
@@ -157,6 +171,9 @@ extension RuntimeManager {
         configuration.expectedHarnessVersion = manifest.harnessVersion
     }
 
+    /// Points the configuration at a freshly installed Runtime.
+    ///
+    /// - Parameter result: Installation that was just provisioned or activated.
     func applyRuntimeResult(_ result: RuntimeProvisioningResult) {
         configuration.nodeExecutable = RuntimeLocator.nodeExecutable(
             root: result.root,
@@ -183,12 +200,16 @@ extension RuntimeManager {
         runtimeVersionStatus = runtimeUpdater?.versionStatus()
     }
 
+    /// Publishes a version comparison produced by the update coordinator.
+    ///
+    /// - Parameter status: Comparison to publish.
     func setRuntimeVersionStatus(_ status: RuntimeVersionStatus) {
         runtimeVersionStatus = status
     }
 
-    /// Applies a verified catalog release as the next Runtime target. The
-    /// currently running process and its data home are left untouched.
+    /// Applies a verified catalog release as the next Runtime target.
+    ///
+    /// The running process and its data home are left untouched.
     @discardableResult
     public func setRuntimeRelease(_ release: RuntimeReleaseDescriptor) -> Bool {
         guard runtimeUpdateCoordinator?.isBusy != true else {
@@ -231,6 +252,9 @@ extension RuntimeManager {
         self.state = state
     }
 
+    /// Restarts the Runtime after a failure, clearing the crash budget first.
+    ///
+    /// Ignored unless the current state is failed or crashed.
     public func retry() {
         guard state == .failed || state == .crashed else { return }
         restartTracker.reset()
@@ -250,6 +274,9 @@ extension RuntimeManager {
         configuration.profileName = profileName
     }
 
+    /// Changes how long a launch may take before it is failed.
+    ///
+    /// - Parameter timeout: Seconds to wait for the ready line.
     public func updateStartupTimeout(_ timeout: TimeInterval) {
         configuration.startupTimeout = timeout
     }

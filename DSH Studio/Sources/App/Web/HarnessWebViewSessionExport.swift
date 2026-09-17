@@ -117,8 +117,10 @@ extension HarnessWebView.Coordinator {
         }
     }
 
-    /// Reports an export failure in the native window instead of Harness's
-    /// browser feedback modal, which has already been intercepted.
+    /// Reports an export failure in a native alert.
+    ///
+    /// Harness's own browser feedback is intercepted by the export flow, so the
+    /// failure has to surface here instead.
     @MainActor
     private func presentExportAlert(
         title: String,

@@ -3,8 +3,10 @@ import XCTest
 @testable import DeepSeekHarness
 @testable import DeepSeekLogging
 
+/// Provisioning cases: installing before launch, and cancelling mid-install.
 extension RuntimeManagerTests {
 
+    /// Automatic provisioning updates the configuration before the launch.
     @MainActor
     func testAutomaticProvisioningUpdatesConfigurationBeforeLaunch() async {
         let root = FileManager.default.temporaryDirectory
@@ -31,6 +33,7 @@ extension RuntimeManagerTests {
         XCTAssertTrue(ready)
     }
 
+    /// A provisioning failure is reported and no process is launched.
     @MainActor
     func testProvisioningFailureIsReportedAndDoesNotLaunchProcess() async {
         let process = FakeHarnessProcess()
@@ -51,6 +54,7 @@ extension RuntimeManagerTests {
         XCTAssertEqual(process.launchCount, 0)
     }
 
+    /// Stopping during provisioning cancels it and leaves the Runtime terminated.
     @MainActor
     func testStopDuringProvisioningCancelsProvisioningAndStaysTerminated() async {
         let provisioner = FakeRuntimeProvisioner(

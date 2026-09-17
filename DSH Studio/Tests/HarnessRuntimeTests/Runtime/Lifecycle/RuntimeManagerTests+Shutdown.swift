@@ -3,8 +3,10 @@ import XCTest
 @testable import DeepSeekHarness
 @testable import DeepSeekLogging
 
+/// Shutdown cases: graceful, forced, and coalesced stops.
 extension RuntimeManagerTests {
 
+    /// A graceful stop terminates the child and reports the terminated state.
     @MainActor
     func testGracefulStop() async {
         let fake = FakeHarnessProcess()
@@ -17,6 +19,7 @@ extension RuntimeManagerTests {
         XCTAssertEqual(fake.forceCount, 0)
     }
 
+    /// Stopping after a restart stops the new process, not the old one.
     @MainActor
     func testStopAfterRestartStopsTheCurrentProcess() async {
         let fake = FakeHarnessProcess()
@@ -36,6 +39,7 @@ extension RuntimeManagerTests {
         XCTAssertEqual(fake.gracefulCount, 2)
     }
 
+    /// A forced stop kills the child without waiting for a graceful exit.
     @MainActor
     func testForcedStop() async {
         let fake = FakeHarnessProcess()
@@ -47,6 +51,7 @@ extension RuntimeManagerTests {
         XCTAssertEqual(fake.forceCount, 1)
     }
 
+    /// Concurrent stop calls share one shutdown instead of racing.
     @MainActor
     func testRepeatedStopCallsCoalesce() async {
         let fake = FakeHarnessProcess()

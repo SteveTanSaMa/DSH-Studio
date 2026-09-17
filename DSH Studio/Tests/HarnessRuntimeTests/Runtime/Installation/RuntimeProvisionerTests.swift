@@ -11,9 +11,15 @@ import XCTest
 
 /// Verifies pinned downloads, checksums, staging, and cancellation cleanup.
 final class RuntimeProvisionerTests: XCTestCase {
+    /// Architecture the fixtures install for.
     let architecture = "darwin-arm64"
+    /// Fixed checksum the fixture artifact must match.
     let fixtureSHA256 = "58d6dca829b124ec89d74c20bc88df55e086531559c841582de076a9157c4bb3"
 
+    /// Loads the packaged dependency lockfile used by the fixtures.
+    ///
+    /// - Returns: The lockfile bytes.
+    /// - Throws: When the fixture file cannot be read.
     func packageLockData() throws -> Data {
         let harnessIntegrity = RuntimeRelease.harnessPackageIntegrity
         let pnpmIntegrity = RuntimeRelease.pnpmPackageIntegrity
@@ -48,12 +54,23 @@ final class RuntimeProvisionerTests: XCTestCase {
         return try XCTUnwrap(json.data(using: .utf8))
     }
 
+    /// Creates a unique temporary directory for one test.
+    ///
+    /// - Returns: The created directory.
+    /// - Throws: When the directory cannot be created.
     func makeTemporaryDirectory() throws -> URL {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
         return url
     }
 
+    /// Writes a complete installation fixture into a root.
+    ///
+    /// - Parameters:
+    ///   - root: Root to populate.
+    ///   - runtimeVersion: Version recorded in the manifest.
+    /// - Returns: The manifest written for the fixture.
+    /// - Throws: When a fixture file cannot be written.
     func makeInstalledFixture(
         root: URL,
         architecture: String,

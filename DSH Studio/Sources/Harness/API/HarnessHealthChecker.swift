@@ -15,8 +15,20 @@ public protocol HarnessHealthChecking {
 
 /// Production health checker backed by URLSession.
 public final class SystemHarnessHealthChecker: HarnessHealthChecking {
+    /// Creates a checker with no shared state.
     public init() {}
 
+    /// Probes Harness until one health route answers `ok`.
+    ///
+    /// The URL is validated before any request is built, and a printed process token
+    /// is exchanged for a signed cookie on the shared session so later WebSocket and
+    /// download clients are authenticated too. The current slash-separated route is
+    /// tried first, then the `host.describe` spelling for older Runtime bundles.
+    ///
+    /// - Parameters:
+    ///   - baseURL: Loopback URL reported by the Runtime.
+    ///   - timeout: Seconds allowed per request.
+    /// - Returns: `true` when Harness reports itself healthy.
     public func check(baseURL: URL, timeout: TimeInterval) async -> Bool {
         // Validate before creating a request so a bad or remote URL never
         // reaches the transport layer.

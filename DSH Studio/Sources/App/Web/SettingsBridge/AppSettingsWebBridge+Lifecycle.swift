@@ -5,7 +5,9 @@
 
 import Foundation
 
+/// Keeps the injected sections in sync with Harness's own navigation.
 extension AppSettingsWebBridge {
+    /// The script that re-syncs the injected sections when the page changes.
     static let sourcePartThree = #"""
       const findOptions = () => document.querySelector(".VOzbGW_options") || document.querySelector('[class*="_options"]');
       const findGeneral = options => options?.querySelector("._WvWnq_section") || options?.querySelector('[class*="_WvWnq_section"]');
