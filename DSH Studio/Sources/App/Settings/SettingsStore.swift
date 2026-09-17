@@ -9,8 +9,8 @@ import Combine
 import DeepSeekRuntime
 import Foundation
 
-@MainActor
 /// Persists only app-owned settings; Harness's own settings stay in Harness.
+@MainActor
 final class SettingsStore: ObservableObject {
     /// Defaults key for the chat content width.
     static let chatContentMaxWidthKey = "chatContentMaxWidth"

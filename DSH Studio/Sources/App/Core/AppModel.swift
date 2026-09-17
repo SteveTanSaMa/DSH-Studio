@@ -341,8 +341,8 @@ final class AppModel: ObservableObject {
         objectWillChange.send()
     }
 
-    @discardableResult
     /// Opens the directory containing the sanitized runtime log files.
+    @discardableResult
     func openLogs() -> Bool {
         let support = RuntimeLocator.applicationSupportDirectory()
         guard let logs = support?.appendingPathComponent("Logs", isDirectory: true) else { return false }
