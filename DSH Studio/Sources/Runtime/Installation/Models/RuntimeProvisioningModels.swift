@@ -116,9 +116,16 @@ public struct RuntimeReleaseDescriptor: Codable, Equatable, Sendable {
 public struct RuntimeInstallationManifest: Codable, Equatable, Sendable {
     /// The manifest schema this app writes; manifests of any other version are rejected.
     ///
-    /// Version 2 added the Runtime-owned pnpm dependency required by the Harness
-    /// plugin and profile commands, so an older manifest cannot prove which
-    /// dependencies it holds and is intentionally not adopted.
+    /// Version 3 added the Runtime build version plus the Runtime-owned pnpm dependency
+    /// (`runtimeVersion`, `pnpmVersion`, `pnpmPackageIntegrity`), so an older manifest
+    /// cannot prove which dependencies it holds and is intentionally not adopted. There
+    /// was no committed version 2: the number moved from 1 straight to 3.
+    ///
+    /// - Note: `dataFormat` was added after version 3 without a further bump, so a
+    ///   version 3 manifest may or may not carry it. A manifest written before that
+    ///   change decodes it as `nil` and therefore fails ``matches(_:)`` against a
+    ///   release that declares a format; the installation is then treated as not
+    ///   matching and is reinstalled. That is wasteful but fail-safe.
     public static let currentSchemaVersion = 3
 
     /// Schema version recorded when the Runtime was installed.
