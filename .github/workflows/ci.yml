@@ -1,0 +1,91 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Pure text gate: no Xcode needed, so it reports in seconds.
+  docs:
+    name: Documentation gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Every in-scope declaration carries a doc comment
+        run: python3 scripts/check-doc-comments.py
+
+  test:
+    name: Build and test
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select the newest installed Xcode
+        run: |
+          set -euo pipefail
+          latest="$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
+          sudo xcode-select -s "$latest"
+          xcodebuild -version
+      - name: Run the test suite
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -project "DSH Studio.xcodeproj" \
+            -scheme "DSH Studio" \
+            -destination 'platform=macOS' \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData" \
+            | tail -30
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: ${{ runner.temp }}/DerivedData/Logs/Test
+          if-no-files-found: ignore
+
+  docbuild:
+    name: DocC build without warnings
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select the newest installed Xcode
+        run: |
+          set -euo pipefail
+          latest="$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
+          sudo xcode-select -s "$latest"
+          xcodebuild -version
+      - name: Build documentation for every module scheme
+        run: |
+          set -euo pipefail
+          status=0
+          for scheme in DeepSeekRuntime DeepSeekHarness DeepSeekLogging; do
+            log="$RUNNER_TEMP/docbuild-$scheme.log"
+            xcodebuild docbuild \
+              -project "DSH Studio.xcodeproj" \
+              -scheme "$scheme" \
+              -destination 'platform=macOS' \
+              -derivedDataPath "$RUNNER_TEMP/DocBuild" > "$log" 2>&1 || status=1
+
+            # DocC warns when a symbol link cannot be resolved, which is exactly
+            # what this gate is for. The AppIntents notice is toolchain noise and
+            # is filtered out so the gate only reports real documentation issues.
+            warnings="$(grep "warning:" "$log" \
+              | grep -v "Metadata extraction skipped" \
+              | grep -v "appintentsmetadataprocessor" \
+              | sort -u || true)"
+            if [ -n "$warnings" ]; then
+              echo "::error::$scheme produced documentation warnings"
+              echo "$warnings"
+              status=1
+            fi
+          done
+          exit $status
