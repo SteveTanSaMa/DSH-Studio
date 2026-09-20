@@ -22,7 +22,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Every in-scope declaration carries a doc comment
-        run: python3 scripts/check-doc-comments.py
+        run: python3 Scripts/check-doc-comments.py
 
   test:
     name: Build and test

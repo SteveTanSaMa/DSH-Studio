@@ -134,6 +134,18 @@ jobs:
         run: |
           set -euo pipefail
           app="${{ steps.package.outputs.app }}"
+
+          # The Ed25519 catalog verification key is pinned in the project settings and
+          # copied into Info.plist. An empty value would silently disable remote Runtime
+          # discovery, so the release fails instead of shipping a build that cannot
+          # verify a catalog. See Scripts/build-app.sh for the same contract.
+          key="$(/usr/libexec/PlistBuddy -c 'Print :RuntimeCatalogPublicKey' "$app/Contents/Info.plist")"
+          if [ -z "$key" ]; then
+            echo "::error::RuntimeCatalogPublicKey is empty; this build cannot verify a Runtime catalog"
+            exit 1
+          fi
+          echo "Runtime catalog public key present (${#key} characters)"
+
           codesign --verify --deep --strict --verbose=2 "$app" || true
           spctl --assess --type execute --verbose=2 "$app" || true
           shasum -a 256 "$RUNNER_TEMP/dist"/* > "$RUNNER_TEMP/dist/SHA256SUMS.txt"
