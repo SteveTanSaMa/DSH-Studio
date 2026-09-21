@@ -63,7 +63,7 @@ public final class PluginMarketManager: ObservableObject {
             .appendingPathComponent("last-operation.json", isDirectory: false)
         self.state = PluginMarketState(
             installState: .checking,
-            compatibleHarness: runtime.harnessVersion == PluginMarketRelease.compatibleHarnessVersion,
+            compatibleHarness: Self.isHarnessCompatible(runtime),
             profileDirectory: PluginMarketProfileStore(
                 dshHome: runtime.configuration.dshHome,
                 fileManager: fileManager
@@ -92,7 +92,7 @@ public final class PluginMarketManager: ObservableObject {
         guard isSupportedProfile else {
             state = PluginMarketState(
                 installState: .unavailable,
-                compatibleHarness: runtime.harnessVersion == PluginMarketRelease.compatibleHarnessVersion,
+                compatibleHarness: Self.isHarnessCompatible(runtime),
                 enabled: false,
                 busy: false,
                 profileDirectory: profileStore.profileDirectory.path,
@@ -105,8 +105,7 @@ public final class PluginMarketManager: ObservableObject {
         let retainedOperationError = record?.succeeded == false ? state.statusError : nil
         do {
             let inspection = try profileStore.inspect()
-            let compatibleHarness = runtime.harnessVersion
-                == runtime.configuration.expectedHarnessVersion
+            let compatibleHarness = Self.isHarnessCompatible(runtime)
             let hasMarketFootprint = inspection.dependencySpec != nil
                 || inspection.bundleListed
                 || inspection.installedVersion != nil
@@ -175,7 +174,7 @@ public final class PluginMarketManager: ObservableObject {
         } catch {
             state = PluginMarketState(
                 installState: .unavailable,
-                compatibleHarness: runtime.harnessVersion == PluginMarketRelease.compatibleHarnessVersion,
+                compatibleHarness: Self.isHarnessCompatible(runtime),
                 enabled: false,
                 busy: isBusy,
                 profileDirectory: profileStore.profileDirectory.path,
@@ -413,10 +412,23 @@ public final class PluginMarketManager: ObservableObject {
         if let operationError { throw operationError }
     }
 
+    /// Whether an installed Harness matches the version its installation declares.
+    ///
+    /// The comparison is against the Runtime's own manifest rather than a version
+    /// compiled into the app, so the market keeps working as the Runtime moves ahead
+    /// of the app's fallback pin. A mismatch still means the installation is
+    /// inconsistent, which is why it is reported instead of ignored.
+    ///
+    /// - Parameter runtime: Runtime whose installed Harness is compared.
+    /// - Returns: `true` when the installed version matches the declared one.
+    private static func isHarnessCompatible(_ runtime: RuntimeManager) -> Bool {
+        runtime.harnessVersion == runtime.configuration.expectedHarnessVersion
+    }
+
     private func validateHarness() throws {
-        let actual = runtime.harnessVersion
-        let expected = runtime.configuration.expectedHarnessVersion
-        guard actual == expected else {
+        guard Self.isHarnessCompatible(runtime) else {
+            let actual = runtime.harnessVersion
+            let expected = runtime.configuration.expectedHarnessVersion
             throw PluginMarketManagerError.incompatibleHarness(
                 expected: expected,
                 actual: actual

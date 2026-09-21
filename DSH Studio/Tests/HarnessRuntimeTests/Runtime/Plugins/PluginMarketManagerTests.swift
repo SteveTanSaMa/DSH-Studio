@@ -81,6 +81,39 @@ final class PluginMarketManagerTests: XCTestCase {
         XCTAssertFalse(manager.state.compatibleHarness)
     }
 
+    /// A Runtime newer than the app's fallback pin stays compatible with the market.
+    ///
+    /// Compatibility is judged against the version the installation itself declares,
+    /// so shipping a newer Runtime must not disable the market.
+    @MainActor
+    func testNewerInstalledHarnessRemainsCompatibleWithItsManifest() async throws {
+        let manager = makeManager(
+            harnessVersion: "0.1.6-alpha.2",
+            expectedHarnessVersion: "0.1.6-alpha.2"
+        )
+
+        XCTAssertTrue(manager.state.compatibleHarness)
+
+        await manager.refresh()
+
+        XCTAssertTrue(manager.state.compatibleHarness)
+        XCTAssertNotEqual(manager.state.installState, .incompatible)
+    }
+
+    /// An installation whose Harness disagrees with its own manifest reports incompatible.
+    @MainActor
+    func testHarnessThatDisagreesWithItsManifestIsIncompatible() async throws {
+        let manager = makeManager(
+            harnessVersion: "0.1.6-alpha.2",
+            expectedHarnessVersion: "0.1.1-rc.2"
+        )
+
+        await manager.refresh()
+
+        XCTAssertEqual(manager.state.installState, .incompatible)
+        XCTAssertFalse(manager.state.compatibleHarness)
+    }
+
     /// A Runtime mid-transition suppresses the install state instead of guessing it.
     func testRefreshClassifiesRuntimeTransitionSeparatelyFromInstallState() async throws {
         let manager = makeManager()
@@ -297,6 +330,7 @@ final class PluginMarketManagerTests: XCTestCase {
 
     private func makeManager(
         harnessVersion: String = PluginMarketRelease.compatibleHarnessVersion,
+        expectedHarnessVersion: String? = nil,
         commandRunner: any RuntimeCommandRunning = RecordingPluginMarketCommandRunner(),
         process: FakeHarnessProcess = FakeHarnessProcess(),
         healthChecker: (any HarnessHealthChecking)? = nil,
@@ -346,6 +380,7 @@ final class PluginMarketManagerTests: XCTestCase {
             pnpmExecutable: pnpm,
             startupTimeout: startupTimeout,
             gracefulTimeout: gracefulTimeout,
+            expectedHarnessVersion: expectedHarnessVersion ?? RuntimeLocator.harnessVersion,
             profileName: profileName
         )
         let runtime = RuntimeManager(
