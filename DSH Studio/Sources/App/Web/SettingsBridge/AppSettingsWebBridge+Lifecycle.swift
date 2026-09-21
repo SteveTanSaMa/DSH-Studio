@@ -9,8 +9,43 @@ import Foundation
 extension AppSettingsWebBridge {
     /// The script that re-syncs the injected sections when the page changes.
     static let sourcePartThree = #"""
-      const findOptions = () => document.querySelector(".VOzbGW_options") || document.querySelector('[class*="_options"]');
-      const findGeneral = options => options?.querySelector("._WvWnq_section") || options?.querySelector('[class*="_WvWnq_section"]');
+      // Harness class names are CSS-module generated: "<hash>_<local>". The hash is
+      // rebuilt per build, so it must never be hardcoded — it differed between
+      // 0.1.5-rc.2 (xmPW5W_options / TKfhPG_section) and 0.1.6-alpha.2
+      // (VOzbGW_options / _WvWnq_section), and even between two builds of the same
+      // version. The local half is the stable part, and the panel is identified by
+      // structure: the navigation element names the module, and the panel is the
+      // element that shares its prefix.
+      const modulePrefixOf = element => {
+        const names = element && element.classList ? Array.from(element.classList) : [];
+        const name = names.find(candidate => candidate.indexOf("_") > 0);
+        return name ? name.slice(0, name.indexOf("_")) : null;
+      };
+
+      const findOptionsByModule = () => {
+        const anchors = document.querySelectorAll('[class*="_navList"], [class*="_rail"], [class*="_navTitle"]');
+        for (const anchor of anchors) {
+          const prefix = modulePrefixOf(anchor);
+          if (!prefix) continue;
+          const panel = document.querySelector(`.${CSS.escape(prefix)}_options`);
+          if (panel) return panel;
+        }
+        return null;
+      };
+
+      // Fallback for a layout that exposes no navigation anchor: accept only a
+      // candidate that actually contains a section, so another package's
+      // "*_options" element cannot be mistaken for the Settings panel.
+      const findOptionsByShape = () => {
+        const candidates = Array.from(document.querySelectorAll('[class*="_options"]'));
+        return candidates.find(candidate => candidate.querySelector('[class*="_section"]')) || null;
+      };
+
+      const findOptions = () => findOptionsByModule() || findOptionsByShape();
+
+      // Any element whose class ends in "_section" inside the located panel is the
+      // active settings section; Harness renders one at a time.
+      const findGeneral = options => options?.querySelector('[class*="_section"]') || null;
 
       const attachGeneralBlock = general => {
         if (!generalBlock) generalBlock = createGeneralBlock();
@@ -23,7 +58,16 @@ extension AppSettingsWebBridge {
       const ensure = () => {
         const options = findOptions();
         const general = findGeneral(options);
-        if (general) attachGeneralBlock(general);
+        if (general) {
+          attachGeneralBlock(general);
+        } else if (!anchorWarningSent) {
+          // Staying silent would make a Harness layout change look like the
+          // settings simply vanished, so report it once for the native log.
+          anchorWarningSent = true;
+          if (window.console && window.console.warn) {
+            window.console.warn("DSH Studio: app settings anchor not found; injected section was not attached.");
+          }
+        }
         render();
         if (Date.now() - lastStateRequestAt > 30000 && pending.size === 0) {
           lastStateRequestAt = Date.now();

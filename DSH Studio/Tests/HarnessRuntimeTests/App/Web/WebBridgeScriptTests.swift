@@ -113,6 +113,67 @@ final class WebBridgeScriptTests: XCTestCase {
         XCTAssertTrue(source.contains("z-index: 1200 !important"))
     }
 
+    /// The injected settings bridge must not pin Harness CSS-module hashes.
+    ///
+    /// Harness class names are `<hash>_<local>` and the hash is rebuilt per build:
+    /// 0.1.5-rc.2 shipped `xmPW5W_options` / `TKfhPG_section`, while 0.1.6-alpha.2
+    /// shipped `VOzbGW_options` / `_WvWnq_section`, and two builds of the same
+    /// version differed again. A pinned hash would make the injected section vanish
+    /// silently on the next Harness build.
+    func testAppSettingsBridgeDoesNotPinHarnessCSSModuleHashes() throws {
+        // Only code is inspected: the surrounding comment legitimately names the
+        // stale hashes as documentation of why they must not be used.
+        let code = try appSettingsBridgeLifecycleSource()
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
+            .joined(separator: "\n")
+
+        for staleHash in ["VOzbGW", "_WvWnq", "xmPW5W", "TKfhPG", "I9ZhnW", "BYqExW"] {
+            XCTAssertFalse(code.contains(staleHash), "\(staleHash) pins a build-specific hash")
+        }
+        let source = code
+        XCTAssertTrue(source.contains("modulePrefixOf"), "the module prefix must be derived at runtime")
+        XCTAssertTrue(source.contains(#"[class*="_navList"]"#))
+        XCTAssertTrue(source.contains(#"[class*="_rail"]"#))
+        XCTAssertTrue(source.contains(#"[class*="_options"]"#))
+        XCTAssertTrue(source.contains(#"[class*="_section"]"#))
+    }
+
+    /// The bridge prefers a structure-derived anchor and reports a missing one.
+    ///
+    /// Several Harness packages expose a `*_options` or `*_section` element, so a
+    /// blind first match could attach the section to another package's DOM; and a
+    /// layout change must not look like the settings simply disappeared.
+    func testAppSettingsBridgeResolvesItsAnchorByStructureAndWarnsWhenMissing() throws {
+        let source = try appSettingsBridgeLifecycleSource()
+
+        XCTAssertTrue(source.contains("findOptionsByModule() || findOptionsByShape()"))
+        XCTAssertTrue(
+            source.contains("candidate.querySelector('[class*=\"_section\"]')"),
+            "the shape fallback must require a section child"
+        )
+        XCTAssertTrue(source.contains("anchorWarningSent"))
+        XCTAssertTrue(source.contains("app settings anchor not found"))
+    }
+
+    /// Reads the injected-settings script that re-syncs on navigation.
+    ///
+    /// - Returns: The contents of the lifecycle part of the settings bridge.
+    /// - Throws: When the source file cannot be read.
+    private func appSettingsBridgeLifecycleSource() throws -> String {
+        let sourceRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/App/Web/SettingsBridge")
+        return try String(
+            contentsOf: sourceRoot.appendingPathComponent("AppSettingsWebBridge+Lifecycle.swift"),
+            encoding: .utf8
+        )
+    }
+
     /// The WebView bridge projects only Harness's General settings.
     ///
     /// Profile, preset, Runtime, and diagnostics settings belong to the native window

@@ -36,6 +36,7 @@ extension AppSettingsWebBridge {
       let pending = new Set();
       let lastStateRequestAt = 0;
       let ensureScheduled = false;
+      let anchorWarningSent = false;
       const messages = {
         zh: {
           chatContentWidth: "对话内容宽度",

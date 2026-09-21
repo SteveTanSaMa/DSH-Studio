@@ -15,14 +15,20 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Pure text gate: no Xcode needed, so it reports in seconds.
+  # Pure text gates: no Xcode needed, so they report in seconds.
   docs:
-    name: Documentation gate
+    name: Static gates
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Every in-scope declaration carries a doc comment
         run: python3 Scripts/check-doc-comments.py
+      # The injected settings bridge is assembled from several Swift string
+      # constants at runtime, so a stray backtick or an opened template literal only
+      # breaks the concatenation — never any single file. Node is preinstalled on
+      # the runner, which is what makes a real parse check possible here.
+      - name: The assembled web-bridge script is valid JavaScript
+        run: python3 Scripts/check-web-bridge-script.py
 
   test:
     name: Build and test
