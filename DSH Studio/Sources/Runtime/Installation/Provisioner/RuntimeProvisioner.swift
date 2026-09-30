@@ -38,6 +38,11 @@ public final class RuntimeProvisioner: RuntimeCandidateUpdating, RuntimeDataProf
     let packageLockDataOverride: Data?
     /// Node checksum override used by tests; `nil` uses the pinned release value.
     let nodeArchiveSHA256Override: String?
+    /// Receives coarse progress while this provisioner installs.
+    ///
+    /// Attached by the Runtime manager so a first launch can report a download that
+    /// takes minutes instead of showing an unexplained spinner.
+    public var progressHandler: (@Sendable (RuntimeProvisioningProgress) -> Void)? = nil
 
     /// Creates a provisioner for one installation root.
     ///
@@ -310,6 +315,142 @@ public final class RuntimeProvisioner: RuntimeCandidateUpdating, RuntimeDataProf
         } catch {
             throw RuntimeProvisioningError.downloadFailed(error.localizedDescription)
         }
+    }
+
+    /// Builds the one native dependency that ships no prebuilt binding.
+    ///
+    /// `--ignore-scripts` keeps every other package's install script out of the app,
+    /// but `fs-ext` — the binding Harness session persistence loads — has no prebuilt
+    /// macOS binary and is compiled by its own install script. It is rebuilt here with
+    /// the packaged Node so the binding matches that Node's ABI, loaded once to prove
+    /// it actually works, and stripped of its build material so the staged tree keeps
+    /// only the loadable file. The Runtime publication pipeline performs exactly these
+    /// steps for the same reason.
+    ///
+    /// A Harness line without the module is left alone.
+    ///
+    /// - Parameters:
+    ///   - harnessRoot: Harness root that contains `node_modules`.
+    ///   - nodeRoot: Packaged Node installation that must both build and load the binding.
+    ///   - nodeExecutable: Packaged Node executable.
+    ///   - npmCLI: npm entry point run by ``nodeExecutable``.
+    /// - Throws: ``RuntimeProvisioningError`` when the module cannot be built, does not
+    ///   load with the packaged Node, or its build material cannot be pruned.
+    func prepareNativeBinding(
+        in harnessRoot: URL,
+        nodeRoot: URL,
+        nodeExecutable: URL,
+        npmCLI: URL
+    ) throws {
+        let module = harnessRoot.appendingPathComponent("node_modules/fs-ext", isDirectory: true)
+        guard fileManager.fileExists(atPath: module.appendingPathComponent("package.json").path) else {
+            return
+        }
+        let binding = module.appendingPathComponent("build/Release/fs_ext.node")
+        if !fileManager.fileExists(atPath: binding.path) {
+            // The one command allowed to run install scripts; every other npm call
+            // keeps the default that skips them.
+            var environment = commandEnvironment(nodeRoot: nodeRoot)
+            environment["npm_config_ignore_scripts"] = "false"
+            let rebuild = try commandRunner.run(
+                executable: nodeExecutable,
+                arguments: [npmCLI.path, "rebuild", "fs-ext", "--no-audit", "--no-fund"],
+                currentDirectory: harnessRoot,
+                environment: environment
+            )
+            guard rebuild.status == 0 else {
+                throw RuntimeProvisioningError.commandFailed(status: rebuild.status, detail: summarize(rebuild.stderr))
+            }
+        }
+        guard loadsNativeModule(module, nodeRoot: nodeRoot, nodeExecutable: nodeExecutable) else {
+            throw RuntimeProvisioningError.runtimeValidationFailed("fs-ext 原生模块无法被打包的 Node 加载")
+        }
+        try pruneBuildMaterial(in: module)
+        guard loadsNativeModule(module, nodeRoot: nodeRoot, nodeExecutable: nodeExecutable) else {
+            throw RuntimeProvisioningError.runtimeValidationFailed("fs-ext 原生模块在清理构建产物后无法加载")
+        }
+    }
+
+    /// Whether the packaged Node can load a module directory.
+    ///
+    /// A wrong architecture or a wrong `NODE_MODULE_VERSION` only fails when the
+    /// binding is actually loaded, which is far too late once the Runtime is published.
+    ///
+    /// - Parameters:
+    ///   - module: Module directory to require.
+    ///   - nodeRoot: Packaged Node installation used to run the probe.
+    ///   - nodeExecutable: Packaged Node executable.
+    /// - Returns: `true` when the module loaded without an error.
+    private func loadsNativeModule(_ module: URL, nodeRoot: URL, nodeExecutable: URL) -> Bool {
+        let probe = try? commandRunner.run(
+            executable: nodeExecutable,
+            arguments: ["-e", "require(process.argv[1])", module.path],
+            currentDirectory: module.deletingLastPathComponent(),
+            environment: commandEnvironment(nodeRoot: nodeRoot)
+        )
+        return probe?.status == 0
+    }
+
+    /// Removes everything under `build/` except the loadable binding.
+    ///
+    /// node-gyp leaves object files, dependency files, and Makefiles carrying absolute
+    /// build paths; an immutable installation should keep only the binding itself.
+    ///
+    /// - Parameter module: Native module directory whose build material is pruned.
+    /// - Throws: ``RuntimeProvisioningError/installationFailed(_:)`` when an entry
+    ///   cannot be removed.
+    private func pruneBuildMaterial(in module: URL) throws {
+        let build = module.appendingPathComponent("build", isDirectory: true)
+        guard let enumerator = fileManager.enumerator(at: build, includingPropertiesForKeys: [.isDirectoryKey]) else {
+            return
+        }
+        var entries: [URL] = []
+        for case let entry as URL in enumerator {
+            entries.append(entry)
+        }
+        // Deepest first, so a directory emptied by its own children can be removed too.
+        let deepestFirst = entries.sorted { $0.path.count > $1.path.count }
+        do {
+            for entry in deepestFirst {
+                let isDirectory = (try? entry.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true
+                if isDirectory {
+                    if try fileManager.contentsOfDirectory(atPath: entry.path).isEmpty {
+                        try fileManager.removeItem(at: entry)
+                    }
+                } else if entry.pathExtension != "node" {
+                    try fileManager.removeItem(at: entry)
+                }
+            }
+        } catch {
+            throw RuntimeProvisioningError.installationFailed(error.localizedDescription)
+        }
+    }
+
+    /// Reports one installation step.
+    ///
+    /// - Parameter progress: Step to report; ignored when no handler is attached.
+    func report(_ progress: RuntimeProvisioningProgress) {
+        progressHandler?(progress)
+    }
+
+    /// Reports byte progress of one download as installation progress.
+    ///
+    /// - Parameters:
+    ///   - received: Bytes received so far.
+    ///   - expected: Expected total, or `0` when the server sent no length.
+    ///   - detail: Step description shown while the download runs.
+    func reportDownload(received: Int64, expected: Int64, detail: String) {
+        let fraction = expected > 0
+            ? min(1, max(0, Double(received) / Double(expected)))
+            : nil
+        report(RuntimeProvisioningProgress(fraction: fraction, detail: detail))
+    }
+
+    /// Reports a step that has no measurable percentage.
+    ///
+    /// - Parameter detail: Step description shown while it runs.
+    func reportStep(_ detail: String) {
+        report(RuntimeProvisioningProgress(fraction: nil, detail: detail))
     }
 
     /// Restores the executable bit on the `node-pty` spawn helper.

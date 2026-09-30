@@ -7,6 +7,7 @@
 
 import AppKit
 import Combine
+import DeepSeekHarness
 import DeepSeekLogging
 import DeepSeekRuntime
 import Foundation
@@ -15,6 +16,10 @@ import UniformTypeIdentifiers
 /// Coordinates user settings with the RuntimeManager used by the main window.
 @MainActor
 final class AppModel: ObservableObject {
+    /// Settings namespace owned by the first-party ``HarnessProfileStore/studioSettingsBundle``
+    /// plugin and rendered by its page inside the Harness settings dialog.
+    static let studioSettingsNamespace = "dsh-studio"
+
     /// The Runtime whose process, versions, and profiles this model owns.
     @Published var runtime: RuntimeManager
 
@@ -71,6 +76,7 @@ final class AppModel: ObservableObject {
             workspace: settings.workspaceURL,
             dshHome: currentDataHomeURL,
             profileName: selectedHarnessProfileName,
+            environment: settings.legacyPluginEnvironment,
             release: runtimeRelease,
             catalogService: runtimeCatalogService
         )
@@ -79,6 +85,13 @@ final class AppModel: ObservableObject {
             runtime: configuredRuntime,
             supportDirectory: support
         )
+        // The settings page lives inside the Harness profile, so it has to be written
+        // before the process that loads it starts — including on a first launch, where
+        // the Runtime only exists once provisioning finished.
+        configuredRuntime.prelaunchPreparation = { [weak self] in
+            guard let self else { return }
+            self.installStudioSettingsPage(profileName: self.runtime.configuration.profileName)
+        }
         bindRuntime()
         applySettings()
     }
@@ -97,11 +110,16 @@ final class AppModel: ObservableObject {
         runtimeStateCancellable = runtime.$state
             .removeDuplicates()
             .sink { [weak self] state in
-                if state == .ready, let self {
+                guard let self else { return }
+                if state == .ready {
                     try? self.harnessProfiles.markHealthy(name: self.runtime.configuration.profileName)
                     self.selectedHarnessProfileName = self.runtime.configuration.profileName
+                    // Every restart — including the one a workspace or profile change
+                    // triggers — is a chance for the app-owned values to have moved
+                    // ahead of the namespace the settings page reads.
+                    Task { await self.syncStudioSettingsMirror() }
                 }
-                self?.schedulePluginMarketRefresh()
+                self.schedulePluginMarketRefresh()
             }
         pluginMarketCancellable = pluginMarket.objectWillChange
             .sink { [weak self] _ in self?.objectWillChange.send() }
@@ -264,6 +282,93 @@ final class AppModel: ObservableObject {
     func applySettings() {
         // Runtime recovery is an app reliability mechanism, not a user-facing toggle.
         runtime.restartPolicy.enabled = true
+    }
+
+    /// Mirrors one preference the Harness settings page just stored.
+    ///
+    /// The page owns the value: it is written to Harness's own settings service first
+    /// and only then reported here, so this method never becomes a second source of
+    /// truth. It exists because the native side still has to act on three of them —
+    /// the injected layout width and the notification switches — and because the
+    /// workspace must be admitted before the Runtime is relaunched against it.
+    ///
+    /// - Parameters:
+    ///   - key: Preference key; unknown keys are rejected rather than stored.
+    ///   - value: Value decoded from the page's JSON payload.
+    /// - Returns: `true` when the value was recognized and applied.
+    @discardableResult
+    func applyStudioPreference(key: String, value: Any) -> Bool {
+        switch key {
+        case SettingsStore.chatContentMaxWidthKey:
+            guard let number = value as? NSNumber else { return false }
+            settings.chatContentMaxWidth = number.doubleValue
+            HarnessWebView.applyChatContentMaxWidthOnLiveWebViews(settings.chatContentMaxWidth)
+            return true
+        case SettingsStore.turnCompletionNotificationKey:
+            guard let raw = value as? String,
+                  let preference = TurnCompletionNotificationPreference(rawValue: raw) else {
+                return false
+            }
+            settings.turnCompletionNotification = preference
+            return true
+        case SettingsStore.permissionNotificationsEnabledKey:
+            guard let enabled = value as? Bool else { return false }
+            settings.permissionNotificationsEnabled = enabled
+            return true
+        case SettingsStore.questionNotificationsEnabledKey:
+            guard let enabled = value as? Bool else { return false }
+            settings.questionNotificationsEnabled = enabled
+            return true
+        case SettingsStore.workspacePathKey:
+            // The path only becomes the workspace through the native directory panel,
+            // which admits and relaunches against it. A path echoed back by the page is
+            // already the one in use, so there is nothing further to apply.
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// Republishes the app-owned preferences into the DSH Studio settings namespace.
+    ///
+    /// The Harness settings page reads that namespace, while the values this app needs
+    /// before Harness can start — the workspace, the layout width, and the notification
+    /// switches — live in native storage. Writing only the fields that differ keeps the
+    /// page showing what the app is actually using, including when the change came from
+    /// the app menu or a profile switch rather than from the page itself.
+    ///
+    /// The revision Harness returns fences the write, so a value the user saved in the
+    /// page while the Runtime was restarting wins instead of being overwritten.
+    private func syncStudioSettingsMirror() async {
+        guard let baseURL = runtime.readyURL else { return }
+        do {
+            let client = HarnessAPIClient(baseURL: baseURL)
+            let snapshot = try await client.settingsDescribe()
+            guard let section = snapshot.namespaces.first(where: { $0.ns == Self.studioSettingsNamespace }) else {
+                return
+            }
+            let stored = section.value.objectValue ?? [:]
+            let published: [String: HarnessJSONValue] = [
+                SettingsStore.workspacePathKey: .string(settings.workspaceURL.standardizedFileURL.path),
+                SettingsStore.chatContentMaxWidthKey: .number(settings.chatContentMaxWidth),
+                SettingsStore.turnCompletionNotificationKey: .string(settings.turnCompletionNotification.rawValue),
+                SettingsStore.permissionNotificationsEnabledKey: .bool(settings.permissionNotificationsEnabled),
+                SettingsStore.questionNotificationsEnabledKey: .bool(settings.questionNotificationsEnabled)
+            ]
+            let patch = published.filter { stored[$0.key] != $0.value }
+            guard !patch.isEmpty else { return }
+            _ = try await client.settingsUpdate(
+                namespace: Self.studioSettingsNamespace,
+                patch: patch,
+                expectedRevision: section.revision
+            )
+        } catch {
+            runtime.logs.log(
+                component: "Settings",
+                level: "info",
+                message: "DSH Studio settings mirror not updated: \(LogRedactor.redact(error.localizedDescription))"
+            )
+        }
     }
 
     private func installPluginMarketIfNeeded(allowIdle: Bool = false) async {
@@ -452,7 +557,51 @@ final class AppModel: ObservableObject {
     /// - Throws: ``HarnessProfileStoreError`` when the name is invalid or taken.
     func createHarnessProfile(name: String) throws {
         _ = try harnessProfiles.create(name: name)
+        installStudioSettingsPage(profileName: name)
         objectWillChange.send()
+    }
+
+    /// Installs or refreshes the first-party settings page in one profile.
+    ///
+    /// The startup factory only covers the profile the app launched with, so a profile
+    /// created or switched to later would otherwise start without the DSH Studio
+    /// section. Installing here keeps the page present in every profile.
+    ///
+    /// Nothing happens while the Runtime is not installed yet: the page vendors packages
+    /// out of the Runtime's own dependency tree, and a clean machine has none until
+    /// provisioning finishes. The pre-launch preparation calls this again by then.
+    ///
+    /// - Parameter profileName: Profile the page must be installed into.
+    private func installStudioSettingsPage(profileName: String) {
+        guard let source = Bundle.main.resourceURL?.appendingPathComponent(
+            HarnessProfileStore.studioSettingsResourceName,
+            isDirectory: true
+        ),
+        FileManager.default.fileExists(atPath: source.path) else { return }
+        let runtimeNodeModules = RuntimeLocator.harnessNodeModules(
+            harnessEntry: runtime.configuration.harnessEntry
+        )
+        guard FileManager.default.fileExists(atPath: runtimeNodeModules.path) else {
+            runtime.logs.log(
+                component: "Settings",
+                level: "info",
+                message: "Runtime 尚未安装，DSH Studio 设置页将在启动前写入"
+            )
+            return
+        }
+        do {
+            try harnessProfiles.installStudioSettingsPlugin(
+                from: source,
+                runtimeNodeModules: runtimeNodeModules,
+                profileName: profileName
+            )
+        } catch {
+            runtime.logs.log(
+                component: "Settings",
+                level: "error",
+                message: "DSH Studio 设置页安装失败：\(error.localizedDescription)"
+            )
+        }
     }
 
     /// Switches the active profile, restarting Harness when it is running.
@@ -465,6 +614,7 @@ final class AppModel: ObservableObject {
     func selectHarnessProfile(name: String) async throws -> Bool {
         guard name != runtime.configuration.profileName else { return true }
         try harnessProfiles.select(name: name)
+        installStudioSettingsPage(profileName: name)
         let oldName = runtime.configuration.profileName
         let shouldResume = runtime.state != .idle && runtime.state != .terminated
         await runtime.stop()

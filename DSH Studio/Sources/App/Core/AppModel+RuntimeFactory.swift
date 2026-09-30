@@ -16,6 +16,7 @@ extension RuntimeManager {
         workspace: URL,
         dshHome: URL? = nil,
         profileName: String = "web",
+        environment: [String: String] = [:],
         release requestedRelease: RuntimeReleaseDescriptor? = nil,
         catalogService: RuntimeCatalogService? = nil
     ) -> RuntimeManager {
@@ -48,8 +49,36 @@ extension RuntimeManager {
         let dshHome = dshHome ?? RuntimeLocator.defaultDSHHome() ?? support
             .appendingPathComponent("DSH_HOME", isDirectory: true)
         _ = try? dataProfileStore.ensureLegacyProfile(homeURL: dshHome)
-        let logURL = support
-            .appendingPathComponent("Logs", isDirectory: true)
+        let harnessProfiles = HarnessProfileStore(dshHome: dshHome, supportDirectory: support)
+        // Every launch refreshes the first-party settings page in the profile it is
+        // about to boot, so a profile created later cannot silently lose DSH Studio's
+        // settings section. A machine with no Runtime yet has nothing to install the
+        // page against; `RuntimeManager.prelaunchPreparation` writes it once
+        // provisioning finished and before Harness starts.
+        let runtimeNodeModules = RuntimeLocator.harnessNodeModules(
+            harnessEntry: RuntimeLocator.harnessEntry(
+                root: root,
+                harnessVersion: installedHarnessVersion
+            )
+        )
+        if let source = Bundle.main.resourceURL?.appendingPathComponent(
+            HarnessProfileStore.studioSettingsResourceName,
+            isDirectory: true
+        ),
+        FileManager.default.fileExists(atPath: source.path),
+        FileManager.default.fileExists(atPath: runtimeNodeModules.path) {
+            do {
+                try harnessProfiles.installStudioSettingsPlugin(
+                    from: source,
+                    runtimeNodeModules: runtimeNodeModules,
+                    profileName: profileName
+                )
+            } catch {
+                NSLog("DSH Studio settings plugin installation failed: %@", error.localizedDescription)
+            }
+        }
+        let logDirectory = support.appendingPathComponent("Logs", isDirectory: true)
+        let logURL = logDirectory
             .appendingPathComponent("runtime.log")
         let configuration = RuntimeConfiguration(
             nodeExecutable: RuntimeLocator.nodeExecutable(root: root),
@@ -63,8 +92,9 @@ extension RuntimeManager {
                 root: root,
                 harnessVersion: installedHarnessVersion
             ),
+            environment: environment,
             expectedHarnessVersion: installedHarnessVersion,
-            profileName: profileName
+            profileName: profileName,
         )
         let provisioner: (any RuntimeProvisioning)? =
             RuntimeLocator.usesDevelopmentOverride() || RuntimeLocator.isBundledRuntimeRoot(root)
@@ -78,7 +108,8 @@ extension RuntimeManager {
             configuration: configuration,
             logFileURL: logURL,
             provisioner: provisioner,
-            dataProfileStore: dataProfileStore
+            dataProfileStore: dataProfileStore,
+            crashReportDirectory: logDirectory.appendingPathComponent("CrashReports", isDirectory: true)
         )
     }
 }

@@ -30,6 +30,11 @@ public struct PluginMarketProfileInspection: Equatable, Sendable {
     public let lockIntegrityValid: Bool
     /// Whether the profile patch currently activates the market.
     public let enabled: Bool
+    /// Harness compatibility range the installed package declares, when it does.
+    ///
+    /// Read from the package's own `peerDependencies`, so an installed market can be
+    /// judged against the running Harness even when the publication carried no range.
+    public let declaredHarnessRange: String?
 
     /// Creates an inspection result.
     ///
@@ -44,6 +49,7 @@ public struct PluginMarketProfileInspection: Equatable, Sendable {
     ///   - entryPointValid: Whether the installed package exposes its entry point.
     ///   - lockIntegrityValid: Whether the lockfile pins version and integrity.
     ///   - enabled: Whether the patch activates the market.
+    ///   - declaredHarnessRange: Harness range the installed package declares, if any.
     public init(
         profileDirectory: URL,
         dependencySpec: String?,
@@ -54,7 +60,8 @@ public struct PluginMarketProfileInspection: Equatable, Sendable {
         bundlePatchValid: Bool,
         entryPointValid: Bool,
         lockIntegrityValid: Bool,
-        enabled: Bool
+        enabled: Bool,
+        declaredHarnessRange: String? = nil
     ) {
         self.profileDirectory = profileDirectory
         self.dependencySpec = dependencySpec
@@ -66,6 +73,7 @@ public struct PluginMarketProfileInspection: Equatable, Sendable {
         self.entryPointValid = entryPointValid
         self.lockIntegrityValid = lockIntegrityValid
         self.enabled = enabled
+        self.declaredHarnessRange = declaredHarnessRange
     }
 }
 
@@ -101,12 +109,11 @@ public struct PluginMarketProfileSnapshot: Sendable {
 
 /// Owns the fixed `DSH_HOME/profiles/web` contract used by dsh-market.
 ///
-/// The store rejects symlinks that resolve outside the managed profile and edits
-/// one narrowly-scoped patch entry rather than treating YAML as a command
-/// surface.
-/// Owns only the fixed `DSH_HOME/profiles/web` contract used by dsh-market.
-/// It rejects symlinks that resolve outside the managed Profile and edits one
+/// It rejects symlinks that resolve outside the managed profile and edits one
 /// narrowly-scoped patch entry rather than treating YAML as a command surface.
+/// Version and integrity checks compare against the ``pin`` it was given, so a
+/// Runtime that publishes its own market pin is honored instead of the app's
+/// compiled-in fallback.
 public final class PluginMarketProfileStore: @unchecked Sendable {
     /// The standardized `DSH_HOME` this store operates in.
     public let dshHome: URL
@@ -114,6 +121,8 @@ public final class PluginMarketProfileStore: @unchecked Sendable {
     public let profileName: String
     /// `DSH_HOME/profiles/<profileName>`, the only directory this store edits.
     public let profileDirectory: URL
+    /// The market version and integrity this profile is expected to hold.
+    public let pin: RuntimePluginPin
 
     private let fileManager: FileManager
     private let patchFileName = "cordis.patch.yml"
@@ -131,10 +140,12 @@ public final class PluginMarketProfileStore: @unchecked Sendable {
     /// - Parameters:
     ///   - dshHome: Harness data home; a non-standardized value is standardized here.
     ///   - profileName: Profile to manage; defaults to the market's supported profile.
+    ///   - pin: Market version the profile must hold; defaults to the app's fallback.
     ///   - fileManager: File system seam used by tests.
     public init(
         dshHome: URL,
         profileName: String = PluginMarketRelease.profileName,
+        pin: RuntimePluginPin = PluginMarketRelease.fallbackPin,
         fileManager: FileManager = .default
     ) {
         self.dshHome = dshHome.standardizedFileURL
@@ -142,6 +153,7 @@ public final class PluginMarketProfileStore: @unchecked Sendable {
         self.profileDirectory = self.dshHome
             .appendingPathComponent("profiles", isDirectory: true)
             .appendingPathComponent(profileName, isDirectory: true)
+        self.pin = pin
         self.fileManager = fileManager
     }
 
@@ -315,8 +327,28 @@ public final class PluginMarketProfileStore: @unchecked Sendable {
             bundlePatchValid: bundlePatchValid,
             entryPointValid: entryPointValid,
             lockIntegrityValid: (try? hasExpectedLockIntegrity()) == true,
-            enabled: try isMarketEnabled()
+            enabled: try isMarketEnabled(),
+            declaredHarnessRange: Self.declaredHarnessRange(in: installedManifest)
         )
+    }
+
+    /// Reads the Harness range the installed package declares for itself.
+    ///
+    /// Harness packages share one version, so the range over any of them answers the
+    /// same question; `dsh-settings` is checked first because that is the package the
+    /// market names.
+    ///
+    /// - Parameter manifest: Parsed `package.json` of the installed market.
+    /// - Returns: The declared range, or `nil` when the package declares none.
+    private static func declaredHarnessRange(in manifest: [String: Any]) -> String? {
+        guard let peers = manifest["peerDependencies"] as? [String: Any] else { return nil }
+        for name in ["@deepseek-ai/dsh-settings", "@deepseek-ai/dsh"] {
+            if let range = peers[name] as? String,
+               !range.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return range
+            }
+        }
+        return nil
     }
 
     /// Captures the profile files a mutation may overwrite.
@@ -359,10 +391,10 @@ public final class PluginMarketProfileStore: @unchecked Sendable {
             throw PluginMarketManagerError.malformedProfile("pnpm-lock.yaml 过大")
         }
         let text = String(decoding: data, as: UTF8.self)
-        let packageReference = text.contains("dshmarket@\(PluginMarketRelease.packageVersion)")
-            || text.contains("dsh-market@\(PluginMarketRelease.packageVersion)")
+        let packageReference = text.contains("\(pin.package)@\(pin.version)")
+            || text.contains("dsh-market@\(pin.version)")
         return packageReference
-            && text.contains(PluginMarketRelease.packageIntegrity)
+            && text.contains(pin.integrity)
     }
 
     /// Verifies that the profile holds exactly the installation the app expects.
@@ -372,35 +404,35 @@ public final class PluginMarketProfileStore: @unchecked Sendable {
     ///   version, manifest, patch, entry point, or lockfile does not match.
     public func validateExpectedInstallation() throws -> PluginMarketProfileInspection {
         let inspection = try inspect()
-        guard inspection.dependencySpec == PluginMarketRelease.packageVersion else {
+        guard inspection.dependencySpec == pin.version else {
             throw PluginMarketManagerError.malformedProfile(
-                "package.json 未锁定到 dshmarket@\(PluginMarketRelease.packageVersion)"
+                "package.json 未锁定到 \(pin.package)@\(pin.version)"
             )
         }
         guard inspection.packageManifestValid,
-              inspection.installedVersion == PluginMarketRelease.packageVersion else {
+              inspection.installedVersion == pin.version else {
             throw PluginMarketManagerError.malformedProfile(
-                "node_modules 中的 dshmarket package.json 版本无效"
+                "node_modules 中的 \(pin.package) package.json 版本无效"
             )
         }
         guard try hasExpectedLockIntegrity() else {
             throw PluginMarketManagerError.malformedProfile(
-                "pnpm-lock.yaml 缺少 dshmarket 的固定 integrity"
+                "pnpm-lock.yaml 缺少 \(pin.package) 的固定 integrity"
             )
         }
         guard inspection.bundleListed else {
             throw PluginMarketManagerError.malformedProfile(
-                "package.json 的 dsh.profile.bundles 缺少 dshmarket"
+                "package.json 的 dsh.profile.bundles 缺少 \(pin.package)"
             )
         }
         guard inspection.bundlePatchValid else {
             throw PluginMarketManagerError.malformedProfile(
-                "dshmarket 未声明固定的 cordis.patch.yml bundle"
+                "\(pin.package) 未声明固定的 cordis.patch.yml bundle"
             )
         }
         guard inspection.entryPointValid else {
             throw PluginMarketManagerError.malformedProfile(
-                "dshmarket 缺少 lib/index.js 入口"
+                "\(pin.package) 缺少 lib/index.js 入口"
             )
         }
         return inspection

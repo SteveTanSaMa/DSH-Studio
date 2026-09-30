@@ -11,6 +11,13 @@ import Foundation
 /// Every path is derived from a Runtime root so callers never build these paths
 /// by hand.
 extension RuntimeLocator {
+    /// Path of the Harness entry point relative to the Harness `node_modules` directory.
+    ///
+    /// The only definition of that layout: ``harnessEntry(root:architecture:harnessVersion:)``
+    /// appends it and ``harnessNodeModules(harnessEntry:)`` drops it, so the two cannot
+    /// disagree about where a Harness installation keeps its packages.
+    private static let harnessEntryRelativePath = "\(dshPackageName)/lib/bin.js"
+
     /// The architecture identifier used by Runtime directories.
     ///
     /// - Returns: `darwin-x64` on an Intel host, otherwise `darwin-arm64`.
@@ -53,9 +60,23 @@ extension RuntimeLocator {
     ) -> URL {
         harnessRoot(root: root, architecture: architecture, harnessVersion: harnessVersion)
             .appendingPathComponent("node_modules", isDirectory: true)
-            .appendingPathComponent(dshPackageName, isDirectory: true)
-            .appendingPathComponent("lib", isDirectory: true)
-            .appendingPathComponent("bin.js")
+            .appendingPathComponent(Self.harnessEntryRelativePath)
+    }
+
+    /// Path of the Harness dependency tree that contains an entry point.
+    ///
+    /// A profile's own packages resolve their Harness dependencies from this directory,
+    /// so packages are copied out of it rather than out of a shared cache.
+    ///
+    /// - Parameter harnessEntry: Entry point returned by
+    ///   ``harnessEntry(root:architecture:harnessVersion:)``.
+    /// - Returns: The `node_modules` directory holding the Harness packages.
+    public static func harnessNodeModules(harnessEntry: URL) -> URL {
+        // The entry sits below `node_modules` by exactly the components of
+        // ``harnessEntryRelativePath``, so the inverse cannot drift from the forward path.
+        Self.harnessEntryRelativePath
+            .split(separator: "/")
+            .reduce(harnessEntry) { url, _ in url.deletingLastPathComponent() }
     }
 
     /// Root directory of one Harness version for an architecture.

@@ -17,6 +17,11 @@ public final class HarnessProfileStore: @unchecked Sendable {
     public static let baseBundle = "@deepseek-ai/dsh-base"
     /// The bundle that must follow ``baseBundle`` for the Web UI to start.
     public static let webBundle = "@deepseek-ai/dsh-web-app"
+    /// The first-party settings bundle mounted by DSH Studio.
+    public static let studioSettingsBundle = "dsh-studio-settings"
+
+    /// Resource directory copied into the active Harness Profile at launch.
+    public static let studioSettingsResourceName = "dsh-studio-settings"
 
     /// The standardized `DSH_HOME` whose `profiles` directory is managed.
     public let dshHome: URL
@@ -203,6 +208,115 @@ public final class HarnessProfileStore: @unchecked Sendable {
         )
         try? persist(next)
         return next
+    }
+
+    /// Installs or refreshes the first-party Studio settings bundle in a Profile.
+    ///
+    /// The package is copied locally from the App bundle, so enabling the settings
+    /// page never depends on npm or network availability. Existing bundle order
+    /// is preserved and the Studio bundle is appended once.
+    public func installStudioSettingsPlugin(
+        from source: URL,
+        runtimeNodeModules: URL? = nil,
+        profileName: String = "web"
+    ) throws {
+        guard Self.isSafeName(profileName),
+              let profile = profile(named: profileName) else {
+            throw HarnessProfileStoreError.notFound
+        }
+        let target = profile.directory
+        try fileManager.createDirectory(at: target, withIntermediateDirectories: true)
+        let sourceManifest = source.appendingPathComponent("package.json")
+        guard isNonSymlinkDirectory(source),
+              isNonSymlinkRegularFile(sourceManifest) else {
+            throw HarnessProfileStoreError.malformedManifest("DSH Studio 设置插件资源无效")
+        }
+
+        let nodeModules = target.appendingPathComponent("node_modules", isDirectory: true)
+        let manifestURL = target.appendingPathComponent("package.json")
+        let staging = nodeModules.appendingPathComponent(
+            ".\(Self.studioSettingsBundle).installing-\(UUID().uuidString)",
+            isDirectory: true
+        )
+        let installed = nodeModules.appendingPathComponent(Self.studioSettingsBundle, isDirectory: true)
+        var backup: URL?
+        var originalManifest: Data?
+        do {
+            try fileManager.createDirectory(at: nodeModules, withIntermediateDirectories: true)
+            originalManifest = try? Data(contentsOf: manifestURL)
+            if fileManager.fileExists(atPath: installed.path) {
+                backup = nodeModules.appendingPathComponent(
+                    ".\(Self.studioSettingsBundle).previous-\(UUID().uuidString)",
+                    isDirectory: true
+                )
+                if let backup { try fileManager.moveItem(at: installed, to: backup) }
+            }
+            try fileManager.copyItem(at: source, to: staging)
+            if let runtimeNodeModules {
+                try copyRuntimePackage(
+                    named: "@deepseek-ai/schemastery",
+                    from: runtimeNodeModules,
+                    into: staging
+                )
+                try copyRuntimePackage(
+                    named: "@deepseek-ai/cosmokit",
+                    from: runtimeNodeModules,
+                    into: staging
+                )
+                try copyRuntimePackage(
+                    named: "@standard-schema/spec",
+                    from: runtimeNodeModules,
+                    into: staging
+                )
+            }
+            try fileManager.moveItem(at: staging, to: installed)
+
+            var manifest: [String: Any]
+            if isNonSymlinkRegularFile(manifestURL) {
+                manifest = try readManifest(at: manifestURL)
+            } else if profileName == Self.defaultProfileName {
+                manifest = [
+                    "name": "dsh-profile-web",
+                    "private": true,
+                    "dependencies": [:],
+                    "dsh": ["profile": ["bundles": [Self.baseBundle, Self.webBundle]]]
+                ]
+            } else {
+                throw HarnessProfileStoreError.malformedManifest("Profile package.json 不存在")
+            }
+            var dsh = (manifest["dsh"] as? [String: Any]) ?? [:]
+            var profileConfig = (dsh["profile"] as? [String: Any]) ?? [:]
+            var bundles = (profileConfig["bundles"] as? [Any])?.compactMap { $0 as? String } ?? []
+            if !bundles.contains(Self.studioSettingsBundle) {
+                bundles.append(Self.studioSettingsBundle)
+            }
+            profileConfig["bundles"] = bundles
+            dsh["profile"] = profileConfig
+            manifest["dsh"] = dsh
+            let manifestData = try JSONSerialization.data(
+                withJSONObject: manifest,
+                options: [.prettyPrinted, .sortedKeys]
+            )
+            try manifestData.write(to: manifestURL, options: .atomic)
+            if let backup { try? fileManager.removeItem(at: backup) }
+        } catch {
+            try? fileManager.removeItem(at: staging)
+            if let backup,
+               !fileManager.fileExists(atPath: installed.path) {
+                try? fileManager.moveItem(at: backup, to: installed)
+            }
+            if let originalManifest {
+                try? originalManifest.write(to: manifestURL, options: .atomic)
+            } else {
+                try? fileManager.removeItem(at: manifestURL)
+            }
+            // A failure that already describes itself is rethrown as it is; wrapping it
+            // again produced "Profile 保存失败：Profile 保存失败：…" in the app log.
+            if let storeError = error as? HarnessProfileStoreError {
+                throw storeError
+            }
+            throw HarnessProfileStoreError.persistenceFailed(error.localizedDescription)
+        }
     }
 
     /// Creates a new profile directory with a minimal launcher manifest.
@@ -403,6 +517,36 @@ public final class HarnessProfileStore: @unchecked Sendable {
 
     private func profileDirectory(name: String) -> URL {
         profilesDirectory.appendingPathComponent(name, isDirectory: true)
+    }
+
+    private func readManifest(at url: URL) throws -> [String: Any] {
+        guard isNonSymlinkRegularFile(url),
+              let data = try? Data(contentsOf: url),
+              let object = try? JSONSerialization.jsonObject(with: data),
+              let manifest = object as? [String: Any] else {
+            throw HarnessProfileStoreError.malformedManifest("Profile package.json 无法解析")
+        }
+        return manifest
+    }
+
+    private func copyRuntimePackage(
+        named name: String,
+        from runtimeNodeModules: URL,
+        into pluginDirectory: URL
+    ) throws {
+        let source = runtimeNodeModules.appendingPathComponent(name, isDirectory: true)
+        guard isNonSymlinkDirectory(source) else {
+            throw HarnessProfileStoreError.persistenceFailed("Runtime 缺少 \(name)")
+        }
+        let target = pluginDirectory.appendingPathComponent(
+            "node_modules/\(name)",
+            isDirectory: true
+        )
+        try fileManager.createDirectory(
+            at: target.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try fileManager.copyItem(at: source, to: target)
     }
 
     private func isNonSymlinkDirectory(_ url: URL) -> Bool {

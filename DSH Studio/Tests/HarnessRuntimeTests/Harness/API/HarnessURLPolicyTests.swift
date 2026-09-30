@@ -27,4 +27,12 @@ final class HarnessURLPolicyTests: XCTestCase {
             )
         )
     }
+
+    /// Only credential-free HTTPS links may leave the embedded Harness page.
+    func testOnlyCredentialFreeHTTPSURLsAreAllowedExternally() {
+        XCTAssertTrue(HarnessURLPolicy.isAllowedExternalHTTPS(URL(string: "https://deepseek.com/docs")!))
+        XCTAssertFalse(HarnessURLPolicy.isAllowedExternalHTTPS(URL(string: "http://deepseek.com/docs")!))
+        XCTAssertFalse(HarnessURLPolicy.isAllowedExternalHTTPS(URL(string: "https://user:password@deepseek.com/docs")!))
+        XCTAssertFalse(HarnessURLPolicy.isAllowedExternalHTTPS(URL(string: "mailto:test@example.com")!))
+    }
 }

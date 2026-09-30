@@ -62,7 +62,17 @@ extension RuntimeProvisioner {
         }
 
         let archive = staging.appendingPathComponent("runtime.tar.gz", isDirectory: false)
-        try await downloader.download(from: artifact.url, to: archive)
+        // The download is minutes long on a first launch, so the step names it and,
+        // when the catalog published one, how large it is.
+        let publishedSize = artifact.size.map {
+            "（\(ByteCountFormatter.string(fromByteCount: Int64($0), countStyle: .file))）"
+        } ?? ""
+        let downloadDetail = "正在下载 Runtime\(publishedSize)…"
+        report(RuntimeProvisioningProgress(fraction: 0, detail: downloadDetail))
+        try await downloader.download(from: artifact.url, to: archive) { [weak self] received, expected in
+            self?.reportDownload(received: received, expected: expected, detail: downloadDetail)
+        }
+        reportStep("正在校验并解包 Runtime…")
         let actualSHA256 = try sha256(at: archive)
         guard actualSHA256 == artifact.sha256 else {
             throw RuntimeProvisioningError.checksumMismatch(

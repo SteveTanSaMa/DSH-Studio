@@ -9,6 +9,8 @@ import XCTest
 struct FixtureDownloader: RuntimeAssetDownloading {
     /// Bytes written to every download destination.
     let data: Data
+    /// Byte counts reported through the progress closure before the file is written.
+    var reportedProgress: [(received: Int64, expected: Int64)] = []
     private let counter = Counter()
 
     /// Number of downloads performed so far.
@@ -23,6 +25,24 @@ struct FixtureDownloader: RuntimeAssetDownloading {
     func download(from url: URL, to destination: URL) async throws {
         counter.increment()
         try data.write(to: destination)
+    }
+
+    /// Reports the configured byte steps, then writes the fixture bytes.
+    ///
+    /// - Parameters:
+    ///   - url: Requested artifact URL; ignored by the fixture.
+    ///   - destination: File that receives the fixture bytes.
+    ///   - onProgress: Receives each configured byte count.
+    /// - Throws: When the fixture bytes cannot be written.
+    func download(
+        from url: URL,
+        to destination: URL,
+        onProgress: (@Sendable (Int64, Int64) -> Void)?
+    ) async throws {
+        for step in reportedProgress {
+            onProgress?(step.received, step.expected)
+        }
+        try await download(from: url, to: destination)
     }
 }
 
@@ -44,21 +64,40 @@ struct CancellableDownloader: RuntimeAssetDownloading {
     }
 }
 
-/// Fakes the two setup commands by writing the files a real run would produce.
+/// Fakes the setup commands by writing the files a real run would produce.
 ///
 /// `tar` invocations get a fake Node.js binary and npm CLI, and `npm ci` gets the
 /// Harness package, the pnpm package, the pnpm shim, and the native `node-pty`
 /// files, so the provisioner's validation runs against a complete tree without a
-/// network.
+/// network. When the fixture includes the native module the Harness session
+/// persistence loads, `npm rebuild` produces its binding and the packaged Node's
+/// module probe is answered by the double.
 final class FixtureCommandRunner: RuntimeCommandRunning, @unchecked Sendable {
     private let fileManager = FileManager.default
     private(set) var invocationCount = 0
+    /// Whether the installed Harness tree contains the native module that has to be
+    /// compiled locally, as the current Harness line does for `fs-ext`.
+    let includesNativeBinding: Bool
+    /// Whether the packaged Node's module probe fails, which must fail the install.
+    let nativeBindingFailsToLoad: Bool
+
+    /// Creates the fixture runner.
+    ///
+    /// - Parameters:
+    ///   - includesNativeBinding: Install an `fs-ext` package during `npm ci`.
+    ///   - nativeBindingFailsToLoad: Answer the packaged Node's module probe with a
+    ///     load failure.
+    init(includesNativeBinding: Bool = false, nativeBindingFailsToLoad: Bool = false) {
+        self.includesNativeBinding = includesNativeBinding
+        self.nativeBindingFailsToLoad = nativeBindingFailsToLoad
+    }
 
     /// Recreates the layout the given command would have produced.
     ///
     /// - Parameters:
     ///   - executable: Command being run; unused.
-    ///   - arguments: Arguments used to tell the extraction and install cases apart.
+    ///   - arguments: Arguments used to tell the extraction, install, rebuild, and
+    ///     module-probe cases apart.
     ///   - currentDirectory: Directory the fixture writes into.
     ///   - environment: Environment for the command; unused.
     /// - Returns: A successful result with empty output.
@@ -70,7 +109,20 @@ final class FixtureCommandRunner: RuntimeCommandRunning, @unchecked Sendable {
         environment: [String: String]
     ) throws -> RuntimeCommandResult {
         invocationCount += 1
-        if arguments.first == "-xzf", let index = arguments.firstIndex(of: "-C"), arguments.indices.contains(index + 1) {
+        if arguments.first == "-e" {
+            // The packaged Node's module probe. A fixture Node cannot really load a
+            // binding, so the double answers for it.
+            return nativeBindingFailsToLoad
+                ? RuntimeCommandResult(status: 1, stdout: "", stderr: "dlopen(fs_ext.node) failed\n")
+                : RuntimeCommandResult(status: 0, stdout: "", stderr: "")
+        }
+        if arguments.contains("rebuild") {
+            // `npm rebuild fs-ext` compiles the binding and leaves build material the
+            // install is expected to prune.
+            try writeNativeBinding(in: currentDirectory)
+        } else if arguments.first == "-xzf",
+                  let index = arguments.firstIndex(of: "-C"),
+                  arguments.indices.contains(index + 1) {
             let nodeRoot = URL(fileURLWithPath: arguments[index + 1], isDirectory: true)
             let node = nodeRoot.appendingPathComponent("bin/node")
             try fileManager.createDirectory(at: node.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -107,8 +159,36 @@ final class FixtureCommandRunner: RuntimeCommandRunning, @unchecked Sendable {
             let helper = nativeDirectory.appendingPathComponent("spawn-helper")
             try Data("#!/bin/sh\n".utf8).write(to: helper)
             try fileManager.setAttributes([.posixPermissions: NSNumber(value: 0o755)], ofItemAtPath: helper.path)
+
+            if includesNativeBinding {
+                // The package ships no binding, exactly like the real one, so the
+                // install has to compile it.
+                let module = currentDirectory.appendingPathComponent("node_modules/fs-ext", isDirectory: true)
+                try fileManager.createDirectory(at: module, withIntermediateDirectories: true)
+                try Data("{\"name\":\"fs-ext\",\"version\":\"2.1.1\"}".utf8)
+                    .write(to: module.appendingPathComponent("package.json"))
+            }
         }
         return RuntimeCommandResult(status: 0, stdout: "", stderr: "")
+    }
+
+    /// Writes the binding a completed `npm rebuild` produces, plus the material it
+    /// leaves behind.
+    ///
+    /// - Parameter harnessRoot: Harness root the rebuild ran in.
+    /// - Throws: When a fixture file cannot be written.
+    private func writeNativeBinding(in harnessRoot: URL) throws {
+        let build = harnessRoot.appendingPathComponent("node_modules/fs-ext/build", isDirectory: true)
+        let release = build.appendingPathComponent("Release", isDirectory: true)
+        try fileManager.createDirectory(at: release, withIntermediateDirectories: true)
+        try Data("fixture binding".utf8).write(to: release.appendingPathComponent("fs_ext.node"))
+        try Data("object".utf8).write(to: release.appendingPathComponent("fs_ext.o"))
+        try Data("dependency".utf8).write(to: release.appendingPathComponent("fs_ext.d"))
+
+        let objects = build.appendingPathComponent("obj.target/fs-ext/src", isDirectory: true)
+        try fileManager.createDirectory(at: objects, withIntermediateDirectories: true)
+        try Data("object".utf8).write(to: objects.appendingPathComponent("fs-ext.o"))
+        try Data("all:\n".utf8).write(to: build.appendingPathComponent("Makefile"))
     }
 }
 

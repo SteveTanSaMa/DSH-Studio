@@ -5,7 +5,33 @@
 
 import Foundation
 
-/// Abstraction around downloading the pinned Node archive.
+/// Coarse progress of one Runtime installation.
+///
+/// A Runtime artifact is close to 200 MiB, so a first launch spends minutes
+/// downloading before anything can start. This is what the loading surface and the
+/// log report while that happens.
+public struct RuntimeProvisioningProgress: Equatable, Sendable {
+    /// Completion in `0...1`, or `nil` while the current step cannot be measured.
+    ///
+    /// Steps such as extracting an archive or running the dependency install have no
+    /// meaningful percentage, and reporting a fabricated one would make the surface
+    /// look further along than it is.
+    public let fraction: Double?
+    /// User-facing description of the current step.
+    public let detail: String
+
+    /// Creates one progress report.
+    ///
+    /// - Parameters:
+    ///   - fraction: Completion in `0...1`, or `nil` when the step cannot be measured.
+    ///   - detail: User-facing description of the step.
+    public init(fraction: Double?, detail: String) {
+        self.fraction = fraction
+        self.detail = detail
+    }
+}
+
+/// Abstraction around downloading the pinned Node archive and Runtime artifact.
 public protocol RuntimeAssetDownloading: Sendable {
     /// Downloads one pinned artifact to a destination file.
     ///
@@ -14,14 +40,53 @@ public protocol RuntimeAssetDownloading: Sendable {
     ///   - destination: File the artifact is written to.
     /// - Throws: When the download fails or the destination cannot be written.
     func download(from url: URL, to destination: URL) async throws
+
+    /// Downloads one pinned artifact while reporting the bytes received.
+    ///
+    /// - Parameters:
+    ///   - url: Trusted HTTPS artifact URL.
+    ///   - destination: File the artifact is written to.
+    ///   - onProgress: Called with the bytes received and the expected total; the total
+    ///     is `0` when the server sends no length. Passing `nil` reports nothing.
+    /// - Throws: When the download fails or the destination cannot be written.
+    func download(
+        from url: URL,
+        to destination: URL,
+        onProgress: (@Sendable (Int64, Int64) -> Void)?
+    ) async throws
+}
+
+/// Shared behaviour for downloaders.
+public extension RuntimeAssetDownloading {
+    /// Reports nothing, for downloaders that cannot measure progress.
+    ///
+    /// - Parameters:
+    ///   - url: Trusted HTTPS artifact URL.
+    ///   - destination: File the artifact is written to.
+    ///   - onProgress: Ignored.
+    /// - Throws: Whatever the plain download throws.
+    func download(
+        from url: URL,
+        to destination: URL,
+        onProgress: (@Sendable (Int64, Int64) -> Void)?
+    ) async throws {
+        try await download(from: url, to: destination)
+    }
 }
 
 /// Abstraction around the local `tar` and `npm` commands used during setup.
-public protocol RuntimeProvisioning: Sendable {
+public protocol RuntimeProvisioning: AnyObject, Sendable {
     /// Installation root this provisioner owns.
     var root: URL { get }
     /// Architecture the provisioner installs and validates.
     var architecture: String { get }
+    /// Receives coarse progress while this provisioner installs.
+    ///
+    /// The Runtime manager attaches one so the loading surface can report a download
+    /// that takes minutes. A provisioner that installs nothing reports nothing, but it
+    /// still has to hold the handler: a silently dropped assignment would leave the
+    /// surface unable to tell an install apart from a hang.
+    var progressHandler: (@Sendable (RuntimeProvisioningProgress) -> Void)? { get set }
     /// Installs the pinned Runtime when it is missing or invalid.
     ///
     /// - Returns: The installed root, architecture, and manifest.

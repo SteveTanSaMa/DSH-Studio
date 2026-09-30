@@ -14,6 +14,18 @@ import XCTest
 /// page depends on, starts touching app settings that must stay native, or if a
 /// native surface loses a required control.
 final class WebBridgeScriptTests: XCTestCase {
+    /// Repository root, resolved from this file's location.
+    ///
+    /// The plugin package and the Swift sources live in different subtrees, so tests
+    /// that cross between them resolve both from here instead of from the App sources.
+    private var repositoryRoot: URL {
+        var url = URL(fileURLWithPath: #filePath)
+        for _ in 0..<6 {
+            url.deleteLastPathComponent()
+        }
+        return url
+    }
+
     /// The sidebar script resizes the grid and follows later attribute changes.
     func testCollapsedSidebarScriptResizesGridAndTracksAttributeChanges() {
         let source = HarnessLayoutWebBridge.source
@@ -113,277 +125,159 @@ final class WebBridgeScriptTests: XCTestCase {
         XCTAssertTrue(source.contains("z-index: 1200 !important"))
     }
 
-    /// The injected settings bridge must not pin Harness CSS-module hashes.
-    ///
-    /// Harness class names are `<hash>_<local>` and the hash is rebuilt per build:
-    /// 0.1.5-rc.2 shipped `xmPW5W_options` / `TKfhPG_section`, while 0.1.6-alpha.2
-    /// shipped `VOzbGW_options` / `_WvWnq_section`, and two builds of the same
-    /// version differed again. A pinned hash would make the injected section vanish
-    /// silently on the next Harness build.
-    func testAppSettingsBridgeDoesNotPinHarnessCSSModuleHashes() throws {
-        // Only code is inspected: the surrounding comment legitimately names the
-        // stale hashes as documentation of why they must not be used.
-        let code = try appSettingsBridgeLifecycleSource()
-            .split(separator: "\n", omittingEmptySubsequences: false)
-            .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
-            .joined(separator: "\n")
-
-        for staleHash in ["VOzbGW", "_WvWnq", "xmPW5W", "TKfhPG", "I9ZhnW", "BYqExW"] {
-            XCTAssertFalse(code.contains(staleHash), "\(staleHash) pins a build-specific hash")
-        }
-        let source = code
-        XCTAssertTrue(source.contains("modulePrefixOf"), "the module prefix must be derived at runtime")
-        XCTAssertTrue(source.contains(#"[class*="_navList"]"#))
-        XCTAssertTrue(source.contains(#"[class*="_rail"]"#))
-        XCTAssertTrue(source.contains(#"[class*="_options"]"#))
-        XCTAssertTrue(source.contains(#"[class*="_section"]"#))
-    }
-
-    /// The bridge prefers a structure-derived anchor and reports a missing one.
-    ///
-    /// Several Harness packages expose a `*_options` or `*_section` element, so a
-    /// blind first match could attach the section to another package's DOM; and a
-    /// layout change must not look like the settings simply disappeared.
-    func testAppSettingsBridgeResolvesItsAnchorByStructureAndWarnsWhenMissing() throws {
-        let source = try appSettingsBridgeLifecycleSource()
-
-        XCTAssertTrue(source.contains("findOptionsByModule() || findOptionsByShape()"))
-        XCTAssertTrue(
-            source.contains("candidate.querySelector('[class*=\"_section\"]')"),
-            "the shape fallback must require a section child"
-        )
-        XCTAssertTrue(source.contains("anchorWarningSent"))
-        XCTAssertTrue(source.contains("app settings anchor not found"))
-    }
-
-    /// Reads the injected-settings script that re-syncs on navigation.
-    ///
-    /// - Returns: The contents of the lifecycle part of the settings bridge.
-    /// - Throws: When the source file cannot be read.
-    private func appSettingsBridgeLifecycleSource() throws -> String {
-        let sourceRoot = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .appendingPathComponent("Sources/App/Web/SettingsBridge")
-        return try String(
-            contentsOf: sourceRoot.appendingPathComponent("AppSettingsWebBridge+Lifecycle.swift"),
+    /// Settings are provided by the first-party Harness plugin, not DOM injection.
+    func testSettingsAreMountedByFirstPartyPlugin() throws {
+        let plugin = repositoryRoot.appendingPathComponent("Plugins/dsh-studio-settings")
+        let manifest = try String(
+            contentsOf: plugin.appendingPathComponent("package.json"),
             encoding: .utf8
         )
+        let registration = try String(
+            contentsOf: plugin.appendingPathComponent("src/registration.js"),
+            encoding: .utf8
+        )
+        XCTAssertTrue(manifest.contains("\"settings.section\"") == false)
+        XCTAssertTrue(manifest.contains("\"dsh-studio-settings\""))
+        XCTAssertTrue(registration.contains("ctx.slots.inject(\"settings.section\""))
+        XCTAssertTrue(registration.contains("ctx.configForms.whileServed"))
+        XCTAssertFalse(registration.contains("querySelector"))
     }
 
-    /// The WebView bridge projects only Harness's General settings.
+    /// The page's browser bundle ships and registers under the package name.
     ///
-    /// Profile, preset, Runtime, and diagnostics settings belong to the native window
-    /// and must not reappear in the page.
-    func testAppSettingsBridgeProjectsOnlyGeneralSettings() throws {
-        let sourceRoot = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .appendingPathComponent("Sources/App/Web/SettingsBridge")
-        let source = try [
-            "AppSettingsWebBridge.swift",
-            "AppSettingsWebBridge+Behavior.swift",
-            "AppSettingsWebBridge+Styles.swift",
-            "AppSettingsWebBridge+CSS.swift",
-            "AppSettingsWebBridge+Lifecycle.swift"
+    /// Harness's module table keys a bundle by the package name it declares, so a
+    /// missing or renamed `lib/client.js` leaves the settings page silently absent
+    /// from the Harness dialog. The bundle is also required to import React and the
+    /// primitives from the shell's shared table instead of bundling a second copy.
+    func testSettingsPageBundleRegistersUnderItsPackageName() throws {
+        let plugin = repositoryRoot.appendingPathComponent("Plugins/dsh-studio-settings")
+        let manifest = try String(
+            contentsOf: plugin.appendingPathComponent("package.json"),
+            encoding: .utf8
+        )
+        let bundle = try String(
+            contentsOf: plugin.appendingPathComponent("lib/client.js"),
+            encoding: .utf8
+        )
+
+        XCTAssertTrue(manifest.contains("\"./client\": \"./lib/client.js\""))
+        XCTAssertTrue(bundle.contains("__ModuleLoader__.load({id:\"dsh-studio-settings\""))
+        XCTAssertTrue(bundle.hasSuffix("return module.exports;}});\n"))
+        XCTAssertTrue(bundle.contains("require(\"react\")"))
+        XCTAssertTrue(bundle.contains("require(\"@deepseek-ai/dsh-client-ui-primitives\")"))
+        // A marker from the shipped stylesheet: proves the artifact was rebuilt from
+        // the current sources rather than left behind by an earlier build.
+        XCTAssertTrue(bundle.contains("dshStudioSection"))
+    }
+
+    /// Every action the settings page sends has a native handler, and the native side
+    /// adds no action the page cannot reach.
+    func testStudioActionContractIsComplete() throws {
+        let actions = [
+            "profile.list", "profile.create", "profile.select", "profile.delete",
+            "workspace.choose", "data.open", "terminal.open", "logs.open",
+            "preset.import", "preset.export",
+            "runtime.check", "runtime.update", "runtime.rollback",
+            "diagnostics.copy", "diagnostics.export", "preference.sync"
         ]
-        .map { try String(contentsOf: sourceRoot.appendingPathComponent($0), encoding: .utf8) }
-        .joined(separator: "\n")
-        let settingsHandlerSource = try String(
-            contentsOf: sourceRoot
-                .deletingLastPathComponent()
-                .appendingPathComponent("WebView/HarnessWebViewSettingsBridge.swift"),
+        let bridge = try String(
+            contentsOf: repositoryRoot.appendingPathComponent(
+                "DSH Studio/Sources/App/Web/WebView/HarnessWebViewSettingsBridge.swift"
+            ),
+            encoding: .utf8
+        )
+        let bundle = try String(
+            contentsOf: repositoryRoot.appendingPathComponent("Plugins/dsh-studio-settings/lib/client.js"),
             encoding: .utf8
         )
 
-        XCTAssertTrue(source.contains("appSettings.openDataFolder"))
-        XCTAssertTrue(source.contains("appSettings.chooseWorkspace"))
-        XCTAssertFalse(source.contains("appSettings.openTerminal"))
-        XCTAssertFalse(source.contains("appSettings.exportDiagnostics"))
-        XCTAssertFalse(source.contains("appSettings.openLogs"))
-        XCTAssertFalse(source.contains("appSettings.runtimeUpdate"))
-        XCTAssertFalse(source.contains("appSettings.createProfile"))
-        XCTAssertFalse(source.contains("appSettings.selectProfile"))
-        XCTAssertFalse(source.contains("appSettings.importPreset"))
-        XCTAssertFalse(source.contains("appSettings.exportPreset"))
-        XCTAssertFalse(source.contains("latestHarnessVersion"))
-        XCTAssertFalse(source.contains("harnessProfiles"))
-        XCTAssertFalse(source.contains("agentPresets"))
-        XCTAssertTrue(source.contains("placeholder=\"748–2400\""))
-        XCTAssertTrue(source.contains("选择工作区"))
-        XCTAssertTrue(source.contains("data-app-i18n=\"dataFolder\">数据文件夹"))
-        XCTAssertLessThan(
-            source.range(of: "data-app-i18n=\"workspace\"")!.lowerBound,
-            source.range(of: "data-app-i18n=\"dataFolder\"")!.lowerBound
-        )
-        XCTAssertFalse(source.contains("workspaceDetail"))
-        XCTAssertTrue(source.contains("dsh-studio-app-settings-section-divider"))
-        XCTAssertTrue(source.contains("border-bottom: 1px solid var(--dsw-alias-border-l2)"))
-        XCTAssertTrue(source.contains("const messages ="))
-        XCTAssertTrue(source.contains("Chat content width"))
-        XCTAssertTrue(source.contains("data-app-i18n=\"notifications\">通知"))
-        XCTAssertTrue(source.contains("data-app-i18n=\"turnCompletionNotification\">轮次完成通知"))
-        XCTAssertTrue(source.contains("设置 DSH Studio 完成后何时提醒您"))
-        XCTAssertTrue(source.contains("Choose when to be notified after DSH Studio finishes"))
-        XCTAssertTrue(source.contains("data-app-i18n=\"permissionNotifications\">启用权限通知"))
-        XCTAssertTrue(source.contains("在需要通知权限时显示提醒"))
-        XCTAssertTrue(source.contains("data-app-i18n=\"questionNotifications\">启用问题通知"))
-        XCTAssertTrue(source.contains("需要输入才能继续时显示提醒"))
-        XCTAssertTrue(source.contains("createGeneralBlock"))
-        XCTAssertTrue(source.contains("attachGeneralBlock"))
-        XCTAssertTrue(source.contains("dataset.slot = \"settings.general.item\""))
-        XCTAssertFalse(source.contains("settings.section"))
-        XCTAssertFalse(source.contains("dsh-studio-settings-nav"))
-        XCTAssertFalse(source.contains("deepseekStudioSettingsSection"))
-        XCTAssertFalse(source.contains("data-deepseek-studio-settings-content-active"))
-        XCTAssertFalse(source.contains("createStudioBlock"))
-        XCTAssertFalse(source.contains("studioBlock"))
-        XCTAssertFalse(source.contains("settingsSectionIds"))
-        XCTAssertTrue(source.contains("dsh-studio-app-settings-notification-row"))
-        XCTAssertTrue(source.contains("dsh-studio-app-settings-notification-row-last"))
-        XCTAssertTrue(source.contains("width: 52px;"))
-        XCTAssertTrue(source.contains("height: 36px;"))
-        XCTAssertTrue(source.contains("width: 32px;"))
-        XCTAssertTrue(source.contains("height: 20px;"))
-        XCTAssertTrue(source.contains("width: 16px;"))
-        XCTAssertTrue(source.contains("height: 16px;"))
-        XCTAssertTrue(source.contains("transform: translateX(12px);"))
-        XCTAssertTrue(source.contains("turnCompletionNotification"))
-        XCTAssertTrue(source.contains("permissionNotificationsEnabled"))
-        XCTAssertTrue(source.contains("questionNotificationsEnabled"))
-        XCTAssertTrue(source.contains("role=\"switch\""))
-        XCTAssertTrue(source.contains("aria-haspopup=\"listbox\""))
-        XCTAssertTrue(source.contains("data-app-option=\"whenNotFocused\""))
-        XCTAssertFalse(source.contains("<select"))
-        XCTAssertFalse(source.contains("type=\"checkbox\""))
-        XCTAssertTrue(source.contains("whenNotFocused"))
-        XCTAssertTrue(source.contains("仅在未聚焦时"))
-        XCTAssertTrue(source.contains("document.documentElement?.lang"))
-        XCTAssertTrue(source.contains("attributeFilter: [\"lang\", \"class\"]"))
-        XCTAssertTrue(source.contains("工作区"))
-        XCTAssertTrue(source.contains("数据文件夹"))
-        XCTAssertTrue(source.contains("data-app-i18n=\"notifications\">通知"))
-        XCTAssertFalse(source.contains("dsh-studio-app-settings-version-actions"))
-        XCTAssertFalse(source.contains("dsh-studio-app-settings-resource-list"))
-        XCTAssertFalse(source.contains("dsh-studio-app-settings-status-badge"))
-        XCTAssertFalse(settingsHandlerSource.contains("case \"appSettings.openTerminal\":"))
-        XCTAssertFalse(settingsHandlerSource.contains("terminal-open-failed"))
-        XCTAssertFalse(settingsHandlerSource.contains("Agent Preset 已导入"))
-        XCTAssertFalse(settingsHandlerSource.contains("Agent Preset 已导出"))
-        XCTAssertFalse(settingsHandlerSource.contains("copyDiagnostics"))
-
+        for action in actions {
+            XCTAssertTrue(bridge.contains("case \"\(action)\""), "no native handler for \(action)")
+            XCTAssertTrue(bundle.contains("\"\(action)\""), "settings page never sends \(action)")
+        }
     }
 
-    /// The native settings scene owns every app-level setting.
-    func testNativeSettingsSceneOwnsAppLevelSettings() throws {
+    /// The page's message handler is registered with the content controller.
+    ///
+    /// `window.webkit.messageHandlers.<name>` only exists once the WebView adds the
+    /// coordinator to its user content controller, so a missing registration turns
+    /// every native operation into an instant "bridge unavailable" failure.
+    func testNativeBridgeRegistersTheScriptMessageHandler() throws {
+        let sourceURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/App/Web/HarnessWebView.swift")
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+
+        XCTAssertTrue(source.contains("configuration.userContentController.add("))
+        XCTAssertTrue(source.contains("name: PluginMarketRestartWebBridge.messageHandlerName"))
+        XCTAssertTrue(source.contains("removeScriptMessageHandler(forName: PluginMarketRestartWebBridge.messageHandlerName)"))
+    }
+
+    /// The app menu opens Harness's own settings dialog rather than a native window.
+    func testSettingsMenuCommandPressesTheHarnessTrigger() throws {
         let sourceRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .deletingLastPathComponent()
-            .appendingPathComponent("Sources/App")
-        let appSource = try String(
-            contentsOf: sourceRoot.appendingPathComponent("Core/DeepSeekHarnessSliceApp.swift"),
+            .appendingPathComponent("Sources")
+        let behavior = try String(
+            contentsOf: sourceRoot.appendingPathComponent("Harness/Web/Layout/HarnessLayoutWebBridge+Behavior.swift"),
             encoding: .utf8
         )
-        let settingsSource = try String(
-            contentsOf: sourceRoot.appendingPathComponent("Core/AppSettingsView.swift"),
+        let webView = try String(
+            contentsOf: sourceRoot.appendingPathComponent("App/Web/HarnessWebView.swift"),
             encoding: .utf8
         )
 
-        XCTAssertTrue(appSource.contains("Settings {"))
-        XCTAssertTrue(appSource.contains("AppSettingsView(model: AppDelegate.sharedModel)"))
-        XCTAssertTrue(settingsSource.contains("Harness Profiles"))
-        XCTAssertTrue(settingsSource.contains("Agent Presets"))
-        XCTAssertTrue(settingsSource.contains("Runtime"))
-        XCTAssertTrue(settingsSource.contains("诊断与工具"))
+        XCTAssertTrue(behavior.contains("__deepseekStudioOpenSettings"))
+        XCTAssertTrue(behavior.contains("[data-slot=\"sidebar.settings\"]"))
+        XCTAssertTrue(behavior.contains("[data-shortcut-modal=\"settings\"]"))
+        XCTAssertTrue(behavior.contains("trigger.click()"))
+        XCTAssertTrue(webView.contains("__deepseekStudioOpenSettings"))
     }
 
-    /// Guards the Settings window contract.
-    ///
-    /// One sidebar category per concern, the macOS 26 settings metrics (46pt rows,
-    /// 12pt group radius, 13/11pt type) with no decoration layered on top, and no
-    /// setting that Harness's own settings page already projects.
-    func testSettingsWindowUsesSystemSettingsMetricsAndNativeControls() throws {
-        let appRoot = URL(fileURLWithPath: #filePath)
+    /// The chat width preference is replayed into every freshly loaded page.
+    func testChatContentWidthIsReplayedIntoLoadedPages() throws {
+        let sourceRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .deletingLastPathComponent()
-            .appendingPathComponent("Sources/App")
-        let source = try [
-            "Core/AppSettingsView.swift",
-            "Core/Settings/SettingsDesign.swift",
-            "Core/Settings/AppSettingsView+Profiles.swift",
-            "Core/Settings/AppSettingsView+Presets.swift",
-            "Core/Settings/AppSettingsView+Runtime.swift",
-            "Core/Settings/AppSettingsView+Diagnostics.swift"
-        ]
-        .map { try String(contentsOf: appRoot.appendingPathComponent($0), encoding: .utf8) }
-        .joined(separator: "\n")
+            .appendingPathComponent("Sources")
+        let webView = try String(
+            contentsOf: sourceRoot.appendingPathComponent("App/Web/HarnessWebView.swift"),
+            encoding: .utf8
+        )
+        let navigation = try String(
+            contentsOf: sourceRoot.appendingPathComponent("App/Web/WebView/HarnessWebViewNavigation.swift"),
+            encoding: .utf8
+        )
 
-        // Only the categories this app owns appear in the sidebar.
-        for pane in ["case profiles", "case presets", "case runtime", "case diagnostics"] {
-            XCTAssertTrue(source.contains(pane), "missing settings pane \(pane)")
-        }
-        XCTAssertTrue(source.contains("NavigationSplitView"))
-        XCTAssertTrue(source.contains(".listStyle(.sidebar)"))
-        XCTAssertTrue(source.contains(".navigationTitle(activePane.title)"))
-        XCTAssertTrue(source.contains("SettingsGroup("))
+        XCTAssertTrue(webView.contains("applyChatContentMaxWidthOnLiveWebViews"))
+        XCTAssertTrue(webView.contains("__deepseekStudioSetChatContentMaxWidth"))
+        XCTAssertTrue(navigation.contains("__deepseekStudioSetChatContentMaxWidth"))
+        XCTAssertTrue(navigation.contains("model.settings.chatContentMaxWidth"))
+    }
 
-        // Preferences that Harness's own settings page already projects are not
-        // duplicated in the native window: one setting, one home.
-        for duplicated in ["chatContentMaxWidth", "workspaceURL", "currentDataHomeURL",
-                           "turnCompletionNotification", "permissionNotificationsEnabled",
-                           "questionNotificationsEnabled"] {
-            XCTAssertFalse(
-                source.contains(duplicated),
-                "\(duplicated) belongs to Harness's settings page, not the native window"
-            )
-        }
-
-        // macOS 26 settings surface metrics.
-        XCTAssertTrue(source.contains("static let rowMinHeight: CGFloat = 46"))
-        XCTAssertTrue(source.contains("static let groupCornerRadius: CGFloat = 12"))
-        XCTAssertTrue(source.contains("static let titleFont = Font.body.weight(.medium)"))
-        XCTAssertTrue(source.contains("static let detailFont = Font.subheadline"))
-        XCTAssertTrue(source.contains("static let headerFont = Font.subheadline.weight(.bold)"))
-        XCTAssertTrue(source.contains(".fill(SettingsDesign.groupFill)"))
-
-        // The group surface follows the effective appearance instead of being
-        // frozen to the one that was current when the value was created.
-        XCTAssertTrue(source.contains("static let groupFill = adaptive("))
-        XCTAssertTrue(source.contains("static let separator = adaptive("))
-
-        // Every row action shares one width, and the sidebar cannot be collapsed.
-        XCTAssertTrue(source.contains("static let actionButtonLabelWidth"))
-        XCTAssertTrue(source.contains("frame(minWidth: SettingsDesign.actionButtonLabelWidth)"))
-        XCTAssertTrue(source.contains("SettingsWindowConfigurator"))
-        XCTAssertTrue(source.contains("itemIdentifier == .toggleSidebar"))
-        XCTAssertTrue(source.contains("window.toolbarStyle = .unified"))
-
-        // Destructive removal is confirmed and unreachable for the default profile.
-        XCTAssertTrue(source.contains("case confirmProfileDeletion"))
-        XCTAssertTrue(source.contains("canDeleteCurrentProfile"))
-        XCTAssertTrue(source.contains("HarnessProfileStore.defaultProfileName"))
-
-        // Hierarchy comes from spacing, type, and one low-contrast fill.
-        XCTAssertFalse(source.contains("LinearGradient"))
-        XCTAssertFalse(source.contains(".shadow("))
-        XCTAssertFalse(source.contains(".borderedProminent"))
-        XCTAssertFalse(source.contains(".glassEffect("))
-        XCTAssertFalse(source.contains("NSVisualEffectView"))
-
-        // The window still opens on a category this app owns.
-        XCTAssertTrue(source.contains("initialPane: SettingsPane = .profiles"))
+    /// There is no independent native Settings scene or command fallback.
+    func testNativeSettingsSurfaceIsRemoved() throws {
+        let sourceURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/App/Core/DeepSeekHarnessSliceApp.swift")
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+        XCTAssertFalse(source.contains("Settings {"))
+        XCTAssertFalse(source.contains("showSettingsWindow"))
+        XCTAssertFalse(source.contains("CommandGroup(replacing: .appSettings)"))
+        XCTAssertTrue(source.contains("openSettingsOnLiveWebViews"))
     }
 
     /// The app menu covers the expected App, File, View, and Help actions.
@@ -397,7 +291,8 @@ final class WebBridgeScriptTests: XCTestCase {
             .appendingPathComponent("Sources/App/Core/DeepSeekHarnessSliceApp.swift")
         let source = try String(contentsOf: sourceURL, encoding: .utf8)
 
-        XCTAssertTrue(source.contains("Settings {"))
+        XCTAssertTrue(source.contains("keyboardShortcut(\",\", modifiers: [.command])"))
+        XCTAssertTrue(source.contains("openSettingsOnLiveWebViews"))
         XCTAssertFalse(source.contains("CommandMenu(\"DSH Studio\")"))
         XCTAssertTrue(source.contains("检查 Runtime 更新"))
         XCTAssertTrue(source.contains("打开 DSH 终端"))
@@ -437,6 +332,24 @@ final class WebBridgeScriptTests: XCTestCase {
         XCTAssertTrue(webViewSource.contains("reloadLiveWebViews"))
         XCTAssertTrue(webViewSource.contains("toggleSidebarOnLiveWebViews"))
         XCTAssertTrue(webViewSource.contains("evaluateJavaScript"))
+    }
+
+    /// Web Inspector access stays behind a native, explicitly controlled WebKit flag.
+    func testWebViewInspectionUsesPublicInspectableFlag() throws {
+        let sourceURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/App/Web/HarnessWebView.swift")
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+
+        XCTAssertTrue(source.contains("#if DEBUG"))
+        XCTAssertTrue(source.contains("defaultWebInspectionEnabled = false"))
+        XCTAssertTrue(source.contains("webView.isInspectable = Self.webInspectionEnabled"))
+        XCTAssertTrue(source.contains("$0.value?.isInspectable = enabled"))
+        XCTAssertFalse(source.contains("setValue(true, forKey: \"developerExtrasEnabled\")"))
     }
 
     /// The market's restart is routed through the app-owned Runtime.
@@ -481,6 +394,25 @@ final class WebBridgeScriptTests: XCTestCase {
         XCTAssertTrue(source.contains("width: 100% !important"))
         XCTAssertTrue(source.contains("max-width: 100% !important"))
         XCTAssertTrue(source.contains("box-sizing: border-box !important"))
+    }
+
+    /// Nested Harness scrollports keep their own boundaries without global event interception.
+    func testNestedScrollportsIsolateOverscroll() {
+        let source = HarnessLayoutWebBridge.source
+
+        XCTAssertTrue(source.contains("[data-conversation-scroll]"))
+        XCTAssertTrue(source.contains("overscroll-behavior-y: none !important"))
+        XCTAssertTrue(source.contains("[data-input-scroll]"))
+        XCTAssertTrue(source.contains("overscroll-behavior-y: contain !important"))
+        XCTAssertTrue(source.contains("inputScrollSelector"))
+        XCTAssertTrue(source.contains("installInputScrollBoundaryGuard"))
+        XCTAssertTrue(source.contains("element.addEventListener(\"wheel\""))
+        XCTAssertTrue(source.contains("capture: true"))
+        XCTAssertTrue(source.contains("stopImmediatePropagation()"))
+        XCTAssertTrue(source.contains("syncInputScrollBoundaryGuards"))
+        XCTAssertFalse(source.contains("preventDefault"))
+        XCTAssertFalse(source.contains("document.addEventListener(\"wheel\""))
+        XCTAssertFalse(source.contains("window.addEventListener(\"wheel\""))
     }
 
     /// The export script suppresses only Harness's own download feedback.

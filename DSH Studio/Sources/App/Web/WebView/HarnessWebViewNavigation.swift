@@ -3,6 +3,7 @@
 //  DSH Studio
 //
 
+import AppKit
 import DeepSeekHarness
 import DeepSeekLogging
 import Foundation
@@ -25,8 +26,9 @@ extension HarnessWebView.Coordinator: WKNavigationDelegate, WKUIDelegate {
             decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
         ) {
             // Session export is the one Harness download handled natively. The
-            // embedded UI is loopback-only, so external navigations are
-            // cancelled instead of escaping to the system browser.
+            // The embedded UI is loopback-only. Safe user-activated HTTPS links
+            // may leave through the system browser; all other external navigation
+            // remains cancelled here.
             guard let url = navigationAction.request.url else {
                 decisionHandler(.cancel)
                 return
@@ -43,6 +45,10 @@ extension HarnessWebView.Coordinator: WKNavigationDelegate, WKUIDelegate {
             if isAllowed(url) {
                 decisionHandler(.allow)
                 return
+            }
+            if navigationAction.navigationType == .linkActivated,
+               HarnessURLPolicy.isAllowedExternalHTTPS(url) {
+                NSWorkspace.shared.open(url)
             }
             decisionHandler(.cancel)
         }
@@ -76,7 +82,8 @@ extension HarnessWebView.Coordinator: WKNavigationDelegate, WKUIDelegate {
             }
         }
 
-        /// Refuses to create new windows: Harness runs inside the single app WebView.
+        /// Opens safe external links in the system browser instead of creating a second
+        /// embedded page that could inherit the Harness session boundary.
         ///
         /// - Parameters:
         ///   - webView: WebView requesting the new window.
@@ -90,6 +97,10 @@ extension HarnessWebView.Coordinator: WKNavigationDelegate, WKUIDelegate {
             for navigationAction: WKNavigationAction,
             windowFeatures: WKWindowFeatures
         ) -> WKWebView? {
+            if let url = navigationAction.request.url,
+               HarnessURLPolicy.isAllowedExternalHTTPS(url) {
+                NSWorkspace.shared.open(url)
+            }
             return nil
         }
 
@@ -106,7 +117,7 @@ extension HarnessWebView.Coordinator: WKNavigationDelegate, WKUIDelegate {
             }
         }
 
-        /// Resets the reload budget and publishes the current settings to the page.
+        /// Resets the reload budget and replays the app-owned layout values.
         ///
         /// - Parameters:
         ///   - webView: WebView that finished loading.
@@ -114,7 +125,12 @@ extension HarnessWebView.Coordinator: WKNavigationDelegate, WKUIDelegate {
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             reloadAttempts = 0
             self.webView = webView
-            broadcastAppSettingsState()
+            // The injected layout script only publishes the setter, while the value
+            // itself stays in the app's settings, so every completed load replays it.
+            let width = model.settings.chatContentMaxWidth
+            webView.evaluateJavaScript(
+                "window.__deepseekStudioSetChatContentMaxWidth && window.__deepseekStudioSetChatContentMaxWidth(\(width));"
+            )
         }
 
 }

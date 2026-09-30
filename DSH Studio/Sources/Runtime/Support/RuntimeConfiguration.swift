@@ -31,6 +31,11 @@ public struct RuntimeConfiguration: Sendable, Equatable {
     /// Seconds to wait for the ready line before the launch is failed.
     public var startupTimeout: TimeInterval
     /// Seconds a graceful shutdown may take before the process is killed.
+    ///
+    /// The Runtime publication pipeline holds Harness to the same budget: its
+    /// smoke test fails when the process does not exit within ten seconds of
+    /// `SIGTERM`, because that is how the app stops the Runtime. Killing sooner
+    /// would cut a Harness short while it is still flushing session persistence.
     public var gracefulTimeout: TimeInterval
     /// Seconds allowed for one HTTP health-check request.
     public var healthCheckTimeout: TimeInterval
@@ -68,7 +73,7 @@ public struct RuntimeConfiguration: Sendable, Equatable {
         pnpmExecutable: URL? = nil,
         port: String = "0",
         startupTimeout: TimeInterval = 90,
-        gracefulTimeout: TimeInterval = 6,
+        gracefulTimeout: TimeInterval = 10,
         healthCheckTimeout: TimeInterval = 5,
         environment: [String: String] = [:],
         expectedNodeVersion: String = "24.19.0",

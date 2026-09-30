@@ -25,3 +25,10 @@ xcuserdata/
 
 # Local analysis and design notes
 /docs/
+
+# Local working notes kept out of the published history
+/COMMENT_MIGRATION.md
+/COMMENT_MIGRATION.diff
+
+# Local assistant and tooling state
+/.commandcode/

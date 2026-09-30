@@ -20,13 +20,33 @@ public final class PluginMarketManager: ObservableObject {
 
     /// The Runtime whose profile and process this manager drives.
     public let runtime: RuntimeManager
-    /// A store resolved against the current Runtime data home.
+    /// The market version this Runtime's release pins.
     ///
-    /// Runtime updates can activate an isolated `DSH_HOME`, so retaining one store
-    /// instance would make later market operations mutate the previous data profile.
+    /// The Runtime decides: a release that publishes its own market pin is honored,
+    /// and the app's compiled-in version is only the last resort. That is what lets a
+    /// Runtime update move the market with it instead of requiring an app release.
+    public var pin: RuntimePluginPin {
+        Self.pin(for: runtime)
+    }
+
+    /// The market pin a Runtime's release publishes, or the app's fallback.
+    ///
+    /// - Parameter runtime: Runtime whose release record is read.
+    /// - Returns: The pin to install and validate against.
+    static func pin(for runtime: RuntimeManager) -> RuntimePluginPin {
+        let status = runtime.runtimeVersionStatus
+        return PluginMarketRelease.pin(installed: status?.installed, available: status?.available)
+    }
+
+    /// A store resolved against the current Runtime data home and market pin.
+    ///
+    /// Runtime updates can activate an isolated `DSH_HOME` and a new market pin, so
+    /// retaining one store instance would make later operations mutate the previous
+    /// data profile against the previous pin.
     public var profileStore: PluginMarketProfileStore {
         PluginMarketProfileStore(
             dshHome: runtime.configuration.dshHome,
+            pin: pin,
             fileManager: fileManager
         )
     }
@@ -63,11 +83,15 @@ public final class PluginMarketManager: ObservableObject {
             .appendingPathComponent("last-operation.json", isDirectory: false)
         self.state = PluginMarketState(
             installState: .checking,
-            compatibleHarness: Self.isHarnessCompatible(runtime),
+            requestedVersion: Self.pin(for: runtime).version,
+            compatibleHarness: Self.isHarnessCompatible(runtime, pin: Self.pin(for: runtime)),
             profileDirectory: PluginMarketProfileStore(
                 dshHome: runtime.configuration.dshHome,
+                pin: Self.pin(for: runtime),
                 fileManager: fileManager
             ).profileDirectory.path,
+            source: PluginMarketRelease.sourceDescription(for: Self.pin(for: runtime)),
+            integrity: Self.pin(for: runtime).integrity,
             lastOperation: Self.loadOperationRecord(
                 from: self.operationRecordURL,
                 fileManager: fileManager
@@ -92,7 +116,8 @@ public final class PluginMarketManager: ObservableObject {
         guard isSupportedProfile else {
             state = PluginMarketState(
                 installState: .unavailable,
-                compatibleHarness: Self.isHarnessCompatible(runtime),
+                requestedVersion: pin.version,
+                compatibleHarness: Self.isHarnessCompatible(runtime, pin: pin),
                 enabled: false,
                 busy: false,
                 profileDirectory: profileStore.profileDirectory.path,
@@ -105,13 +130,17 @@ public final class PluginMarketManager: ObservableObject {
         let retainedOperationError = record?.succeeded == false ? state.statusError : nil
         do {
             let inspection = try profileStore.inspect()
-            let compatibleHarness = Self.isHarnessCompatible(runtime)
+            let compatibleHarness = Self.isHarnessCompatible(
+                runtime,
+                pin: pin,
+                declaredRange: inspection.declaredHarnessRange
+            )
             let hasMarketFootprint = inspection.dependencySpec != nil
                 || inspection.bundleListed
                 || inspection.installedVersion != nil
                 || (inspection.packageJSONPresent && !inspection.packageManifestValid)
-            let installed = inspection.dependencySpec == PluginMarketRelease.packageVersion
-                && inspection.installedVersion == PluginMarketRelease.packageVersion
+            let installed = inspection.dependencySpec == pin.version
+                && inspection.installedVersion == pin.version
             let packageValid = installed
                 && inspection.packageManifestValid
                 && inspection.bundleListed
@@ -131,7 +160,7 @@ public final class PluginMarketManager: ObservableObject {
                     marketVersion = status.version
                     statusError = status.error
                     if let updates = try? await httpClient.updates(baseURL: baseURL) {
-                        let own = updates.updates[PluginMarketRelease.packageName]
+                        let own = updates.updates[pin.package]
                             ?? updates.updates["dsh-market"]
                         latestVersion = own?.latest
                         updateAvailable = own?.updateAvailable == true
@@ -160,6 +189,7 @@ public final class PluginMarketManager: ObservableObject {
 
             state = PluginMarketState(
                 installState: installState,
+                requestedVersion: pin.version,
                 installedVersion: inspection.installedVersion,
                 latestVersion: latestVersion ?? marketVersion,
                 updateAvailable: updateAvailable,
@@ -168,16 +198,21 @@ public final class PluginMarketManager: ObservableObject {
                 routeAvailable: routeAvailable,
                 busy: isBusy,
                 profileDirectory: profileStore.profileDirectory.path,
+                source: PluginMarketRelease.sourceDescription(for: pin),
+                integrity: pin.integrity,
                 statusError: statusError ?? retainedOperationError,
                 lastOperation: record
             )
         } catch {
             state = PluginMarketState(
                 installState: .unavailable,
-                compatibleHarness: Self.isHarnessCompatible(runtime),
+                requestedVersion: pin.version,
+                compatibleHarness: Self.isHarnessCompatible(runtime, pin: pin),
                 enabled: false,
                 busy: isBusy,
                 profileDirectory: profileStore.profileDirectory.path,
+                source: PluginMarketRelease.sourceDescription(for: pin),
+                integrity: pin.integrity,
                 statusError: error.localizedDescription,
                 lastOperation: record
             )
@@ -194,7 +229,7 @@ public final class PluginMarketManager: ObservableObject {
             guard let self else { return }
             try await self.runPluginCommand([
                 "add",
-                "\(PluginMarketRelease.packageName)@\(PluginMarketRelease.packageVersion)",
+                "\(self.pin.package)@\(self.pin.version)",
                 "--save-exact",
             ])
             _ = try self.profileStore.validateExpectedInstallation()
@@ -228,7 +263,7 @@ public final class PluginMarketManager: ObservableObject {
             guard let self else { return }
             try await self.runPluginCommand([
                 "add",
-                "\(PluginMarketRelease.packageName)@\(PluginMarketRelease.packageVersion)",
+                "\(self.pin.package)@\(self.pin.version)",
                 "--save-exact",
             ])
             _ = try self.profileStore.validateExpectedInstallation()
@@ -244,7 +279,7 @@ public final class PluginMarketManager: ObservableObject {
             guard let self else { return }
             try await self.runPluginCommand([
                 "add",
-                "\(PluginMarketRelease.packageName)@\(PluginMarketRelease.packageVersion)",
+                "\(self.pin.package)@\(self.pin.version)",
                 "--save-exact",
             ])
             _ = try self.profileStore.validateExpectedInstallation()
@@ -286,7 +321,7 @@ public final class PluginMarketManager: ObservableObject {
     public func uninstall() async throws {
         try await perform(.uninstall) { [weak self] in
             guard let self else { return }
-            try await self.runPluginCommand(["remove", PluginMarketRelease.packageName])
+            try await self.runPluginCommand(["remove", self.pin.package])
             try self.profileStore.removeMarketEntry()
             try self.profileStore.validateMarketAbsent()
         }
@@ -296,9 +331,10 @@ public final class PluginMarketManager: ObservableObject {
     public func diagnostics() async -> String {
         var lines = [
             "DSH Studio Plugin Market",
-            "Package: \(PluginMarketRelease.packageName)@\(PluginMarketRelease.packageVersion)",
-            "Source: \(PluginMarketRelease.sourceDescription)",
-            "Integrity: \(PluginMarketRelease.packageIntegrity)",
+            "Package: \(pin.package)@\(pin.version)",
+            "Source: \(PluginMarketRelease.sourceDescription(for: pin))",
+            "Integrity: \(pin.integrity)",
+            "Compatible Harness: \(pin.harnessRange ?? state.installState.rawValue)",
             "Profile: \(profileStore.profileDirectory.path)",
             "Harness: \(runtime.harnessVersion ?? "unknown")",
             "Runtime state: \(runtime.state)",
@@ -412,26 +448,42 @@ public final class PluginMarketManager: ObservableObject {
         if let operationError { throw operationError }
     }
 
-    /// Whether an installed Harness matches the version its installation declares.
+    /// Whether the market can run on the Harness this Runtime installed.
     ///
-    /// The comparison is against the Runtime's own manifest rather than a version
-    /// compiled into the app, so the market keeps working as the Runtime moves ahead
-    /// of the app's fallback pin. A mismatch still means the installation is
-    /// inconsistent, which is why it is reported instead of ignored.
+    /// The market declares the Harness versions it supports through its own
+    /// `peerDependencies`; a pin published by the Runtime carries the same declaration,
+    /// so the verdict does not depend on the package being installed first, and never
+    /// compares the installed Harness against a version compiled into the app. A range
+    /// the app cannot read is not a rejection.
     ///
-    /// - Parameter runtime: Runtime whose installed Harness is compared.
-    /// - Returns: `true` when the installed version matches the declared one.
-    private static func isHarnessCompatible(_ runtime: RuntimeManager) -> Bool {
-        runtime.harnessVersion == runtime.configuration.expectedHarnessVersion
+    /// - Parameters:
+    ///   - runtime: Runtime whose installed Harness is judged.
+    ///   - pin: Market pin being considered.
+    ///   - declaredRange: Range the installed package declares, when it is present.
+    /// - Returns: `true` unless a readable range excludes the installed Harness.
+    private static func isHarnessCompatible(
+        _ runtime: RuntimeManager,
+        pin: RuntimePluginPin,
+        declaredRange: String? = nil
+    ) -> Bool {
+        let declared = runtime.configuration.expectedHarnessVersion
+        let running = runtime.harnessVersion ?? declared
+        // An installation whose Harness disagrees with its own record is mid-repair, and
+        // answering "is this supported" about either version would be a guess.
+        guard running == declared else { return false }
+        return PluginMarketRelease.isCompatible(
+            harness: running,
+            pin: pin,
+            declaredRange: declaredRange
+        )
     }
 
     private func validateHarness() throws {
-        guard Self.isHarnessCompatible(runtime) else {
-            let actual = runtime.harnessVersion
-            let expected = runtime.configuration.expectedHarnessVersion
+        let declaredRange = (try? profileStore.inspect())?.declaredHarnessRange
+        guard Self.isHarnessCompatible(runtime, pin: pin, declaredRange: declaredRange) else {
             throw PluginMarketManagerError.incompatibleHarness(
-                expected: expected,
-                actual: actual
+                expected: pin.harnessRange ?? declaredRange ?? "未知版本范围",
+                actual: runtime.harnessVersion ?? runtime.configuration.expectedHarnessVersion
             )
         }
         guard fileManager.isExecutableFile(atPath: runtime.configuration.nodeExecutable.path),

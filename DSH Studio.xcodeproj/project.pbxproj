@@ -92,6 +92,7 @@
 		D5A7F0050000000000000005 /* DSH Studio/Tests/HarnessRuntimeTests */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = "DSH Studio/Tests/HarnessRuntimeTests"; sourceTree = "<group>"; };
 		D5A7F0060000000000000006 /* DSH Studio/Sources/App/Settings */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = "DSH Studio/Sources/App/Settings"; sourceTree = "<group>"; };
 		D5A7F0070000000000000007 /* DSH Studio/Sources/App/Notifications */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = "DSH Studio/Sources/App/Notifications"; sourceTree = "<group>"; };
+		D5A7F0080000000000000008 /* DSH Studio/Sources/App/Appearance */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = "DSH Studio/Sources/App/Appearance"; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -134,6 +135,7 @@
 			isa = PBXGroup;
 			children = (
 				D5A7F0010000000000000001 /* DSH Studio/Sources/App */,
+				D5A7F0080000000000000008 /* DSH Studio/Sources/App/Appearance */,
 				D5A7F0020000000000000002 /* DSH Studio/Sources/Harness */,
 				D5A7F0030000000000000003 /* DSH Studio/Sources/Logging */,
 				D5A7F0040000000000000004 /* DSH Studio/Sources/Runtime */,
@@ -183,6 +185,7 @@
 			buildPhases = (
 				D2082AA1957DB0452F105B41 /* Sources */,
 				BF8071051E1016E410A42867 /* Frameworks */,
+				1A7E5A110000000000000001 /* Prepare DSH Studio settings plugin */,
 				D5A7E0010000000000000001 /* Resources */,
 			);
 			buildRules = (
@@ -194,6 +197,7 @@
 			);
 			fileSystemSynchronizedGroups = (
 				D5A7F0010000000000000001 /* DSH Studio/Sources/App */,
+				D5A7F0080000000000000008 /* DSH Studio/Sources/App/Appearance */,
 			);
 			name = "DSH Studio";
 			packageProductDependencies = (
@@ -241,6 +245,7 @@
 				D5A7F0050000000000000005 /* DSH Studio/Tests/HarnessRuntimeTests */,
 				D5A7F0060000000000000006 /* DSH Studio/Sources/App/Settings */,
 				D5A7F0070000000000000007 /* DSH Studio/Sources/App/Notifications */,
+				D5A7F0080000000000000008 /* DSH Studio/Sources/App/Appearance */,
 			);
 			name = HarnessRuntimeTests;
 			packageProductDependencies = (
@@ -334,6 +339,29 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "ditto \"${SCRIPT_INPUT_FILE_0}\" \"${SCRIPT_OUTPUT_FILE_0}\"\n";
+		};
+		1A7E5A110000000000000001 /* Prepare DSH Studio settings plugin */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/Plugins/dsh-studio-settings/package.json",
+				"$(SRCROOT)/Plugins/dsh-studio-settings/cordis.patch.yml",
+				"$(SRCROOT)/Plugins/dsh-studio-settings/lib/client.js",
+				"$(SRCROOT)/Plugins/dsh-studio-settings/src",
+			);
+			name = "Prepare DSH Studio settings plugin";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/dsh-studio-settings/package.json",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -eu\nDESTINATION=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/dsh-studio-settings\"\nrm -rf \"${DESTINATION}\"\nmkdir -p \"${DESTINATION}\"\n/usr/bin/rsync -a --delete --exclude '.DS_Store' --exclude 'node_modules' --exclude 'tests' --exclude 'scripts' --exclude 'package-lock.json' \"${SRCROOT}/Plugins/dsh-studio-settings/\" \"${DESTINATION}/\"\n";
 		};
 		F8E4AAF6ECA4DF78AABF9522 /* Copy Swift Objective-C Interface Header */ = {
 			isa = PBXShellScriptBuildPhase;

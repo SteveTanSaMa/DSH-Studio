@@ -11,6 +11,8 @@ final class FakeRuntimeUpdater: RuntimeUpdating, @unchecked Sendable {
     let root = URL(fileURLWithPath: "/tmp/runtime")
     /// Architecture reported by every result.
     let architecture = "darwin-arm64"
+    /// Accepted for protocol conformance; this double never installs anything.
+    var progressHandler: (@Sendable (RuntimeProvisioningProgress) -> Void)?
     private(set) var updateCount = 0
     private(set) var rollbackCount = 0
 
@@ -112,6 +114,8 @@ final class FakeCandidateRuntimeUpdater: RuntimeCandidateUpdating, @unchecked Se
     let root = URL(fileURLWithPath: "/tmp/runtime-candidate")
     /// Architecture reported by every result.
     let architecture = "darwin-arm64"
+    /// Accepted for protocol conformance; this double never installs anything.
+    var progressHandler: (@Sendable (RuntimeProvisioningProgress) -> Void)?
     private(set) var prepareCount = 0
     private(set) var activateCount = 0
 

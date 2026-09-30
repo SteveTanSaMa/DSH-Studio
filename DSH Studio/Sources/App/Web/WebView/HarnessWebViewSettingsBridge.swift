@@ -8,11 +8,12 @@ import DeepSeekLogging
 import Foundation
 import WebKit
 
-/// Native side of the settings bridge injected into the Harness page.
+/// Native side of the WebView message bridge.
 ///
-/// The WebView owns only the app preferences projected into Harness's General
-/// settings; profile, preset, Runtime, and diagnostics operations stay in the
-/// native settings window.
+/// Settings are owned by the first-party Harness settings plugin: the Harness page
+/// renders them and persists them through Harness's own settings service. This bridge
+/// carries the operations the page cannot perform itself, plus the preference mirror
+/// that keeps the native side (layout width, notifications, workspace) in step.
 extension HarnessWebView.Coordinator: WKScriptMessageHandler {
     /// Handles one message posted by the injected settings script.
     ///
@@ -25,9 +26,13 @@ extension HarnessWebView.Coordinator: WKScriptMessageHandler {
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         // JavaScript messages are untrusted input. Parse only the expected
         // dictionary shape, then handle the request on the main actor.
-        guard message.name == AppSettingsWebBridge.messageHandlerName,
+        guard message.name == PluginMarketRestartWebBridge.messageHandlerName,
+              message.frameInfo.isMainFrame,
               let body = message.body as? [String: Any],
               let type = body["type"] as? String else {
+            return
+        }
+        guard let webView, isAllowed(webView.url ?? URL(string: "about:blank")!) else {
             return
         }
         let requestID = body["requestId"] as? String
@@ -49,153 +54,157 @@ extension HarnessWebView.Coordinator: WKScriptMessageHandler {
         body: [String: Any],
         webView: WKWebView
     ) async {
-        // The WebView owns only settings projected into Harness General.
+        // The WebView owns the DSH Studio settings page rendered inside Harness.
         switch type {
         case PluginMarketRestartWebBridge.messageType:
             model.restartRuntimeForPluginMarket()
-        case "appSettings.request":
-            sendAppSettingsReply(requestID: requestID, webView: webView)
-        case "appSettings.update":
-            do {
-                try applyAppSetting(key: body["key"] as? String, value: body["value"])
-                sendAppSettingsReply(requestID: requestID, webView: webView)
-            } catch let error as AppSettingsBridgeError {
-                sendAppSettingsReply(
-                    requestID: requestID,
-                    errorCode: error.code,
-                    errorMessage: error.message,
-                    webView: webView
-                )
-            } catch {
-                sendAppSettingsReply(
-                    requestID: requestID,
-                    errorCode: "app-settings-save-failed",
-                    errorMessage: error.localizedDescription,
-                    webView: webView
-                )
-            }
-        case "appSettings.openDataFolder":
-            if model.openDataFolder() {
-                sendAppSettingsReply(requestID: requestID, webView: webView)
-            } else {
-                sendAppSettingsReply(
-                    requestID: requestID,
-                    errorCode: "data-folder-open-failed",
-                    errorMessage: "无法打开数据文件夹",
-                    webView: webView
-                )
-            }
-        case "appSettings.chooseWorkspace":
-            do {
-                let changed = try await model.chooseWorkspace()
-                sendAppSettingsReply(
-                    requestID: requestID,
-                    message: changed ? "工作区已切换" : nil,
-                    cancelled: changed ? nil : true,
-                    webView: webView
-                )
-            } catch {
-                sendAppSettingsReply(
-                    requestID: requestID,
-                    errorCode: "workspace-change-failed",
-                    errorMessage: LogRedactor.redact(error.localizedDescription),
-                    webView: webView
-                )
-            }
-        default:
-            sendAppSettingsReply(
+        case "dshStudio.action":
+            await handleStudioAction(
+                action: body["action"] as? String,
+                payload: body["payload"] as? [String: Any] ?? [:],
                 requestID: requestID,
-                errorCode: "unknown-app-settings-message",
-                errorMessage: "未知的设置请求",
+                webView: webView
+            )
+        default:
+            return
+        }
+    }
+
+    @MainActor
+    private func handleStudioAction(
+        action: String?,
+        payload: [String: Any],
+        requestID: String?,
+        webView: WKWebView
+    ) async {
+        do {
+            let result = try await performStudioAction(action: action, payload: payload)
+            sendStudioActionReply(requestID: requestID, result: result, webView: webView)
+        } catch {
+            sendStudioActionReply(
+                requestID: requestID,
+                error: LogRedactor.redact(error.localizedDescription),
                 webView: webView
             )
         }
     }
 
-    @MainActor
-    private func applyAppSetting(key: String?, value: Any?) throws {
-        guard let key else {
-            throw AppSettingsBridgeError(code: "invalid-app-setting", message: "缺少设置名称")
-        }
-        switch key {
-        case "chatContentMaxWidth":
-            guard let number = value as? NSNumber else {
-                throw AppSettingsBridgeError(code: "invalid-app-setting", message: "对话最大宽度设置值无效")
-            }
-            let width = number.doubleValue
-            guard width.isFinite else {
-                throw AppSettingsBridgeError(code: "invalid-app-setting", message: "对话最大宽度设置值无效")
-            }
-            model.settings.chatContentMaxWidth = SettingsStore.normalizedChatContentMaxWidth(width)
-        case "turnCompletionNotification":
-            guard let rawValue = value as? String,
-                  let preference = TurnCompletionNotificationPreference(rawValue: rawValue) else {
-                throw AppSettingsBridgeError(code: "invalid-app-setting", message: "任务完成通知设置值无效")
-            }
-            model.settings.turnCompletionNotification = preference
-        case "permissionNotificationsEnabled":
-            guard let enabled = value as? NSNumber else {
-                throw AppSettingsBridgeError(code: "invalid-app-setting", message: "权限通知设置值无效")
-            }
-            model.settings.permissionNotificationsEnabled = enabled.boolValue
-        case "questionNotificationsEnabled":
-            guard let enabled = value as? NSNumber else {
-                throw AppSettingsBridgeError(code: "invalid-app-setting", message: "问题通知设置值无效")
-            }
-            model.settings.questionNotificationsEnabled = enabled.boolValue
-        default:
-            throw AppSettingsBridgeError(code: "unknown-app-setting", message: "不支持的应用设置：\(key)")
-        }
-    }
-
-    /// Pushes the current app settings to the page without a request.
+    /// Performs one settings-page operation and returns its JSON-safe reply.
     ///
-    /// Called after navigation and whenever the model changes, so the page never
-    /// shows a stale value for a native edit.
+    /// - Parameters:
+    ///   - action: Action name sent by the page; unknown names are rejected.
+    ///   - payload: Action arguments; every value is validated per action.
+    /// - Returns: A JSON-serializable value; `NSNull` stands in for absent data so a
+    ///   missing optional never suppresses the reply.
+    /// - Throws: ``StudioActionError`` when the request is invalid or the operation fails.
     @MainActor
-    func broadcastAppSettingsState() {
-        guard let webView else { return }
-        sendAppSettingsReply(requestID: nil, webView: webView)
+    private func performStudioAction(
+        action: String?,
+        payload: [String: Any]
+    ) async throws -> Any {
+        guard let action else { throw StudioActionError.invalidRequest }
+        switch action {
+        case "profile.list":
+            return [
+                "active": model.runtime.configuration.profileName,
+                "profiles": model.harnessProfiles.profiles().map { profile in
+                    [
+                        "name": profile.name,
+                        "bundles": profile.bundles,
+                        "selectable": profile.selectable,
+                        "problem": profile.problem ?? NSNull()
+                    ] as [String: Any]
+                }
+            ]
+        case "profile.create":
+            guard let name = payload["name"] as? String else { throw StudioActionError.invalidRequest }
+            try model.createHarnessProfile(name: name)
+            return ["ok": true]
+        case "profile.select":
+            guard let name = payload["name"] as? String else { throw StudioActionError.invalidRequest }
+            _ = try await model.selectHarnessProfile(name: name)
+            return ["ok": true]
+        case "profile.delete":
+            guard let name = payload["name"] as? String else { throw StudioActionError.invalidRequest }
+            try model.deleteHarnessProfile(name: name)
+            return ["ok": true]
+        case "workspace.choose":
+            let changed = try await model.chooseWorkspace()
+            // The page mirrors the admitted path into its own settings field, so the
+            // reply carries the path the app actually launched the Runtime against.
+            return [
+                "changed": changed,
+                "workspacePath": model.settings.workspaceURL.standardizedFileURL.path
+            ]
+        case "data.open":
+            guard model.openDataFolder() else { throw StudioActionError.operationFailed("无法打开数据文件夹") }
+            return ["ok": true]
+        case "terminal.open":
+            guard model.openRuntimeTerminal() else { throw StudioActionError.operationFailed("无法打开 DSH 终端") }
+            return ["ok": true]
+        case "logs.open":
+            guard model.openLogs() else { throw StudioActionError.operationFailed("无法打开日志文件夹") }
+            return ["ok": true]
+        case "preset.import":
+            return ["id": try await model.importAgentPreset() ?? NSNull()] as [String: Any]
+        case "preset.export":
+            return ["path": try await model.exportAgentPreset()?.path ?? NSNull()] as [String: Any]
+        case "runtime.check":
+            guard let status = await model.checkRuntimeVersion() else {
+                throw StudioActionError.operationFailed("无法获取 Runtime 状态")
+            }
+            return [
+                "kind": status.kind.rawValue,
+                "runtimeVersion": status.installed?.runtimeVersion ?? NSNull(),
+                "availableVersion": status.available.runtimeVersion,
+                "updateAvailable": status.updateAvailable,
+                "rollbackAvailable": status.rollbackAvailable
+            ]
+        case "runtime.update":
+            try await model.updateRuntime()
+            return ["ok": true]
+        case "runtime.rollback":
+            try await model.rollbackRuntime()
+            return ["ok": true]
+        case "diagnostics.copy":
+            return ["copied": await model.copyDiagnostics()]
+        case "diagnostics.export":
+            return ["path": try await model.exportDiagnostics().path]
+        case "preference.sync":
+            guard let key = payload["key"] as? String,
+                  let value = payload["value"],
+                  model.applyStudioPreference(key: key, value: value) else {
+                throw StudioActionError.invalidRequest
+            }
+            return ["ok": true]
+        default:
+            throw StudioActionError.unknownAction
+        }
     }
 
     @MainActor
-    private func sendAppSettingsReply(
+    private func sendStudioActionReply(
         requestID: String?,
-        message: String? = nil,
-        cancelled: Bool? = nil,
-        errorCode: String? = nil,
-        errorMessage: String? = nil,
+        result: Any? = nil,
+        error: String? = nil,
         webView: WKWebView
     ) {
-        let reply = AppSettingsBridgeReply(
-            requestID: requestID,
-            ok: errorCode == nil,
-            state: appSettingsState(),
-            message: message,
-            cancelled: cancelled,
-            error: errorCode.map {
-                AppSettingsBridgeReply.ErrorPayload(code: $0, message: errorMessage ?? "设置请求失败")
-            }
-        )
-        guard let data = try? JSONEncoder().encode(reply),
-              let json = String(data: data, encoding: .utf8) else {
-            return
-        }
-        webView.evaluateJavaScript(
-            "window.__deepseekStudioReceive && window.__deepseekStudioReceive(\(json));"
-        )
+        guard let requestID,
+              JSONSerialization.isValidJSONObject(result ?? [:]),
+              let resultData = try? JSONSerialization.data(withJSONObject: result ?? [:]),
+              let resultJSON = String(data: resultData, encoding: .utf8) else { return }
+        let errorJSON = error.map { value -> String in
+            let data = try? JSONSerialization.data(withJSONObject: value)
+            return String(data: data ?? Data("\"操作失败\"".utf8), encoding: .utf8) ?? "\"操作失败\""
+        } ?? "null"
+        let script = "window.__dshStudioReceive && window.__dshStudioReceive({requestId:\(jsonString(requestID)),ok:\(error == nil),result:\(resultJSON),error:\(errorJSON)});"
+        webView.evaluateJavaScript(script)
     }
 
-    @MainActor
-    private func appSettingsState() -> AppSettingsWebState {
-        AppSettingsWebState(
-            workspacePath: NSString(string: model.settings.workspaceURL.path).abbreviatingWithTildeInPath,
-            chatContentMaxWidth: model.settings.chatContentMaxWidth,
-            dshHomePath: NSString(string: model.currentDataHomeURL.path).abbreviatingWithTildeInPath,
-            turnCompletionNotification: model.settings.turnCompletionNotification.rawValue,
-            permissionNotificationsEnabled: model.settings.permissionNotificationsEnabled,
-            questionNotificationsEnabled: model.settings.questionNotificationsEnabled
-        )
+    private func jsonString(_ value: String) -> String {
+        guard let data = try? JSONEncoder().encode(value),
+              let string = String(data: data, encoding: .utf8) else { return "\"\"" }
+        return string
     }
 
     /// Whether a navigation target is the Runtime this WebView was created for.
@@ -219,30 +228,16 @@ extension HarnessWebView.Coordinator: WKScriptMessageHandler {
     }
 }
 
-private struct AppSettingsBridgeError: Error {
-    let code: String
-    let message: String
-}
+private enum StudioActionError: Error, LocalizedError {
+    case invalidRequest
+    case unknownAction
+    case operationFailed(String)
 
-private struct AppSettingsBridgeReply: Encodable {
-    struct ErrorPayload: Encodable {
-        let code: String
-        let message: String
-    }
-
-    let requestID: String?
-    let ok: Bool
-    let state: AppSettingsWebState
-    let message: String?
-    let cancelled: Bool?
-    let error: ErrorPayload?
-
-    enum CodingKeys: String, CodingKey {
-        case requestID = "requestId"
-        case ok
-        case state
-        case message
-        case cancelled
-        case error
+    var errorDescription: String? {
+        switch self {
+        case .invalidRequest: return "设置操作请求无效"
+        case .unknownAction: return "不支持的设置操作"
+        case .operationFailed(let message): return message
+        }
     }
 }

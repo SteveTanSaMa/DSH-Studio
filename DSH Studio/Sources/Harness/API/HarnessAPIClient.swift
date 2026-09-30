@@ -117,8 +117,8 @@ public final class HarnessAPIClient {
     ///   fails, or Harness rejects it.
     public func settingsDescribe() async throws -> HarnessSettingsSnapshot {
         try await call(
-            method: "settings.describe",
-            payload: .object([:]),
+            endpoint: "settings/describe",
+            args: .object([:]),
             responseType: HarnessSettingsSnapshot.self
         )
     }
@@ -139,16 +139,16 @@ public final class HarnessAPIClient {
         patch: [String: HarnessJSONValue],
         expectedRevision: Int?
     ) async throws -> HarnessSettingNamespace {
-        var payload: [String: HarnessJSONValue] = [
+        var args: [String: HarnessJSONValue] = [
             "ns": .string(namespace),
             "patch": .object(patch)
         ]
         if let expectedRevision {
-            payload["expectedRevision"] = .number(Double(expectedRevision))
+            args["expectedRevision"] = .number(Double(expectedRevision))
         }
         return try await call(
-            method: "settings.update",
-            payload: .object(payload),
+            endpoint: "settings/update",
+            args: .object(args),
             responseType: HarnessSettingNamespace.self
         )
     }
@@ -170,7 +170,7 @@ public final class HarnessAPIClient {
         operations: [HarnessSettingOperation],
         expectedRevision: Int?
     ) async throws -> HarnessSettingNamespace {
-        var payload: [String: HarnessJSONValue] = [
+        var args: [String: HarnessJSONValue] = [
             "ns": .string(namespace),
             "ops": .array(operations.map { operation in
                 switch operation {
@@ -189,37 +189,52 @@ public final class HarnessAPIClient {
             })
         ]
         if let expectedRevision {
-            payload["expectedRevision"] = .number(Double(expectedRevision))
+            args["expectedRevision"] = .number(Double(expectedRevision))
         }
         return try await call(
-            method: "settings.mutate",
-            payload: .object(payload),
+            endpoint: "settings/mutate",
+            args: .object(args),
             responseType: HarnessSettingNamespace.self
         )
     }
 
+    /// Calls one remote endpoint on the loopback RPC surface.
+    ///
+    /// The surface addresses a method as `<namespace>/<method>` on the `/api` channel and
+    /// carries named arguments in a single `args` object, so both the path and the
+    /// envelope are derived from `endpoint` rather than restated per caller.
+    ///
+    /// - Parameters:
+    ///   - endpoint: Remote endpoint, for example `settings/describe`.
+    ///   - args: Named arguments object for that endpoint.
+    ///   - responseType: Expected success value.
+    /// - Returns: The decoded success value.
+    /// - Throws: ``HarnessAPIError`` when the URL, transport, envelope, or remote
+    ///   result fails.
     private func call<Value: Decodable>(
-        method: String,
-        payload: HarnessJSONValue,
+        endpoint: String,
+        args: HarnessJSONValue,
         responseType: Value.Type
     ) async throws -> Value {
         // Every public operation funnels through this check, so test doubles
         // cannot accidentally hide a remote base URL in production.
-        guard HarnessURLPolicy.isAllowedLoopback(baseURL) else {
+        guard HarnessURLPolicy.isAllowedLoopback(baseURL),
+              endpoint.split(separator: "/").allSatisfy({ !$0.isEmpty }) else {
             throw HarnessAPIError.invalidBaseURL
         }
 
-        let endpoint = HarnessURLPolicy.baseURL(from: baseURL)
-            .appendingPathComponent("api", isDirectory: true)
-            .appendingPathComponent(method, isDirectory: false)
+        var url = HarnessURLPolicy.baseURL(from: baseURL).appendingPathComponent("api", isDirectory: true)
+        for segment in endpoint.split(separator: "/") {
+            url.appendPathComponent(String(segment))
+        }
         let rpcID = UUID().uuidString
         let body = RPCRequest(
             type: "client-request",
             rpcID: rpcID,
-            method: method,
-            payload: payload
+            method: endpoint,
+            payload: RPCArgsPayload(args: args)
         )
-        var request = URLRequest(url: endpoint)
+        var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.timeoutInterval = 30
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -261,6 +276,15 @@ public final class HarnessAPIClient {
             throw HarnessAPIError.remote(code: error.code, message: error.message)
         }
     }
+}
+
+/// The named-argument payload every loopback RPC request carries.
+///
+/// The surface accepts exactly one plain-object `args` field, so the object is built
+/// once per endpoint rather than restated in the envelope.
+private struct RPCArgsPayload: Encodable {
+    /// Named arguments of the remote method.
+    let args: HarnessJSONValue
 }
 
 private struct RPCRequest<Payload: Encodable>: Encodable {

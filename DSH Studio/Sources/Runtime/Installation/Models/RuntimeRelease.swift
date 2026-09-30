@@ -10,9 +10,17 @@ import Foundation
 /// These values intentionally avoid mutable "latest" URLs and remote install
 /// scripts. Every network request can therefore be checked against a known
 /// host, version, integrity value, and archive checksum.
+///
+/// They mirror the release the Runtime repository publishes today, and are the
+/// fallback when no signed catalog is available (a local or development build).
+/// Refresh them from the published catalog — `Scripts/verify-published-runtime.sh`
+/// in the Runtime repository prints the same fields — and never from a moving tag.
+///
+/// The Runtime identity is the Harness version itself: `runtimeVersion` and
+/// ``RuntimeLocator/harnessVersion`` are the same string, with no build counter.
 public enum RuntimeRelease {
     /// Runtime build produced from this release.
-    public static let runtimeVersion = "0.1.1-rc.2-ver1"
+    public static let runtimeVersion = "0.2.0-rc.2"
     /// Node.js version bundled with the Runtime.
     public static let nodeVersion = "24.19.0"
     /// Harness version the Runtime installs.
@@ -24,7 +32,7 @@ public enum RuntimeRelease {
     /// Registry base URL used while installing the Runtime's dependencies.
     public static let npmRegistryURL = URL(string: "https://registry.npmjs.org")!
     /// npm integrity string required for the Harness package.
-    public static let harnessPackageIntegrity = "sha512-UP1UIh6q3Gme/yXRn/QL2P8IsVlv8Shpg22TRJIZPsCRWLm4CBiA1MUvXmJAfsOEETBMLAl+xWPtFw6ICsN3wg=="
+    public static let harnessPackageIntegrity = "sha512-EAJ3gPNcVt/uv8X19PMm9NkVhWgT7xXNMk0UKCVm+IQ5rpSQOcsMUa0HWlnYYVybKMsccjcRB21vVVsaXQ6IdA=="
     /// npm integrity string required for the pnpm package.
     public static let pnpmPackageIntegrity = "sha512-H/hwxMYTPf2I+yr8Rt0T1H8JyXlLQ4xv20fKmMrzvBY4HuC+k6CRuOOCTPAfiJ9G19niCRD7C+GrD7W6qA3WIQ=="
     /// Data format this release creates and expects.

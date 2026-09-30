@@ -38,7 +38,10 @@ extension RuntimeLocator {
 
     /// Whether a version string may be used as a directory name.
     ///
-    /// - Parameter value: Candidate version, for example `0.1.1-rc.2-ver1`.
+    /// A published Runtime version is the Harness version itself (`0.2.0-rc.2`); this
+    /// check only decides whether the string is safe as a single path component.
+    ///
+    /// - Parameter value: Candidate version.
     /// - Returns: `true` for a non-empty name of ASCII letters, digits, `.`, `-`, and
     ///   `_` that is not `.` or `..`.
     public static func isSafeRuntimeVersion(_ value: String) -> Bool {

@@ -74,7 +74,10 @@ extension RuntimeProvisioner {
         ) else {
             throw RuntimeProvisioningError.unsupportedArchitecture(architecture)
         }
-        try await downloader.download(from: archiveURL, to: archive)
+        report(RuntimeProvisioningProgress(fraction: 0, detail: "正在下载 Node.js…"))
+        try await downloader.download(from: archiveURL, to: archive) { [weak self] received, expected in
+            self?.reportDownload(received: received, expected: expected, detail: "正在下载 Node.js…")
+        }
         let actualSHA256 = try sha256(at: archive)
         guard actualSHA256 == release.nodeArchiveSHA256 else {
             throw RuntimeProvisioningError.checksumMismatch(
@@ -131,6 +134,7 @@ extension RuntimeProvisioner {
             "--no-fund",
             "--registry", RuntimeRelease.npmRegistryURL.absoluteString
         ]
+        reportStep("正在安装 Harness 依赖…")
         let npmResult = try commandRunner.run(
             executable: nodeExecutable,
             arguments: npmArguments,
@@ -141,6 +145,14 @@ extension RuntimeProvisioner {
             throw RuntimeProvisioningError.commandFailed(status: npmResult.status, detail: summarize(npmResult.stderr))
         }
 
+        reportStep("正在编译原生模块…")
+        try prepareNativeBinding(
+            in: harnessRoot,
+            nodeRoot: nodeRoot,
+            nodeExecutable: nodeExecutable,
+            npmCLI: npmCLI
+        )
+        reportStep("正在校验运行时…")
         try repairNativePermissions(in: harnessRoot)
         let harnessEntry = RuntimeLocator.harnessEntry(
             root: staging,

@@ -30,6 +30,13 @@ struct DeepSeekHarnessSliceApp: App {
             }
 
             CommandGroup(after: .appInfo) {
+                Button("设置…") {
+                    AppMenuActions.openSettings()
+                }
+                .keyboardShortcut(",", modifiers: [.command])
+
+                Divider()
+
                 Button("检查 Runtime 更新") {
                     AppMenuActions.checkRuntimeVersion()
                 }
@@ -65,6 +72,15 @@ struct DeepSeekHarnessSliceApp: App {
                     HarnessWebView.reloadLiveWebViews()
                 }
 
+                Toggle(
+                    "允许 Web Inspector 检查 Harness",
+                    isOn: Binding(
+                        get: { HarnessWebView.isWebInspectionEnabled },
+                        set: { HarnessWebView.setWebInspectionEnabled($0) }
+                    )
+                )
+                .keyboardShortcut("i", modifiers: [.command, .option])
+
                 Divider()
 
                 Button("进入全屏") {
@@ -91,15 +107,16 @@ struct DeepSeekHarnessSliceApp: App {
             }
         }
 
-        Settings {
-            AppSettingsView(model: AppDelegate.sharedModel)
-        }
     }
 }
 
 @MainActor
 private enum AppMenuActions {
     private static var model: AppModel { AppDelegate.sharedModel }
+
+    static func openSettings() {
+        _ = HarnessWebView.openSettingsOnLiveWebViews()
+    }
 
     static func checkRuntimeVersion() {
         Task { @MainActor in

@@ -25,9 +25,7 @@ struct ContentView: View {
         ZStack {
             switch model.runtime.state {
             case .idle, .provisioning, .updating, .rollingBack, .launching, .starting:
-                ProgressView(progressMessage)
-                    .controlSize(.large)
-                    .padding()
+                loadingSurface
             case .ready:
                 if webContentCrashed {
                     runtimeError("WebView 内容进程已终止")
@@ -50,6 +48,7 @@ struct ContentView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .ignoresSafeArea()
+        .background(MainWindowAccessor().frame(width: 0, height: 0))
         .task {
             model.start()
         }
@@ -59,6 +58,39 @@ struct ContentView: View {
         .onChange(of: model.runtime.state) { _, _ in
             model.runtime.logs.log(component: "App", level: "info", message: "state \(model.runtime.state)")
         }
+    }
+
+    /// The surface shown until Harness is ready to load.
+    ///
+    /// Installing a Runtime downloads close to 200 MiB, so the step is named and, when
+    /// it can be measured, reported as a determinate bar: a silent spinner for minutes
+    /// is indistinguishable from a launch that stopped working.
+    private var loadingSurface: some View {
+        VStack(spacing: 12) {
+            if let progress = model.runtime.provisioningProgress {
+                if let fraction = progress.fraction {
+                    ProgressView(value: fraction)
+                        .progressViewStyle(.linear)
+                        .frame(width: 280)
+                    Text(fraction.formatted(.percent.precision(.fractionLength(0))))
+                        .font(.callout)
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                } else {
+                    ProgressView()
+                        .controlSize(.large)
+                }
+                Text(progress.detail)
+                    .foregroundStyle(.secondary)
+            } else {
+                ProgressView()
+                    .controlSize(.large)
+                Text(progressMessage)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: 420)
+        .padding()
     }
 
     private func runtimeError(_ message: String) -> some View {

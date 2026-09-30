@@ -140,6 +140,10 @@ final class FakeRuntimeProvisioner: RuntimeProvisioning, @unchecked Sendable {
     let architecture = "darwin-arm64"
     private let error: Error?
     private let waitsForCancellation: Bool
+    /// Steps this fake reports through ``RuntimeProvisioning/progressHandler``.
+    var reportedProgress: [RuntimeProvisioningProgress] = []
+    /// Handler the manager attaches before installing.
+    var progressHandler: (@Sendable (RuntimeProvisioningProgress) -> Void)?
 
     /// Creates a provisioner that succeeds, fails, or waits to be cancelled.
     ///
@@ -165,6 +169,16 @@ final class FakeRuntimeProvisioner: RuntimeProvisioning, @unchecked Sendable {
     /// - Throws: The configured error, or `CancellationError` when the wait is
     ///   cancelled.
     func provision() async throws -> RuntimeProvisioningResult {
+        // Progress is reported before anything else, so a test can assert what the
+        // loading surface would have shown during the install. The pause lets the
+        // manager's hop onto the main actor deliver the reports while this provisioner
+        // is still installing, the way a real download takes time to.
+        for step in reportedProgress {
+            progressHandler?(step)
+        }
+        if !reportedProgress.isEmpty {
+            try? await Task.sleep(nanoseconds: 50_000_000)
+        }
         if let error {
             throw error
         }

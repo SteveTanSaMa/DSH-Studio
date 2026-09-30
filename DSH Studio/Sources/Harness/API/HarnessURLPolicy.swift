@@ -28,6 +28,21 @@ public enum HarnessURLPolicy {
         return true
     }
 
+    /// Allows only credential-free HTTPS URLs that may be handed to the system browser.
+    ///
+    /// External pages never enter the embedded WebView, so the policy intentionally
+    /// does not whitelist a host. User-initiated navigation is checked separately by
+    /// the WebView delegate.
+    public static func isAllowedExternalHTTPS(_ url: URL) -> Bool {
+        guard url.scheme?.lowercased() == "https",
+              url.host != nil,
+              url.user == nil,
+              url.password == nil else {
+            return false
+        }
+        return true
+    }
+
     /// Removes the one-time process token before constructing native API URLs.
     public static func baseURL(from url: URL) -> URL {
         guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {

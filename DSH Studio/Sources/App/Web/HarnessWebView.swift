@@ -22,6 +22,13 @@ struct HarnessWebView: NSViewRepresentable {
     /// Called when WebKit kills the content process so the host can recover.
     let onWebContentTerminated: () -> Void
 
+    #if DEBUG
+    private static let defaultWebInspectionEnabled = true
+    #else
+    private static let defaultWebInspectionEnabled = false
+    #endif
+
+    private static var webInspectionEnabled = defaultWebInspectionEnabled
     private static var liveWebViews: [WeakWebView] = []
 
     /// Creates the coordinator that holds this view's delegate state.
@@ -71,20 +78,20 @@ struct HarnessWebView: NSViewRepresentable {
         )
         configuration.userContentController.addUserScript(
             WKUserScript(
-                source: AppSettingsWebBridge.source,
-                injectionTime: .atDocumentEnd,
-                forMainFrameOnly: true
-            )
-        )
-        configuration.userContentController.addUserScript(
-            WKUserScript(
                 source: PluginMarketRestartWebBridge.source,
                 injectionTime: .atDocumentEnd,
                 forMainFrameOnly: true
             )
         )
-        configuration.userContentController.add(context.coordinator, name: AppSettingsWebBridge.messageHandlerName)
+        // The content controller retains its message handlers, so the
+        // coordinator must be unregistered in dismantleNSView to avoid
+        // keeping a torn-down WebView's state alive.
+        configuration.userContentController.add(
+            context.coordinator,
+            name: PluginMarketRestartWebBridge.messageHandlerName
+        )
         let webView = WKWebView(frame: .zero, configuration: configuration)
+        webView.isInspectable = Self.webInspectionEnabled
         webView.navigationDelegate = context.coordinator
         webView.uiDelegate = context.coordinator
         HarnessWebView.register(webView)
@@ -99,11 +106,10 @@ struct HarnessWebView: NSViewRepresentable {
     static func dismantleNSView(_ nsView: WKWebView, coordinator: Coordinator) {
         unregister(nsView)
         nsView.stopLoading()
+        nsView.configuration.userContentController
+            .removeScriptMessageHandler(forName: PluginMarketRestartWebBridge.messageHandlerName)
         nsView.navigationDelegate = nil
         nsView.uiDelegate = nil
-        nsView.configuration.userContentController.removeScriptMessageHandler(
-            forName: AppSettingsWebBridge.messageHandlerName
-        )
     }
 
     /// Stops every live WebView before AppKit confirms termination.
@@ -133,6 +139,64 @@ struct HarnessWebView: NSViewRepresentable {
                 "window.__deepseekStudioToggleSidebar && window.__deepseekStudioToggleSidebar();"
             )
         }
+    }
+
+    /// Opens Harness's own Settings dialog.
+    ///
+    /// The settings surface belongs to Harness, so the app presses Harness's own
+    /// sidebar trigger instead of rendering a second preferences window; the
+    /// first-party ``HarnessProfileStore/studioSettingsBundle`` section provides the
+    /// DSH Studio page inside that dialog.
+    ///
+    /// - Returns: `false` when the Harness page is not ready.
+    @MainActor
+    static func openSettingsOnLiveWebViews() -> Bool {
+        liveWebViews = liveWebViews.filter { $0.value != nil }
+        let readyWebViews = liveWebViews.compactMap { entry -> WKWebView? in
+            guard let webView = entry.value, webView.url != nil, !webView.isLoading else { return nil }
+            return webView
+        }
+        guard !readyWebViews.isEmpty else { return false }
+        readyWebViews.forEach { webView in
+            webView.evaluateJavaScript(
+                "window.__deepseekStudioOpenSettings && window.__deepseekStudioOpenSettings();"
+            )
+        }
+        return true
+    }
+
+    /// Pushes the chat content width into every live Harness page.
+    ///
+    /// Harness reads the width from a CSS custom property that only this app sets, so
+    /// a page that loads after the preference was stored needs the value replayed.
+    ///
+    /// - Parameter width: Width in CSS pixels; non-finite values are ignored by the page.
+    @MainActor
+    static func applyChatContentMaxWidthOnLiveWebViews(_ width: Double) {
+        liveWebViews = liveWebViews.filter { $0.value != nil }
+        liveWebViews.forEach { webView in
+            webView.value?.evaluateJavaScript(
+                "window.__deepseekStudioSetChatContentMaxWidth && window.__deepseekStudioSetChatContentMaxWidth(\(width));"
+            )
+        }
+    }
+
+    /// Whether the current Harness WebView can be discovered by Safari's Web Inspector.
+    @MainActor
+    static var isWebInspectionEnabled: Bool {
+        webInspectionEnabled
+    }
+
+    /// Enables or disables Web Inspector discovery for current and future WebViews.
+    ///
+    /// WebKit exposes inspection through the public ``isInspectable`` property. The
+    /// app does not invoke private inspector UI; once enabled, the page is available
+    /// from Safari's Develop menu for an explicit diagnostic session.
+    @MainActor
+    static func setWebInspectionEnabled(_ enabled: Bool) {
+        webInspectionEnabled = enabled
+        liveWebViews = liveWebViews.filter { $0.value != nil }
+        liveWebViews.forEach { $0.value?.isInspectable = enabled }
     }
 
     private static func register(_ webView: WKWebView) {

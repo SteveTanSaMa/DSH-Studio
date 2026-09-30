@@ -160,6 +160,16 @@ extension HarnessLayoutWebBridge {
           max-width: 100% !important;
         }
 
+        /* Keep the conversation viewport inside its legal scroll range. */
+        [data-conversation-scroll] {
+          overscroll-behavior-y: none !important;
+        }
+
+        /* Keep composer input scrolling local to the input container. */
+        [data-input-scroll] {
+          overscroll-behavior-y: contain !important;
+        }
+
         /* The App uses a hidden title bar, so both sidebar modes need native
            title-bar clearance. */
         [class*="_frame"][data-sidebar-collapsed] {

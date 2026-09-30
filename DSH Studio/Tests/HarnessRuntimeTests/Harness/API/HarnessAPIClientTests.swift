@@ -48,8 +48,14 @@ final class HarnessAPIClientTests: XCTestCase {
         ).settingsDescribe()
 
         XCTAssertEqual(transport.lastRequest?.httpMethod, "POST")
-        XCTAssertEqual(transport.lastRequest?.url?.path, "/api/settings.describe")
+        XCTAssertEqual(transport.lastRequest?.url?.path, "/api/settings/describe")
         XCTAssertEqual(transport.lastRequest?.value(forHTTPHeaderField: "Content-Type"), "application/json")
+        let requestObject = try XCTUnwrap(Self.jsonObject(from: try XCTUnwrap(transport.lastRequest)))
+        XCTAssertEqual(requestObject["method"] as? String, "settings/describe")
+        // The surface accepts one plain-object `args` field and nothing beside it.
+        let payload = try XCTUnwrap(requestObject["payload"] as? [String: Any])
+        XCTAssertEqual(payload.keys.sorted(), ["args"])
+        XCTAssertNotNil(payload["args"])
         XCTAssertEqual(snapshot.namespaces.first?.revision, 7)
         XCTAssertEqual(snapshot.namespaces.first?.user?.objectValue?["baseURL"], .string("https://override"))
         XCTAssertEqual(snapshot.namespaces.first?.value.objectValue?["temperature"], .number(0.7))
@@ -88,15 +94,51 @@ final class HarnessAPIClientTests: XCTestCase {
         )
 
         let requestObject = try XCTUnwrap(Self.jsonObject(from: try XCTUnwrap(transport.lastRequest)))
-        XCTAssertEqual(requestObject["method"] as? String, "settings.mutate")
+        XCTAssertEqual(requestObject["method"] as? String, "settings/mutate")
+        XCTAssertEqual(transport.lastRequest?.url?.path, "/api/settings/mutate")
         let payload = try XCTUnwrap(requestObject["payload"] as? [String: Any])
-        XCTAssertEqual(payload["ns"] as? String, "ui-theme")
-        XCTAssertEqual(payload["expectedRevision"] as? NSNumber, 7)
-        let operations = try XCTUnwrap(payload["ops"] as? [[String: Any]])
+        let args = try XCTUnwrap(payload["args"] as? [String: Any])
+        XCTAssertEqual(args["ns"] as? String, "ui-theme")
+        XCTAssertEqual(args["expectedRevision"] as? NSNumber, 7)
+        let operations = try XCTUnwrap(args["ops"] as? [[String: Any]])
         XCTAssertEqual(operations.count, 2)
         XCTAssertEqual(operations[0]["op"] as? String, "set")
         XCTAssertEqual(operations[1]["op"] as? String, "unset")
         XCTAssertNil(operations[1]["value"])
+    }
+
+    /// The patch write addresses the same channel with the same single-field payload.
+    func testSettingsUpdateSendsPatchAndExpectedRevision() async throws {
+        let transport = RecordingHarnessTransport { request in
+            let requestObject = try XCTUnwrap(Self.jsonObject(from: request))
+            let rpcID = try XCTUnwrap(requestObject["rpcId"] as? String)
+            let body = """
+            {"type":"server-response","rpcId":"\(rpcID)","result":{"ok":true,"value":{
+              "ns":"dsh-studio","schema":{},"value":{"chatContentMaxWidth":900},
+              "applies":"live","secrets":[],"revision":4
+            }}}
+            """
+            return HarnessHTTPResponse(statusCode: 200, data: Data(body.utf8))
+        }
+
+        let namespace = try await HarnessAPIClient(
+            baseURL: URL(string: "http://127.0.0.1:43210")!,
+            transport: transport
+        ).settingsUpdate(
+            namespace: "dsh-studio",
+            patch: ["chatContentMaxWidth": .number(900)],
+            expectedRevision: 3
+        )
+
+        let requestObject = try XCTUnwrap(Self.jsonObject(from: try XCTUnwrap(transport.lastRequest)))
+        XCTAssertEqual(requestObject["method"] as? String, "settings/update")
+        XCTAssertEqual(transport.lastRequest?.url?.path, "/api/settings/update")
+        let payload = try XCTUnwrap(requestObject["payload"] as? [String: Any])
+        let args = try XCTUnwrap(payload["args"] as? [String: Any])
+        XCTAssertEqual(args["ns"] as? String, "dsh-studio")
+        XCTAssertEqual(args["expectedRevision"] as? NSNumber, 3)
+        XCTAssertEqual((args["patch"] as? [String: Any])?["chatContentMaxWidth"] as? NSNumber, 900)
+        XCTAssertEqual(namespace.revision, 4)
     }
 
     /// A remote error surfaces as a failure instead of a successful save.

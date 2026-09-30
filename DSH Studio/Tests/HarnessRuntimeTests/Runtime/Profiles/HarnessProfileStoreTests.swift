@@ -163,4 +163,129 @@ final class HarnessProfileStoreTests: XCTestCase {
         XCTAssertNotEqual(firstStore.selectionStateURL, secondStore.selectionStateURL)
         XCTAssertNotEqual(firstStore.recentStateURL, secondStore.recentStateURL)
     }
+
+    /// A successful install vendors the runtime packages and registers the bundle.
+    func testSettingsInstallRegistersBundleAndVendorsRuntimePackages() throws {
+        let store = HarnessProfileStore(dshHome: dshHome, supportDirectory: support)
+        let source = try makeSettingsPluginSource()
+
+        try store.installStudioSettingsPlugin(
+            from: source,
+            runtimeNodeModules: try makeRuntimeNodeModules()
+        )
+
+        let profile = dshHome
+            .appendingPathComponent("profiles", isDirectory: true)
+            .appendingPathComponent(HarnessProfileStore.defaultProfileName, isDirectory: true)
+        let manifest = try XCTUnwrap(
+            try JSONSerialization.jsonObject(
+                with: Data(contentsOf: profile.appendingPathComponent("package.json"))
+            ) as? [String: Any]
+        )
+        let profileConfig = (manifest["dsh"] as? [String: Any])?["profile"] as? [String: Any]
+        XCTAssertEqual(
+            profileConfig?["bundles"] as? [String],
+            [
+                HarnessProfileStore.baseBundle,
+                HarnessProfileStore.webBundle,
+                HarnessProfileStore.studioSettingsBundle
+            ]
+        )
+        let installed = profile
+            .appendingPathComponent("node_modules", isDirectory: true)
+            .appendingPathComponent(HarnessProfileStore.studioSettingsBundle, isDirectory: true)
+        XCTAssertTrue(
+            FileManager.default.fileExists(
+                atPath: installed.appendingPathComponent("lib/client.js").path
+            )
+        )
+        for package in ["@deepseek-ai/schemastery", "@deepseek-ai/cosmokit", "@standard-schema/spec"] {
+            XCTAssertTrue(
+                FileManager.default.fileExists(
+                    atPath: installed.appendingPathComponent("node_modules/\(package)").path
+                ),
+                "\(package) must be vendored out of the Runtime"
+            )
+        }
+        let leftovers = try FileManager.default
+            .contentsOfDirectory(
+                atPath: profile.appendingPathComponent("node_modules").path
+            )
+            .filter { $0.hasPrefix(".") }
+        XCTAssertTrue(leftovers.isEmpty, "no staging or backup directories remain: \(leftovers)")
+    }
+
+    /// A missing runtime package is reported once, not wrapped in itself.
+    ///
+    /// The app log used to read `Profile 保存失败：Profile 保存失败：Runtime 缺少 …`,
+    /// which hid what was actually missing.
+    func testSettingsInstallReportsMissingRuntimePackageOnce() throws {
+        let store = HarnessProfileStore(dshHome: dshHome, supportDirectory: support)
+        let source = try makeSettingsPluginSource()
+        let runtimeNodeModules = root
+            .appendingPathComponent("runtime", isDirectory: true)
+            .appendingPathComponent("node_modules", isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: runtimeNodeModules,
+            withIntermediateDirectories: true
+        )
+
+        XCTAssertThrowsError(
+            try store.installStudioSettingsPlugin(
+                from: source,
+                runtimeNodeModules: runtimeNodeModules
+            )
+        ) { error in
+            XCTAssertEqual(
+                error.localizedDescription,
+                "Profile 保存失败：Runtime 缺少 @deepseek-ai/schemastery"
+            )
+        }
+        XCTAssertFalse(
+            FileManager.default.fileExists(
+                atPath: dshHome.appendingPathComponent("profiles/web/package.json").path
+            ),
+            "a failed install leaves no profile behind"
+        )
+    }
+
+    /// Creates a plugin source directory shaped like the bundled settings page.
+    ///
+    /// - Returns: Directory holding a manifest and one file under `lib`.
+    /// - Throws: When the fixture cannot be written.
+    private func makeSettingsPluginSource() throws -> URL {
+        let source = root.appendingPathComponent("dsh-studio-settings", isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: source.appendingPathComponent("lib", isDirectory: true),
+            withIntermediateDirectories: true
+        )
+        try Data(#"{"name":"dsh-studio-settings","version":"1.0.0"}"#.utf8).write(
+            to: source.appendingPathComponent("package.json")
+        )
+        try Data("export {}\n".utf8).write(
+            to: source.appendingPathComponent("lib/client.js")
+        )
+        return source
+    }
+
+    /// Creates a runtime dependency tree holding the packages the page vendors.
+    ///
+    /// - Returns: A `node_modules` directory with the three vendored packages.
+    /// - Throws: When the fixture cannot be written.
+    private func makeRuntimeNodeModules() throws -> URL {
+        let nodeModules = root
+            .appendingPathComponent("runtime", isDirectory: true)
+            .appendingPathComponent("node_modules", isDirectory: true)
+        for package in ["@deepseek-ai/schemastery", "@deepseek-ai/cosmokit", "@standard-schema/spec"] {
+            let directory = nodeModules.appendingPathComponent(package, isDirectory: true)
+            try FileManager.default.createDirectory(
+                at: directory,
+                withIntermediateDirectories: true
+            )
+            try Data(#"{"name":"\#(package)"}"#.utf8).write(
+                to: directory.appendingPathComponent("package.json")
+            )
+        }
+        return nodeModules
+    }
 }

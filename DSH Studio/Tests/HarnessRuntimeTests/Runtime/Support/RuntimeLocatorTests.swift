@@ -32,8 +32,39 @@ final class RuntimeLocatorTests: XCTestCase {
     func testHarnessEntryUsesArchitectureDirectory() {
         let root = URL(fileURLWithPath: "/tmp/runtime")
         let entry = RuntimeLocator.harnessEntry(root: root, architecture: "darwin-x64")
-        XCTAssertTrue(entry.path.contains("harness/darwin-x64/0.1.1-rc.2"))
+        // The version directory holds the app's fallback Harness version, so the test
+        // asserts the structure instead of a literal that moves with every published
+        // Runtime.
+        XCTAssertTrue(
+            entry.path.contains("harness/darwin-x64/\(RuntimeLocator.harnessVersion)/node_modules")
+        )
         XCTAssertTrue(entry.path.hasSuffix("@deepseek-ai/dsh/lib/bin.js"))
+    }
+
+    /// The dependency tree is the `node_modules` directory that holds the entry point.
+    ///
+    /// The settings page vendors packages out of this directory. Returning the
+    /// `@deepseek-ai` folder instead of its parent made every install fail with a
+    /// missing `@deepseek-ai/schemastery`, which is why the page never appeared.
+    func testHarnessNodeModulesIsTheDirectoryHoldingTheEntryPoint() {
+        let root = URL(fileURLWithPath: "/tmp/runtime", isDirectory: true)
+        let entry = RuntimeLocator.harnessEntry(root: root, architecture: "darwin-x64")
+
+        let nodeModules = RuntimeLocator.harnessNodeModules(harnessEntry: entry)
+
+        XCTAssertEqual(
+            nodeModules.path,
+            RuntimeLocator
+                .harnessRoot(root: root, architecture: "darwin-x64")
+                .appendingPathComponent("node_modules", isDirectory: true)
+                .path
+        )
+        XCTAssertEqual(nodeModules.lastPathComponent, "node_modules")
+        XCTAssertEqual(
+            nodeModules.appendingPathComponent(RuntimeLocator.dshPackageName).path,
+            entry.deletingLastPathComponent().deletingLastPathComponent().path,
+            "the entry's package must be a direct child of the returned directory"
+        )
     }
 
     /// Versioned paths keep different Runtime versions apart.

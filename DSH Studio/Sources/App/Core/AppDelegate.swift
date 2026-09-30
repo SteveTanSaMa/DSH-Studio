@@ -15,11 +15,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     /// The one app model the window, delegate, and settings all share.
     static let sharedModel = AppModel()
 
+    /// Keeps the Dock icon in step with the system appearance.
+    private let appIcon = AppIconController()
+
     /// Activates the app after launch so the local Harness window is foregrounded.
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
         UNUserNotificationCenter.current().delegate = self
+        appIcon.start()
+    }
+
+    /// Restores the hidden Harness window when the app is opened from the Dock.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        MainWindowLifecycle.shared.showMainWindow()
+        return true
     }
 
     /// Delays termination until the child Harness process has stopped cleanly.

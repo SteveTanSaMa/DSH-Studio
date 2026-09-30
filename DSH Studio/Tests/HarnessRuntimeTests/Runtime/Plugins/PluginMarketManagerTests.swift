@@ -71,7 +71,7 @@ final class PluginMarketManagerTests: XCTestCase {
         XCTAssertEqual(manager.state.installState, .corrupted)
     }
 
-    /// A Runtime older than the plugin requires reports as incompatible, not broken.
+    /// A Runtime older than the plugin supports reports as incompatible, not broken.
     func testRefreshClassifiesLegacyHarnessAsIncompatible() async throws {
         let manager = makeManager(harnessVersion: "0.1.0-rc.6")
 
@@ -81,12 +81,13 @@ final class PluginMarketManagerTests: XCTestCase {
         XCTAssertFalse(manager.state.compatibleHarness)
     }
 
-    /// A Runtime newer than the app's fallback pin stays compatible with the market.
+    /// A Runtime on a line the market declares support for stays compatible.
     ///
-    /// Compatibility is judged against the version the installation itself declares,
-    /// so shipping a newer Runtime must not disable the market.
+    /// Compatibility is decided by the range the market publishes, never by comparing
+    /// the installed Harness against a version compiled into the app — that is what
+    /// let a Runtime update disable the market it shipped with.
     @MainActor
-    func testNewerInstalledHarnessRemainsCompatibleWithItsManifest() async throws {
+    func testInstalledHarnessInsideTheDeclaredLineStaysCompatible() async throws {
         let manager = makeManager(
             harnessVersion: "0.1.6-alpha.2",
             expectedHarnessVersion: "0.1.6-alpha.2"
@@ -98,6 +99,20 @@ final class PluginMarketManagerTests: XCTestCase {
 
         XCTAssertTrue(manager.state.compatibleHarness)
         XCTAssertNotEqual(manager.state.installState, .incompatible)
+    }
+
+    /// A Harness on a line the market never claims reports incompatible.
+    @MainActor
+    func testHarnessOnAnUndeclaredLineIsIncompatible() async throws {
+        let manager = makeManager(
+            harnessVersion: "0.5.0-rc.1",
+            expectedHarnessVersion: "0.5.0-rc.1"
+        )
+
+        await manager.refresh()
+
+        XCTAssertEqual(manager.state.installState, .incompatible)
+        XCTAssertFalse(manager.state.compatibleHarness)
     }
 
     /// An installation whose Harness disagrees with its own manifest reports incompatible.
@@ -329,7 +344,7 @@ final class PluginMarketManagerTests: XCTestCase {
     }
 
     private func makeManager(
-        harnessVersion: String = PluginMarketRelease.compatibleHarnessVersion,
+        harnessVersion: String = RuntimeRelease.harnessVersion,
         expectedHarnessVersion: String? = nil,
         commandRunner: any RuntimeCommandRunning = RecordingPluginMarketCommandRunner(),
         process: FakeHarnessProcess = FakeHarnessProcess(),

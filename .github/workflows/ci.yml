@@ -30,6 +30,30 @@ jobs:
       - name: The assembled web-bridge script is valid JavaScript
         run: python3 Scripts/check-web-bridge-script.py
 
+  # The settings page is shipped product code that never touches the Swift build,
+  # so it needs its own gate: the page's behaviour, its style parity with the
+  # first-party rules it mirrors, and the built bundle the app copies into a
+  # profile must all match the sources in this commit.
+  settings-plugin:
+    name: Settings plugin
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Plugins/dsh-studio-settings
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install the plugin's test dependencies
+        run: npm ci
+      - name: Run the plugin's tests
+        run: npm test
+      - name: Rebuild the page bundle
+        run: npm run build
+      - name: The committed bundle matches the sources
+        run: git diff --exit-code -- lib/client.js
+
   test:
     name: Build and test
     runs-on: macos-15

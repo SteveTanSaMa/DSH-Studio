@@ -10,6 +10,8 @@ import Foundation
 /// The market's default endpoint forks a replacement Harness and terminates the
 /// current process, which conflicts with the app-owned process supervisor.
 enum PluginMarketRestartWebBridge {
+    /// Shared WebKit message handler used by the native bridge.
+    static let messageHandlerName = "deepseekStudio"
     /// Message type the injected script posts when the market asks for a restart.
     static let messageType = "pluginMarket.restart"
 

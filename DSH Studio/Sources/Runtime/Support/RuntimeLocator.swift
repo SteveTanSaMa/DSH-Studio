@@ -11,7 +11,12 @@ public enum RuntimeLocator {
     /// npm package name of the Harness distribution.
     public static let dshPackageName = "@deepseek-ai/dsh"
     /// Harness version this app is built against.
-    public static let harnessVersion = "0.1.1-rc.2"
+    ///
+    /// A Runtime's identity is the Harness version it contains, so this is also the
+    /// fallback Runtime version. It is only used when neither an installed Runtime
+    /// manifest nor a catalog release is available: an installation is described by
+    /// its own manifest, and a catalog release by the signed catalog.
+    public static let harnessVersion = "0.2.0-rc.2"
 
     /// Resolves the Runtime root the app should use.
     ///

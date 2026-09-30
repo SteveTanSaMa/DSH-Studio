@@ -13,6 +13,18 @@ import DeepSeekLogging
 @MainActor
 public final class RuntimeManager: ObservableObject {
     @Published public internal(set) var state: RuntimeState = .idle
+    /// Progress of an installation that is running right now.
+    ///
+    /// A first launch downloads close to 200 MiB before Harness can start, so the
+    /// loading surface reports the step and, when it is measurable, how far along it is.
+    /// `nil` means nothing is being installed.
+    @Published public internal(set) var provisioningProgress: RuntimeProvisioningProgress?
+    /// Work the host completes once a Runtime is installed and before Harness starts.
+    ///
+    /// The profile Harness boots from is written here: doing it while the Runtime was
+    /// still missing would target a tree that does not exist yet, and doing it after the
+    /// launch would be too late for the process to load what it holds.
+    public var prelaunchPreparation: (@MainActor () async -> Void)?
     @Published public internal(set) var readyURL: URL?
     @Published public internal(set) var lastError: RuntimeError?
     @Published public internal(set) var nodeVersion: String?
@@ -29,6 +41,8 @@ public final class RuntimeManager: ObservableObject {
     public var restartPolicy: RestartPolicy
     /// Store used to persist data-profile metadata, when one is configured.
     public let dataProfileStore: RuntimeDataProfileStore?
+    /// Store used to persist bounded reports for unexpected child exits.
+    public let crashReportStore: RuntimeCrashReportStore?
 
     /// Creates the child process; injected so tests can run without launching one.
     let processFactory: HarnessProcessFactory
@@ -46,6 +60,11 @@ public final class RuntimeManager: ObservableObject {
     var process: HarnessProcess?
     /// Downloaded update artifact that has not been activated yet.
     var stagedURL: URL?
+    /// Last whole-ten percentage written to the log while installing.
+    ///
+    /// The loading surface tracks every percent, but the log only needs the milestones
+    /// that explain afterwards how long a first launch spent downloading.
+    var lastLoggedProvisioningPercent: Int?
     /// Pending launch or provisioning work for the current generation.
     var startupTask: Task<Void, Never>?
     /// Graceful-shutdown work; cancelled when a new launch supersedes it.
@@ -96,6 +115,7 @@ public final class RuntimeManager: ObservableObject {
     ///   - provisioner: Installer used when the Runtime is missing or invalid.
     ///   - updater: Update source; falls back to the provisioner when it can update.
     ///   - dataProfileStore: Store used to persist data-profile metadata.
+    ///   - crashReportDirectory: App-owned directory for unexpected-exit reports.
     public init(
         configuration: RuntimeConfiguration,
         processFactory: HarnessProcessFactory = SystemHarnessProcessFactory(),
@@ -105,7 +125,8 @@ public final class RuntimeManager: ObservableObject {
         validateRuntimeOnStart: Bool = true,
         provisioner: (any RuntimeProvisioning)? = nil,
         updater: (any RuntimeUpdating)? = nil,
-        dataProfileStore: RuntimeDataProfileStore? = nil
+        dataProfileStore: RuntimeDataProfileStore? = nil,
+        crashReportDirectory: URL? = nil
     ) {
         self.configuration = configuration
         self.processFactory = processFactory
@@ -116,6 +137,9 @@ public final class RuntimeManager: ObservableObject {
         self.validateRuntimeOnStart = validateRuntimeOnStart
         self.logs = RuntimeLogStore(logFileURL: logFileURL)
         self.dataProfileStore = dataProfileStore
+        self.crashReportStore = crashReportDirectory.map { directory in
+            RuntimeCrashReportStore(directoryURL: directory)
+        }
         self.activeDataProfile = nil
         self.lastTerminationStatus = nil
         self.nodeVersion = RuntimeLocator.nodeVersion(nodeExecutable: configuration.nodeExecutable)
@@ -195,7 +219,16 @@ public final class RuntimeManager: ObservableObject {
 
     private func beginProvisioning(with provisioner: any RuntimeProvisioning) {
         state = .provisioning
+        provisioningProgress = nil
+        lastLoggedProvisioningPercent = nil
         logs.log(component: "Runtime", level: "info", message: "preparing online Runtime")
+        // The provisioner reports from the download queue, so each report is hopped onto
+        // the main actor before it reaches published state.
+        provisioner.progressHandler = { [weak self] progress in
+            Task { @MainActor [weak self] in
+                self?.recordProvisioningProgress(progress)
+            }
+        }
         provisioningTask?.cancel()
         provisioningTask = Task.detached { [weak self, provisioner] in
             do {
@@ -210,17 +243,52 @@ public final class RuntimeManager: ObservableObject {
         }
     }
 
+    /// Publishes one installation step, throttled to what a surface can show.
+    ///
+    /// - Parameter progress: Step reported by the provisioner.
+    private func recordProvisioningProgress(_ progress: RuntimeProvisioningProgress) {
+        guard state == .provisioning else { return }
+        let previous = provisioningProgress
+        // A download reports far more often than a progress bar can use; publishing
+        // every byte would rebuild the loading surface hundreds of times a second.
+        if progress.detail == previous?.detail,
+           let previousFraction = previous?.fraction,
+           let nextFraction = progress.fraction,
+           abs(previousFraction - nextFraction) < 0.01 {
+            return
+        }
+        provisioningProgress = progress
+        guard let fraction = progress.fraction else {
+            // A step with no percentage is worth one line when it starts: it is what
+            // explains afterwards where an install spent its time.
+            if progress.detail != previous?.detail {
+                logs.log(component: "Runtime", level: "info", message: progress.detail)
+            }
+            return
+        }
+        let percent = Int((fraction * 100).rounded())
+        guard percent != lastLoggedProvisioningPercent, percent % 10 == 0 else { return }
+        lastLoggedProvisioningPercent = percent
+        logs.log(
+            component: "Runtime",
+            level: "info",
+            message: "\(progress.detail) \(percent)%"
+        )
+    }
+
     private func finishProvisioning(_ result: RuntimeProvisioningResult) {
         guard state == .provisioning else { return }
         applyRuntimeResult(result)
         loadSelectedDataProfile()
         provisioningTask = nil
+        provisioningProgress = nil
         beginLaunch()
     }
 
     private func failProvisioning(_ error: Error) {
         guard state == .provisioning else { return }
         provisioningTask = nil
+        provisioningProgress = nil
         fail(.runtimeProvisioningFailed(error.localizedDescription))
     }
 
@@ -242,6 +310,24 @@ public final class RuntimeManager: ObservableObject {
         guard prepareDirectories() else { return }
         cleanStaleProcessIfNeeded()
 
+        // Everything the profile must hold has to be on disk before the process starts.
+        guard let prelaunchPreparation else {
+            launchProcess(generation: generation)
+            return
+        }
+        Task { @MainActor [weak self] in
+            await prelaunchPreparation()
+            // A stop or a newer launch during the preparation owns the outcome, not this.
+            guard let self, state == .launching, processGeneration == generation else { return }
+            launchProcess(generation: generation)
+        }
+    }
+
+    /// Starts the Harness process for one launch generation.
+    ///
+    /// - Parameter generation: Launch this process belongs to; callbacks carrying any
+    ///   other generation are discarded.
+    private func launchProcess(generation: Int) {
         let process = processFactory.makeProcess(
             configuration: configuration,
             onOutput: { [weak self] data in

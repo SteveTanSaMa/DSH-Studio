@@ -18,6 +18,11 @@ public struct RuntimeArtifactDescriptor: Codable, Equatable, Sendable {
     public let url: URL
     /// Expected archive checksum, verified before extraction.
     public let sha256: String
+    /// Published archive size in bytes, when the catalog declares it.
+    ///
+    /// Only used to tell the user what a first launch is waiting for; the checksum is
+    /// what decides whether the bytes are the right ones.
+    public let size: Int?
 
     /// Creates a descriptor for one downloadable Runtime archive.
     ///
@@ -26,16 +31,19 @@ public struct RuntimeArtifactDescriptor: Codable, Equatable, Sendable {
     ///   - architecture: Architecture the archive targets.
     ///   - url: Download location.
     ///   - sha256: Checksum the downloaded file must match.
+    ///   - size: Published archive size in bytes, when known.
     public init(
         runtimeVersion: String,
         architecture: String,
         url: URL,
-        sha256: String
+        sha256: String,
+        size: Int? = nil
     ) {
         self.runtimeVersion = runtimeVersion
         self.architecture = architecture
         self.url = url
         self.sha256 = sha256
+        self.size = size
     }
 }
 
@@ -65,6 +73,8 @@ public struct RuntimeReleaseDescriptor: Codable, Equatable, Sendable {
     public let artifact: RuntimeArtifactDescriptor?
     /// The data contract this release expects, when the release declares one.
     public let dataFormat: RuntimeDataFormatDescriptor?
+    /// First-party plugin this release pins, when the publisher declares one.
+    public let pluginMarket: RuntimePluginPin?
 
     /// Creates a release descriptor.
     ///
@@ -82,6 +92,7 @@ public struct RuntimeReleaseDescriptor: Codable, Equatable, Sendable {
     ///   - runtimeVersion: Runtime build version; defaults to the compiled-in pin.
     ///   - artifact: Downloadable archive, when one is offered.
     ///   - dataFormat: Data contract the release expects, when declared.
+    ///   - pluginMarket: First-party plugin pinned alongside this release, when published.
     public init(
         architecture: String,
         nodeVersion: String,
@@ -92,7 +103,8 @@ public struct RuntimeReleaseDescriptor: Codable, Equatable, Sendable {
         pnpmPackageIntegrity: String,
         runtimeVersion: String = RuntimeRelease.runtimeVersion,
         artifact: RuntimeArtifactDescriptor? = nil,
-        dataFormat: RuntimeDataFormatDescriptor? = nil
+        dataFormat: RuntimeDataFormatDescriptor? = nil,
+        pluginMarket: RuntimePluginPin? = nil
     ) {
         self.runtimeVersion = runtimeVersion
         self.architecture = architecture
@@ -104,11 +116,55 @@ public struct RuntimeReleaseDescriptor: Codable, Equatable, Sendable {
         self.pnpmPackageIntegrity = pnpmPackageIntegrity
         self.artifact = artifact
         self.dataFormat = dataFormat
+        self.pluginMarket = pluginMarket
     }
 
     /// A single-line label listing the Runtime, Harness, and Node versions.
     public var versionLabel: String {
         "Runtime \(runtimeVersion) / Harness \(harnessVersion) / Node \(nodeVersion)"
+    }
+}
+
+/// One first-party plugin pinned alongside a Runtime release.
+///
+/// The market plugin is not part of the Runtime artifact, but which version of it
+/// works is decided by the Harness version the artifact contains — and only the
+/// Runtime publisher knows that pairing when it builds. A release therefore carries
+/// the pin as data instead of leaving the app to hardcode a version that goes stale
+/// as soon as Harness moves.
+///
+/// A pin is trusted exactly as far as the record carrying it: the signed catalog and
+/// the artifact manifest, never a value read from the plugin's own feed.
+public struct RuntimePluginPin: Codable, Equatable, Sendable {
+    /// npm package name installed into the Harness profile.
+    public let package: String
+    /// Exact version installed; the app never resolves a moving tag.
+    public let version: String
+    /// npm integrity string the profile lockfile must pin for that version.
+    public let integrity: String
+    /// Harness versions the pinned package declares support for.
+    ///
+    /// Optional because an older publication may omit it; the app then reads the
+    /// range from the installed package instead of refusing to judge.
+    public let harnessRange: String?
+
+    /// Creates a plugin pin.
+    ///
+    /// - Parameters:
+    ///   - package: npm package name.
+    ///   - version: Exact version to install.
+    ///   - integrity: npm integrity string for that version.
+    ///   - harnessRange: Declared Harness compatibility range, when published.
+    public init(
+        package: String,
+        version: String,
+        integrity: String,
+        harnessRange: String? = nil
+    ) {
+        self.package = package
+        self.version = version
+        self.integrity = integrity
+        self.harnessRange = harnessRange
     }
 }
 
@@ -148,6 +204,11 @@ public struct RuntimeInstallationManifest: Codable, Equatable, Sendable {
     public let pnpmPackageIntegrity: String
     /// Data contract the installation was created for, when it declared one.
     public let dataFormat: RuntimeDataFormatDescriptor?
+    /// Plugin the release pins for this installation, when it publishes one.
+    ///
+    /// Recorded so an installation describes its own companion plugin while offline,
+    /// where no catalog can be reached.
+    public let pluginMarket: RuntimePluginPin?
 
     /// Creates a manifest for a completed installation.
     ///
@@ -165,6 +226,7 @@ public struct RuntimeInstallationManifest: Codable, Equatable, Sendable {
     ///   - harnessPackageIntegrity: Integrity string of the Harness package.
     ///   - pnpmPackageIntegrity: Integrity string of the pnpm package.
     ///   - dataFormat: Data contract of the installation, when declared.
+    ///   - pluginMarket: First-party plugin recorded for this installation, when published.
     public init(
         schemaVersion: Int = currentSchemaVersion,
         runtimeVersion: String = RuntimeRelease.runtimeVersion,
@@ -175,7 +237,8 @@ public struct RuntimeInstallationManifest: Codable, Equatable, Sendable {
         nodeSHA256: String,
         harnessPackageIntegrity: String,
         pnpmPackageIntegrity: String = RuntimeRelease.pnpmPackageIntegrity,
-        dataFormat: RuntimeDataFormatDescriptor? = nil
+        dataFormat: RuntimeDataFormatDescriptor? = nil,
+        pluginMarket: RuntimePluginPin? = nil
     ) {
         self.schemaVersion = schemaVersion
         self.runtimeVersion = runtimeVersion
@@ -187,6 +250,7 @@ public struct RuntimeInstallationManifest: Codable, Equatable, Sendable {
         self.harnessPackageIntegrity = harnessPackageIntegrity
         self.pnpmPackageIntegrity = pnpmPackageIntegrity
         self.dataFormat = dataFormat
+        self.pluginMarket = pluginMarket
     }
 
     /// A compact Harness and Node version label for the installed Runtime.
@@ -198,6 +262,10 @@ public struct RuntimeInstallationManifest: Codable, Equatable, Sendable {
     ///
     /// Used before an update is allowed to reuse the existing installation: a
     /// mismatch in any archived dependency or data contract invalidates the reuse.
+    ///
+    /// The companion plugin pin is deliberately not compared: it describes which
+    /// market version goes with the release, not which bytes this installation holds,
+    /// so two records of the same installation stay interchangeable.
     ///
     /// - Parameter release: Release the installation is compared against.
     /// - Returns: `true` when schema, versions, checksums, and data contract agree.
@@ -235,7 +303,8 @@ public extension RuntimeReleaseDescriptor {
             pnpmPackageIntegrity: manifest.pnpmPackageIntegrity,
             runtimeVersion: manifest.runtimeVersion,
             artifact: nil,
-            dataFormat: manifest.dataFormat
+            dataFormat: manifest.dataFormat,
+            pluginMarket: manifest.pluginMarket
         )
     }
 }

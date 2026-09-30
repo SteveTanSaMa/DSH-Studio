@@ -1,0 +1,48 @@
+{
+  "name": "dsh-studio-settings",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "First-party DSH Studio settings plugin for DeepSeek Harness",
+  "main": "./src/host.js",
+  "exports": {
+    ".": "./src/host.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "src",
+    "lib/client.js",
+    "cordis.patch.yml"
+  ],
+  "dsh": {
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-renderer",
+        "@deepseek-ai/dsh-client-ui-settings"
+      ],
+      "platform": "web"
+    },
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/schemastery": "*"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "node --test tests/*.test.js",
+    "test:runtime": "node --test tests/runtime/*.test.js"
+  },
+  "dependencies": {
+    "@deepseek-ai/schemastery": "*"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.10",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "react-test-renderer": "18.3.1"
+  }
+}

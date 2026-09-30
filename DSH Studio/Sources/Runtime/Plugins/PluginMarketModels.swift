@@ -5,15 +5,19 @@
 
 import Foundation
 
-/// The fixed upstream package installed by DSH Studio.
+/// The upstream market package DSH Studio installs into a Harness profile.
 ///
-/// Keeping this contract immutable means the app never executes a remote
-/// install script or resolves an unbounded npm tag on a user's machine.
+/// The version is **not** a property of the app alone. Which market works is decided
+/// by the Harness version the running Runtime contains, and that pairing belongs to
+/// whoever builds the Runtime — so the app prefers the pin the signed catalog (or the
+/// installed Runtime's manifest) publishes, and keeps the constants below only for a
+/// Runtime that publishes none.
+///
+/// Keeping this contract immutable also means the app never executes a remote install
+/// script or resolves an unbounded npm tag on a user's machine.
 public enum PluginMarketRelease {
     /// The npm package name installed into the Harness profile.
     public static let packageName = "dshmarket"
-    /// The pinned package version; the market is never resolved from a moving tag.
-    public static let packageVersion = "1.46.1"
     /// The only profile allowed to host the market.
     public static let profileName = "web"
     /// The single registry host accepted by ``registryURL``.
@@ -22,15 +26,86 @@ public enum PluginMarketRelease {
     ///
     /// The host is fixed so a profile override cannot redirect the install.
     public static let registryURL = URL(string: "https://registry.npmjs.org")!
-    /// The expected `sha512` integrity recorded in the profile lockfile.
-    public static let packageIntegrity = "sha512-TtQbcCXhaWMiq6rElNg7EtckkPD8JxMfOvbxU4WxN9amQVqnqVsCqfuA9Cq1iZTVQeh59vK6brI7oIl9S+/JsA=="
-    /// The Harness version the pinned package was verified against.
+    /// The version used when the Runtime publishes no pin.
     ///
-    /// Retained for compatibility with the existing state model. Installation is
-    /// governed by the fixed Plugin Market package contract above.
-    public static let compatibleHarnessVersion = RuntimeRelease.harnessVersion
+    /// Refresh together with ``packageIntegrity`` and ``harnessRange``; the three
+    /// describe one published package.
+    public static let packageVersion = "1.66.6"
+    /// The expected `sha512` integrity recorded in the profile lockfile.
+    public static let packageIntegrity = "sha512-J7bqwzJAEcGfqN+zD0l82gy3MCf2IOLku9TqfyBD6P8fQgTOg6EzppZIERjTb+JExagxGHIqT6z+XaWPLBbluQ=="
+    /// Harness versions ``packageVersion`` declares support for.
+    ///
+    /// Copied from the package's own `peerDependencies` on the Harness packages, which
+    /// all share one version. It is what makes an out-of-date pin visible instead of
+    /// silently installing a market that cannot load.
+    public static let harnessRange = "^0.1.0-rc.7 || ^0.1.1-rc.2 || ^0.1.2-alpha.2 || ^0.2.0-rc.1"
     /// Provenance text shown next to the installed version.
-    public static let sourceDescription = "npmjs.com / dshmarket@1.46.1"
+    public static var sourceDescription: String {
+        sourceDescription(for: fallbackPin)
+    }
+
+    /// Provenance text for one pin.
+    ///
+    /// - Parameter pin: Pin the profile is expected to hold.
+    /// - Returns: The registry and exact package version, for diagnostics and the UI.
+    public static func sourceDescription(for pin: RuntimePluginPin) -> String {
+        "npmjs.com / \(pin.package)@\(pin.version)"
+    }
+
+    /// The pin used when the Runtime publishes none.
+    public static var fallbackPin: RuntimePluginPin {
+        RuntimePluginPin(
+            package: packageName,
+            version: packageVersion,
+            integrity: packageIntegrity,
+            harnessRange: harnessRange
+        )
+    }
+
+    /// Resolves the market pin for the Runtime the app is bound to.
+    ///
+    /// The installed Runtime decides, because the market has to work with the Harness
+    /// that is running: its manifest is consulted first (it also works offline). A
+    /// catalog entry stands in only while it describes that same version, or while
+    /// nothing is installed yet and the catalog is what will be.
+    ///
+    /// - Parameters:
+    ///   - installed: Manifest of the installed Runtime, when one is valid.
+    ///   - available: Release the catalog offers for this architecture, when known.
+    /// - Returns: The pin to install and validate against.
+    public static func pin(
+        installed: RuntimeInstallationManifest?,
+        available: RuntimeReleaseDescriptor?
+    ) -> RuntimePluginPin {
+        if let pin = installed?.pluginMarket {
+            return pin
+        }
+        if let pin = available?.pluginMarket,
+           installed == nil || installed?.runtimeVersion == available?.runtimeVersion {
+            return pin
+        }
+        return fallbackPin
+    }
+
+    /// Whether a pin is known to work with a Harness version.
+    ///
+    /// The pin's own declaration wins; an installed package's declaration stands in
+    /// when the publication carried none. A range the app cannot read is not a
+    /// rejection — only a range that excludes the version is.
+    ///
+    /// - Parameters:
+    ///   - harness: Harness version that will run the market.
+    ///   - pin: Pin being considered.
+    ///   - declaredRange: Range the installed package declares, when known.
+    /// - Returns: `true` unless a readable range excludes the Harness version.
+    public static func isCompatible(
+        harness: String,
+        pin: RuntimePluginPin,
+        declaredRange: String? = nil
+    ) -> Bool {
+        guard let range = pin.harnessRange ?? declaredRange else { return true }
+        return PluginCompatibility.satisfies(harness, range: range) ?? true
+    }
 }
 
 /// Where the market package stands on this machine.
@@ -316,7 +391,7 @@ public enum PluginMarketManagerError: Error, Equatable, LocalizedError, Sendable
     case runtimeBusy
     /// Harness has not reported a ready URL yet.
     case runtimeNotReady
-    /// The running Harness version differs from the one the market requires.
+    /// The running Harness is outside the range the market supports.
     case incompatibleHarness(expected: String, actual: String?)
     /// The profile path failed the safety checks; carries the rejected detail.
     case unsafeProfile(String)
@@ -339,7 +414,7 @@ public enum PluginMarketManagerError: Error, Equatable, LocalizedError, Sendable
         case .runtimeNotReady:
             return "Runtime 尚未就绪"
         case .incompatibleHarness(let expected, let actual):
-            return "Harness 版本不兼容：需要 \(expected)，当前为 \(actual ?? "未知")"
+            return "Plugin Market 不支持当前 Harness：需要 \(expected)，当前为 \(actual ?? "未知")"
         case .unsafeProfile(let detail):
             return "Plugin Market Profile 路径不安全：\(detail)"
         case .malformedProfile(let detail):

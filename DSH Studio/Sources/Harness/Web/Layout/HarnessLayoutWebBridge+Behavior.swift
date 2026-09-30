@@ -7,8 +7,8 @@ import Foundation
 
 /// The behavior half of the presentation-only layout adjustments.
 ///
-/// Aligns the hero and mirrors the sidebar's collapsed state without changing
-/// any Harness functionality.
+/// Aligns the hero, mirrors the sidebar's collapsed state, and isolates the
+/// input scrollport from Harness's edge-wheel forwarding behavior.
 extension HarnessLayoutWebBridge {
     /// The script that aligns the hero and mirrors the sidebar state.
     static let sourcePartTwo = #"""
@@ -113,6 +113,22 @@ extension HarnessLayoutWebBridge {
         return true;
       };
 
+      // The app's Settings menu item opens Harness's own settings dialog instead of
+      // a second native window, so it presses the trigger Harness already renders in
+      // the sidebar. Both the seat and the dialog are Harness-owned contracts.
+      const settingsDialogSelector = '[role="dialog"][data-shortcut-modal="settings"]';
+      const settingsTriggerSelector =
+        '[data-slot="sidebar.settings"] button[aria-haspopup="dialog"], ' +
+        '[data-slot="sidebar.settings"] button[aria-expanded]';
+
+      window.__deepseekStudioOpenSettings = () => {
+        if (document.querySelector(settingsDialogSelector)) return true;
+        const trigger = document.querySelector(settingsTriggerSelector);
+        if (!trigger || typeof trigger.click !== "function") return false;
+        trigger.click();
+        return true;
+      };
+
       const syncSidebarState = () => {
         let foundSidebar = false;
         document.querySelectorAll('[class*="_logoRow"]').forEach((logoRow) => {
@@ -162,6 +178,7 @@ extension HarnessLayoutWebBridge {
         '[class*="_heroWorkspaceRow"], [class*="_workspaceRow"], [data-composer-card]';
       const sidebarEntrySelector =
         '[class*="_frame"], [class*="_logoRow"], [class*="sidebarCol"], [data-pane="sidebar"]';
+      const inputScrollSelector = '[data-input-scroll]';
       const nodeMatches = (node, selector) =>
         node.nodeType === 1 && node.matches(selector);
       const subtreeContainsHeroEntry = (node) =>
@@ -188,6 +205,36 @@ extension HarnessLayoutWebBridge {
         );
       };
 
+      // Harness forwards edge wheel events from the composer to the
+      // conversation scrollport. Stop that forwarding at the local scrollport
+      // while preserving the browser's normal scrolling and default behavior.
+      const installInputScrollBoundaryGuard = (element) => {
+        if (element.dataset.deepseekStudioInputScrollGuard === "true") return;
+        element.dataset.deepseekStudioInputScrollGuard = "true";
+        element.addEventListener("wheel", (event) => {
+          if (event.deltaY === 0) return;
+          const atTop = element.scrollTop <= 0;
+          const atEnd = element.scrollTop + element.clientHeight >= element.scrollHeight - 1;
+          const movingPastTop = event.deltaY < 0 && atTop;
+          const movingPastEnd = event.deltaY > 0 && atEnd;
+          if (!movingPastTop && !movingPastEnd) return;
+          event.stopImmediatePropagation();
+        }, { capture: true });
+      };
+
+      const syncInputScrollBoundaryGuards = () => {
+        document.querySelectorAll(inputScrollSelector).forEach(installInputScrollBoundaryGuard);
+      };
+      const mutationAddsInputScroll = (mutation) => {
+        if (mutation.type !== "childList") return false;
+        return (
+          nodeMatches(mutation.target, inputScrollSelector) ||
+          Array.from(mutation.addedNodes).some((node) =>
+            nodeMatches(node, inputScrollSelector) || Boolean(node.querySelector?.(inputScrollSelector)),
+          )
+        );
+      };
+
       const observer = new MutationObserver((mutations) => {
         if (mutations.some(mutationChangesHeroStructure)) {
           heroStructureDirty = true;
@@ -197,6 +244,9 @@ extension HarnessLayoutWebBridge {
         }
         if (mutations.some(mutationChangesSidebarStructure)) {
           scheduleSidebarState();
+        }
+        if (mutations.some(mutationAddsInputScroll)) {
+          syncInputScrollBoundaryGuards();
         }
         if (heroStructureDirty) {
           scheduleHeroAlignment();
@@ -209,6 +259,7 @@ extension HarnessLayoutWebBridge {
         subtree: true,
       });
       window.addEventListener("resize", scheduleHeroAlignment);
+      syncInputScrollBoundaryGuards();
       scheduleSidebarState();
       scheduleHeroAlignment();
     })();

@@ -137,4 +137,22 @@ final class SettingsStore: ObservableObject {
         }
         return preference
     }
+
+    /// Encodes only the five legacy preference fields for the one-launch
+    /// migration handoff to the first-party Harness settings plugin.
+    var legacyPluginEnvironment: [String: String] {
+        let values: [String: Any] = [
+            Self.workspacePathKey: workspaceURL.standardizedFileURL.path,
+            Self.chatContentMaxWidthKey: chatContentMaxWidth,
+            Self.turnCompletionNotificationKey: turnCompletionNotification.rawValue,
+            Self.permissionNotificationsEnabledKey: permissionNotificationsEnabled,
+            Self.questionNotificationsEnabledKey: questionNotificationsEnabled,
+        ]
+        guard JSONSerialization.isValidJSONObject(values),
+              let data = try? JSONSerialization.data(withJSONObject: values),
+              let json = String(data: data, encoding: .utf8) else {
+            return [:]
+        }
+        return ["DSH_STUDIO_LEGACY_PREFERENCES": json]
+    }
 }

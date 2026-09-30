@@ -7,34 +7,33 @@ import Foundation
 
 /// Orders Runtime and Harness version strings for comparison and sorting.
 ///
-/// Runtime builds follow `<harness>-ver<n>`; two of those are compared by their
-/// Harness part first and their revision second, so `-ver10` correctly sorts after
-/// `-ver9`. Anything else falls back to numeric-then-lexical component ordering.
+/// A Runtime version **is** the Harness version it contains (`0.2.0-rc.2`), so both
+/// sides of a comparison are semantic versions and are ordered as such: core first,
+/// then prerelease identifiers, with a released version above its own prereleases.
+/// The `-ver<n>` build counter this project used before that rule was settled is
+/// gone from the pipeline — every release it ever named has been unpublished — so it
+/// carries no meaning here either. Anything that is not a semantic version falls back
+/// to numeric-then-lexical component ordering.
 public enum RuntimeVersionOrdering {
     /// Compares two version strings.
     ///
-    /// A standardized Runtime version always sorts after a plain version, so a
-    /// recognizable build outranks an unrecognized string.
+    /// A recognizable version always sorts after a string that is not one, so a
+    /// published Runtime outranks something unrecognized.
     ///
     /// - Parameters:
     ///   - lhs: Left version string.
     ///   - rhs: Right version string.
     /// - Returns: The ordering of `lhs` relative to `rhs`.
     public static func compare(_ lhs: String, _ rhs: String) -> ComparisonResult {
-        if let left = standardizedRuntimeVersion(lhs),
-           let right = standardizedRuntimeVersion(rhs) {
-            let harnessResult = compareHarnessVersions(left.harness, right.harness)
-            if harnessResult != .orderedSame {
-                return harnessResult
-            }
-            return left.revision == right.revision
-                ? .orderedSame
-                : (left.revision < right.revision ? .orderedAscending : .orderedDescending)
+        let leftIsVersion = isRuntimeVersion(lhs)
+        let rightIsVersion = isRuntimeVersion(rhs)
+        if leftIsVersion, rightIsVersion {
+            return compareHarnessVersions(lhs, rhs)
         }
-        if standardizedRuntimeVersion(lhs) != nil {
+        if leftIsVersion {
             return .orderedDescending
         }
-        if standardizedRuntimeVersion(rhs) != nil {
+        if rightIsVersion {
             return .orderedAscending
         }
 
@@ -47,7 +46,7 @@ public enum RuntimeVersionOrdering {
                 return ln < rn ? .orderedAscending : .orderedDescending
             }
             if l != r {
-                return l.localizedStandardCompare(r)
+                return compareIdentifiers(l, r)
             }
         }
         return .orderedSame
@@ -57,14 +56,19 @@ public enum RuntimeVersionOrdering {
         value.split { !$0.isLetter && !$0.isNumber }.map(String.init)
     }
 
-    private static func standardizedRuntimeVersion(_ value: String) -> (harness: String, revision: Int)? {
-        guard let range = value.range(of: #"-ver[1-9][0-9]*$"#, options: .regularExpression),
-              let revision = Int(value[range].dropFirst(4)) else {
-            return nil
-        }
-        let harness = String(value[..<range.lowerBound])
-        guard !harness.isEmpty else { return nil }
-        return (harness, revision)
+    /// Whether a string is a Runtime version.
+    ///
+    /// The shape is the one the Runtime repository publishes: `major.minor.patch` with
+    /// an optional prerelease, and no build metadata, because a Runtime's identity is
+    /// the Harness version and nothing is appended to it.
+    ///
+    /// - Parameter value: Version string being compared.
+    /// - Returns: `true` when the string is a Runtime version.
+    private static func isRuntimeVersion(_ value: String) -> Bool {
+        value.range(
+            of: #"^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$"#,
+            options: .regularExpression
+        ) != nil
     }
 
     private static func compareHarnessVersions(_ lhs: String, _ rhs: String) -> ComparisonResult {
@@ -100,7 +104,7 @@ public enum RuntimeVersionOrdering {
                 return ln < rn ? .orderedAscending : .orderedDescending
             }
             if l != r {
-                return l.localizedStandardCompare(r)
+                return compareIdentifiers(l, r)
             }
         }
         return .orderedSame
@@ -132,8 +136,32 @@ public enum RuntimeVersionOrdering {
             }
             if Int(left) != nil { return .orderedAscending }
             if Int(right) != nil { return .orderedDescending }
-            return left.localizedStandardCompare(right)
+            return compareIdentifiers(left, right)
         }
         return .orderedSame
+    }
+
+    /// Compares two version identifiers without consulting the user's locale.
+    ///
+    /// The Runtime publication pipeline replicates this ordering in
+    /// `check-catalog-precedent.sh` so it can never disagree with the client about
+    /// which Runtime is newer. A locale-aware comparison would break that promise:
+    /// the same two versions would order differently on different Macs, and the
+    /// pipeline could publish a version a client reads as a downgrade.
+    ///
+    /// - Parameters:
+    ///   - lhs: Left identifier.
+    ///   - rhs: Right identifier.
+    /// - Returns: The ordering of `lhs` relative to `rhs`.
+    private static func compareIdentifiers(_ lhs: String, _ rhs: String) -> ComparisonResult {
+        if lhs == rhs { return .orderedSame }
+        if let left = Int(lhs), let right = Int(rhs) {
+            return left < right ? .orderedAscending : .orderedDescending
+        }
+        // A numeric identifier ranks below an alphanumeric one, the same rule the
+        // semantic-versioning grammar uses for prerelease identifiers.
+        if Int(lhs) != nil { return .orderedAscending }
+        if Int(rhs) != nil { return .orderedDescending }
+        return lhs < rhs ? .orderedAscending : .orderedDescending
     }
 }

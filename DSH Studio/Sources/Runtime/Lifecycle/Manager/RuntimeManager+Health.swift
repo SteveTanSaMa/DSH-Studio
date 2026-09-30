@@ -62,6 +62,7 @@ extension RuntimeManager {
         guard generation == processGeneration else { return }
         processExited = true
         lastTerminationStatus = status
+        let processID = process?.pid
         process = nil
         logs.log(component: "Runtime", level: "info", message: "runtime termination status \(status)")
         if state == .failed { return }
@@ -74,6 +75,19 @@ extension RuntimeManager {
         let shouldRestart = state == .ready || state == .starting || state == .launching
         state = shouldRestart ? .crashed : .failed
         lastError = .processCrashed(exitStatus: status, stderr: lastStderrLines)
+        if shouldRestart {
+            crashReportStore?.write(
+                status: status,
+                state: state,
+                generation: generation,
+                processID: processID,
+                configuration: configuration,
+                nodeVersion: nodeVersion,
+                harnessVersion: harnessVersion,
+                stderr: lastStderrLines,
+                logs: logs.entries
+            )
+        }
         if shouldRestart {
             scheduleRestart()
         }

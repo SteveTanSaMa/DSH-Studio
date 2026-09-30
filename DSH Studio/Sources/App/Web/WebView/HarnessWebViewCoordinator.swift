@@ -35,7 +35,6 @@ extension HarnessWebView {
         /// It lives on the coordinator so there is one staging directory and one cleanup
         /// owner per WebView.
         let sessionLogClient = SessionLogDownloadClient()
-        private var modelCancellable: AnyCancellable?
 
         /// Creates the coordinator and subscribes to model changes.
         ///
@@ -55,16 +54,10 @@ extension HarnessWebView {
             self.model = model
             self.onWebContentTerminated = onWebContentTerminated
             super.init()
-            modelCancellable = model.objectWillChange.sink { [weak self] _ in
-                Task { @MainActor [weak self] in
-                    self?.broadcastAppSettingsState()
-                }
-            }
         }
 
         /// Cancels the model subscription when the coordinator goes away.
         deinit {
-            modelCancellable?.cancel()
         }
     }
 }

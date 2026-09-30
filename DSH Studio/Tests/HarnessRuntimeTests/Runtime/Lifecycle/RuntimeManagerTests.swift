@@ -91,6 +91,37 @@ final class RuntimeManagerTests: XCTestCase {
         XCTAssertEqual(manager.lastTerminationStatus, 1)
     }
 
+    /// An unexpected exit writes a redacted report to the configured report directory.
+    @MainActor
+    func testProcessCrashWritesCrashReport() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("dsh-runtime-crash-(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let fake = FakeHarnessProcess()
+        let manager = makeManager(
+            process: fake,
+            healthResult: true,
+            restartPolicy: RestartPolicy(enabled: false),
+            crashReportDirectory: directory
+        )
+        manager.start()
+        fake.emitOutput("dsh web: http://127.0.0.1:43212\n")
+        _ = await waitUntil(manager.state == .ready)
+        fake.emitError("apiKey=sk-crash-secret\n")
+        fake.simulateTermination(1)
+        _ = await waitUntil(manager.state == .crashed)
+
+        let reports = try FileManager.default.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        )
+        let report = try String(contentsOf: try XCTUnwrap(reports.first), encoding: .utf8)
+        XCTAssertTrue(report.contains("exit status: 1"))
+        XCTAssertTrue(report.contains("process id: 123"))
+        XCTAssertFalse(report.contains("sk-crash-secret"))
+    }
+
     /// Crash output is redacted before it reaches the log store.
     @MainActor
     func testCrashLogsRedactSecrets() async {
@@ -243,7 +274,8 @@ final class RuntimeManagerTests: XCTestCase {
         startupTimeout: TimeInterval = 0.5,
         gracefulTimeout: TimeInterval = 0.5,
         restartPolicy: RestartPolicy = RestartPolicy(),
-        provisioner: (any RuntimeProvisioning)? = nil
+        provisioner: (any RuntimeProvisioning)? = nil,
+        crashReportDirectory: URL? = nil
     ) -> RuntimeManager {
         let factory = FakeProcessFactory(process: process)
         let health = FakeHealthChecker(result: healthResult)
@@ -256,7 +288,8 @@ final class RuntimeManagerTests: XCTestCase {
             healthChecker: health,
             restartPolicy: restartPolicy,
             validateRuntimeOnStart: false,
-            provisioner: provisioner
+            provisioner: provisioner,
+            crashReportDirectory: crashReportDirectory
         )
     }
 

@@ -66,6 +66,11 @@ public final class SystemHarnessProcess: HarnessProcess {
     public var onError: ((Data) -> Void)?
     /// Called once with the exit status when the child terminates.
     public var onTermination: ((Int32) -> Void)?
+    /// Descendants recorded when the shutdown started.
+    ///
+    /// Kept so the forced kill can reach a forked copy that outlived its parent and
+    /// was reparented to launchd, where it is no longer discoverable as a child.
+    private var descendantPIDs: [pid_t] = []
 
     /// Creates a process for one launch configuration.
     ///
@@ -137,17 +142,72 @@ public final class SystemHarnessProcess: HarnessProcess {
         try process.run()
     }
 
-    /// Sends `SIGTERM` and lets the runtime wait for the graceful timeout.
+    /// Sends `SIGTERM`, to the Harness process and to the descendants it forked.
+    ///
+    /// Harness may fork a copy of itself while it runs. Such a child is reparented to
+    /// launchd once its parent exits, so signalling only the process this app started
+    /// would leave the copy running; the descendants are recorded here so
+    /// ``forceTerminate()`` can still reach the ones that ignore `SIGTERM`.
     public func terminateGracefully() {
         guard process.isRunning else { return }
+        descendantPIDs = Self.descendants(of: process.processIdentifier)
+        for identifier in descendantPIDs {
+            kill(identifier, SIGTERM)
+        }
         process.terminate()
     }
 
     /// Sends `SIGKILL` when a graceful exit did not happen.
     public func forceTerminate() {
+        for identifier in descendantPIDs {
+            kill(identifier, SIGKILL)
+        }
+        descendantPIDs = []
         let identifier = process.processIdentifier
         guard identifier > 0 else { return }
         kill(identifier, SIGKILL)
+    }
+
+    /// Process identifiers of the live descendants of one process.
+    ///
+    /// - Parameter identifier: Parent process identifier.
+    /// - Returns: Descendant identifiers, one level at a time, deepest last.
+    static func descendants(of identifier: pid_t) -> [pid_t] {
+        guard identifier > 0 else { return [] }
+        var descendants: [pid_t] = []
+        var frontier: [pid_t] = [identifier]
+        while let parent = frontier.popLast() {
+            let children = childPIDs(of: parent)
+            descendants.append(contentsOf: children)
+            frontier.append(contentsOf: children)
+        }
+        return descendants
+    }
+
+    /// Live children of one process.
+    ///
+    /// - Parameter identifier: Parent process identifier.
+    /// - Returns: Child identifiers, or an empty list when none can be read.
+    private static func childPIDs(of identifier: pid_t) -> [pid_t] {
+        var capacity = 64
+        // A busy Harness can outgrow the first guess, so the read is retried with the
+        // size the kernel asked for before giving up.
+        while capacity <= 4096 {
+            let buffer = UnsafeMutablePointer<pid_t>.allocate(capacity: capacity)
+            defer { buffer.deallocate() }
+            let written = proc_listchildpids(
+                identifier,
+                buffer,
+                Int32(capacity * MemoryLayout<pid_t>.size)
+            )
+            guard written > 0 else { return [] }
+            guard written <= capacity else {
+                capacity = Int(written) + 16
+                continue
+            }
+            return (0..<Int(written)).map { buffer[$0] }.filter { $0 > 0 }
+        }
+        return []
     }
 
     /// Returns the child-process PATH with Runtime-owned tools first.
