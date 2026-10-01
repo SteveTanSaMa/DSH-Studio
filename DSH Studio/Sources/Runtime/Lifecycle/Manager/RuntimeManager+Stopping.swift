@@ -89,15 +89,29 @@ extension RuntimeManager {
         }
         state = .stopping
         logs.log(component: "Runtime", level: "info", message: "sending SIGTERM")
+        let stoppedAt = Date()
         process.terminateGracefully()
 
-        let timeout = UInt64(configuration.gracefulTimeout * 1_000_000_000)
-        try? await Task.sleep(nanoseconds: timeout)
+        // The graceful budget is a deadline, not a wait: Harness normally exits as soon
+        // as it is asked to, and sleeping through the whole budget made every quit take
+        // the full ten seconds. The deadline is still what decides when a Runtime that
+        // refuses to leave gets killed.
+        let deadline = stoppedAt.addingTimeInterval(configuration.gracefulTimeout)
+        while !processExited, Date() < deadline {
+            try? await Task.sleep(nanoseconds: 50_000_000)
+        }
 
         if !processExited {
             logs.log(component: "Runtime", level: "warn", message: "graceful timeout, forcing terminate")
             process.forceTerminate()
             try? await Task.sleep(nanoseconds: 500_000_000)
+        } else {
+            let elapsed = Date().timeIntervalSince(stoppedAt)
+            logs.log(
+                component: "Runtime",
+                level: "info",
+                message: String(format: "Runtime stopped in %.2fs", elapsed)
+            )
         }
         state = .terminated
         self.process = nil

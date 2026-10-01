@@ -13,6 +13,7 @@
 		8253FB285F88098D08E0806C /* libDeepSeekLogging.a in Frameworks */ = {isa = PBXBuildFile; fileRef = F909571DEA0A578AE06C4992 /* libDeepSeekLogging.a */; };
 		B5FDB2702541704DC4427E75 /* libDeepSeekHarness.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 8D815112A13191890BB1C897 /* libDeepSeekHarness.a */; };
 		D5A7B0010000000000000001 /* DSH Studio/Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = D5A7C0010000000000000001 /* DSH Studio/Assets.xcassets */; };
+		D5A7B0020000000000000002 /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = D5A7C0020000000000000002 /* AppIcon.icon */; };
 		DCF767977CB8818241A3104C /* libDeepSeekRuntime.a in Frameworks */ = {isa = PBXBuildFile; fileRef = EAD4210FB16AE2BCFCC642F8 /* libDeepSeekRuntime.a */; };
 /* End PBXBuildFile section */
 
@@ -80,6 +81,7 @@
 		8D815112A13191890BB1C897 /* libDeepSeekHarness.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libDeepSeekHarness.a; sourceTree = BUILT_PRODUCTS_DIR; };
 		C6B1936914B87F694A17B386 /* HarnessRuntimeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HarnessRuntimeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		D5A7C0010000000000000001 /* DSH Studio/Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "DSH Studio/Assets.xcassets"; sourceTree = SOURCE_ROOT; };
+		D5A7C0020000000000000002 /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = AppIcon.icon; sourceTree = SOURCE_ROOT; };
 		EAD4210FB16AE2BCFCC642F8 /* libDeepSeekRuntime.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libDeepSeekRuntime.a; sourceTree = BUILT_PRODUCTS_DIR; };
 		F909571DEA0A578AE06C4992 /* libDeepSeekLogging.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libDeepSeekLogging.a; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -92,7 +94,6 @@
 		D5A7F0050000000000000005 /* DSH Studio/Tests/HarnessRuntimeTests */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = "DSH Studio/Tests/HarnessRuntimeTests"; sourceTree = "<group>"; };
 		D5A7F0060000000000000006 /* DSH Studio/Sources/App/Settings */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = "DSH Studio/Sources/App/Settings"; sourceTree = "<group>"; };
 		D5A7F0070000000000000007 /* DSH Studio/Sources/App/Notifications */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = "DSH Studio/Sources/App/Notifications"; sourceTree = "<group>"; };
-		D5A7F0080000000000000008 /* DSH Studio/Sources/App/Appearance */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = "DSH Studio/Sources/App/Appearance"; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -135,7 +136,6 @@
 			isa = PBXGroup;
 			children = (
 				D5A7F0010000000000000001 /* DSH Studio/Sources/App */,
-				D5A7F0080000000000000008 /* DSH Studio/Sources/App/Appearance */,
 				D5A7F0020000000000000002 /* DSH Studio/Sources/Harness */,
 				D5A7F0030000000000000003 /* DSH Studio/Sources/Logging */,
 				D5A7F0040000000000000004 /* DSH Studio/Sources/Runtime */,
@@ -151,6 +151,7 @@
 			isa = PBXGroup;
 			children = (
 				D5A7C0010000000000000001 /* DSH Studio/Assets.xcassets */,
+				D5A7C0020000000000000002 /* AppIcon.icon */,
 			);
 			name = "Recovered References";
 			sourceTree = "<group>";
@@ -197,7 +198,6 @@
 			);
 			fileSystemSynchronizedGroups = (
 				D5A7F0010000000000000001 /* DSH Studio/Sources/App */,
-				D5A7F0080000000000000008 /* DSH Studio/Sources/App/Appearance */,
 			);
 			name = "DSH Studio";
 			packageProductDependencies = (
@@ -245,7 +245,6 @@
 				D5A7F0050000000000000005 /* DSH Studio/Tests/HarnessRuntimeTests */,
 				D5A7F0060000000000000006 /* DSH Studio/Sources/App/Settings */,
 				D5A7F0070000000000000007 /* DSH Studio/Sources/App/Notifications */,
-				D5A7F0080000000000000008 /* DSH Studio/Sources/App/Appearance */,
 			);
 			name = HarnessRuntimeTests;
 			packageProductDependencies = (
@@ -314,6 +313,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				D5A7B0010000000000000001 /* DSH Studio/Assets.xcassets in Resources */,
+				D5A7B0020000000000000002 /* AppIcon.icon in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

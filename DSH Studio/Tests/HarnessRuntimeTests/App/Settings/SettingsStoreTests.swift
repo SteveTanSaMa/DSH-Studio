@@ -11,6 +11,45 @@ import XCTest
 
 /// Verifies app-owned settings persistence and CSS width normalization.
 final class SettingsStoreTests: XCTestCase {
+    /// The sidebar width is remembered across launches and clamped to the layout range.
+    ///
+    /// Harness keeps panel geometry in memory, so this store is the only place a dragged
+    /// width survives a restart.
+    @MainActor
+    func testSidebarWidthPersistsAndClamps() {
+        let suiteName = "DeepSeekStudio.SettingsStoreTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let store = SettingsStore(defaults: defaults)
+        XCTAssertNil(store.sidebarWidth, "a first launch has no width to restore")
+        XCTAssertNil(defaults.object(forKey: SettingsStore.sidebarWidthKey))
+
+        store.sidebarWidth = 336
+        XCTAssertEqual(defaults.double(forKey: SettingsStore.sidebarWidthKey), 336)
+
+        let reopened = SettingsStore(defaults: defaults)
+        XCTAssertEqual(reopened.sidebarWidth, 336, "the next launch gets the same width back")
+
+        reopened.sidebarWidth = SettingsStore.sidebarWidthRange.upperBound + 500
+        XCTAssertEqual(reopened.sidebarWidth, SettingsStore.sidebarWidthRange.upperBound)
+        reopened.sidebarWidth = SettingsStore.sidebarWidthRange.lowerBound - 500
+        XCTAssertEqual(reopened.sidebarWidth, SettingsStore.sidebarWidthRange.lowerBound)
+    }
+
+    /// A stored sidebar width that cannot be a width is dropped, not guessed.
+    @MainActor
+    func testInvalidPersistedSidebarWidthIsIgnored() {
+        let suiteName = "DeepSeekStudio.SettingsStoreTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        defaults.set("wide", forKey: SettingsStore.sidebarWidthKey)
+        let store = SettingsStore(defaults: defaults)
+
+        XCTAssertNil(store.sidebarWidth)
+    }
+
     /// A restored workspace is kept, while the data home stays app-owned.
     @MainActor
     func testWorkspaceCanBeRestoredWhileDataHomeRemainsAppOwned() {

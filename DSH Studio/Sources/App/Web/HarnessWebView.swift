@@ -69,6 +69,18 @@ struct HarnessWebView: NSViewRepresentable {
         configuration.userContentController.addUserScript(
             WKUserScript(source: overscroll, injectionTime: .atDocumentEnd, forMainFrameOnly: true)
         )
+        // The stored sidebar width is handed over before the page renders, so the layout
+        // script can replay it instead of reporting the default back as if the user had
+        // just dragged it.
+        if let sidebarWidth = model.settings.sidebarWidth {
+            configuration.userContentController.addUserScript(
+                WKUserScript(
+                    source: "window.__deepseekStudioSidebarWidth = \(sidebarWidth);",
+                    injectionTime: .atDocumentStart,
+                    forMainFrameOnly: true
+                )
+            )
+        }
         configuration.userContentController.addUserScript(
             WKUserScript(
                 source: HarnessLayoutWebBridge.source,

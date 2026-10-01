@@ -297,6 +297,10 @@ public final class RuntimeManager: ObservableObject {
         processGeneration += 1
         let generation = processGeneration
         dataHomeWasEmptyBeforeLaunch = dataProfileStore?.isDataHomeEmpty(configuration.dshHome)
+        // A launch that did not install anything still has to report the Runtime it starts:
+        // the versions feed the log, the settings page, and crash reports, and reading them
+        // here is a couple of dozen milliseconds against a launch that takes seconds.
+        refreshRuntimeVersions()
 
         logs.log(component: "App", level: "info", message: "app launch")
         logs.log(component: "Runtime", level: "info", message: "node path \(configuration.nodeExecutable.path)")

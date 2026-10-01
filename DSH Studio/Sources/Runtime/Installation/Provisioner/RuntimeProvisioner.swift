@@ -43,6 +43,14 @@ public final class RuntimeProvisioner: RuntimeCandidateUpdating, RuntimeDataProf
     /// Attached by the Runtime manager so a first launch can report a download that
     /// takes minutes instead of showing an unexplained spinner.
     public var progressHandler: (@Sendable (RuntimeProvisioningProgress) -> Void)? = nil
+    /// Directory keeping verified archives and partial downloads, when the caller sets one.
+    ///
+    /// A Runtime artifact is close to 200 MiB and the link to it is often slow, so the
+    /// bytes that already arrived are worth keeping: a verified archive lets a retry skip
+    /// the download entirely, and a partial file lets the next attempt continue it. Both
+    /// are re-checked against the catalog's SHA-256 before use, so nothing here weakens
+    /// the verification the install already performs.
+    let downloadCacheDirectory: URL?
 
     /// Creates a provisioner for one installation root.
     ///
@@ -61,6 +69,7 @@ public final class RuntimeProvisioner: RuntimeCandidateUpdating, RuntimeDataProf
     ///   - release: Release to install; defaults to the app's pinned release.
     ///   - dataProfileStore: Store used to read the active data profile.
     ///   - dataProfileID: Explicitly selected data profile identifier.
+    ///   - downloadCacheDirectory: Directory keeping verified archives and partial downloads.
     public init(
         root: URL,
         architecture: String = RuntimeLocator.architectureDirectory(),
@@ -72,7 +81,8 @@ public final class RuntimeProvisioner: RuntimeCandidateUpdating, RuntimeDataProf
         nodeArchiveSHA256Override: String? = nil,
         release: RuntimeReleaseDescriptor? = nil,
         dataProfileStore: RuntimeDataProfileStore? = nil,
-        dataProfileID: String? = nil
+        dataProfileID: String? = nil,
+        downloadCacheDirectory: URL? = nil
     ) {
         self.root = root
         self.architecture = architecture
@@ -84,6 +94,7 @@ public final class RuntimeProvisioner: RuntimeCandidateUpdating, RuntimeDataProf
         self.nodeArchiveSHA256Override = nodeArchiveSHA256Override
         self.dataProfileStore = dataProfileStore
         self.selectedDataProfileID = dataProfileID
+        self.downloadCacheDirectory = downloadCacheDirectory
         let baseRelease = release ?? Self.releaseDescriptor(architecture: architecture)
         if let nodeArchiveSHA256Override {
             self.release = RuntimeReleaseDescriptor(

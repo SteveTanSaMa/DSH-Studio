@@ -45,21 +45,49 @@ public struct URLSessionRuntimeAssetDownloader: RuntimeAssetDownloading, Sendabl
         to destination: URL,
         onProgress: (@Sendable (Int64, Int64) -> Void)?
     ) async throws {
+        try await download(from: url, to: destination, resumingFrom: nil, onProgress: onProgress)
+    }
+
+    /// Downloads a Runtime artifact, continuing a partial file when the server allows it.
+    ///
+    /// The transfer streams to disk instead of buffering, so an interrupted download keeps
+    /// everything it already received: on a slow link that prefix is worth minutes, and the
+    /// SHA-256 check the caller performs afterwards is what decides whether those bytes are
+    /// the right ones. A server that answers a ranged request with the whole artifact simply
+    /// replaces the partial file.
+    ///
+    /// - Parameters:
+    ///   - url: Trusted artifact URL.
+    ///   - destination: File the archive is written to.
+    ///   - partial: Partial file to continue, when one exists.
+    ///   - onProgress: Called with the bytes received and the expected total; `0` means the
+    ///     server sent no length. Passing `nil` reports nothing.
+    /// - Throws: ``RuntimeProvisioningError/downloadFailed(_:)`` when the source is
+    ///   untrusted, the response status or redirect target is unexpected, or the file
+    ///   cannot be written.
+    public func download(
+        from url: URL,
+        to destination: URL,
+        resumingFrom partial: URL?,
+        onProgress: (@Sendable (Int64, Int64) -> Void)? = nil
+    ) async throws {
         // URLSession may follow redirects, so validate both the requested and
-        // final response host before moving an archive into staging.
+        // final response host before keeping the file.
         guard isAllowedSourceURL(url) else {
             throw RuntimeProvisioningError.downloadFailed("Runtime 下载地址不是受信任的官方地址")
         }
         var request = URLRequest(url: url)
         request.timeoutInterval = 900
-        guard let onProgress else {
-            try await downloadAndMove(temporarySourceFrom: request, to: destination)
-            return
+        let resumeBytes = Self.fileSize(at: partial)
+        if let header = RuntimeDownloadResume.rangeHeader(partialBytes: resumeBytes) {
+            request.setValue(header, forHTTPHeaderField: "Range")
         }
-        // A download task with a delegate reports the bytes as they arrive; the
-        // delegate writes the finished file straight to the destination, because the
-        // session deletes the file it downloaded to as soon as its callback returns.
-        let delegate = DownloadProgressDelegate(destination: destination, onProgress: onProgress)
+        let delegate = DownloadStreamDelegate(
+            partial: partial ?? destination,
+            destination: destination,
+            resumeBytes: resumeBytes,
+            onProgress: onProgress
+        )
         do {
             let response = try await delegate.run(request: request)
             try validate(response: response)
@@ -72,29 +100,17 @@ public struct URLSessionRuntimeAssetDownloader: RuntimeAssetDownloading, Sendabl
         }
     }
 
-    /// Downloads with the async form and moves the temporary file into place.
+    /// Size of an existing file.
     ///
-    /// - Parameters:
-    ///   - request: Prepared request for a trusted artifact URL.
-    ///   - destination: File the archive is moved to.
-    /// - Throws: ``RuntimeProvisioningError/downloadFailed(_:)`` when the response is
-    ///   unexpected or the file cannot be moved.
-    private func downloadAndMove(temporarySourceFrom request: URLRequest, to destination: URL) async throws {
-        let (temporaryURL, response): (URL, URLResponse)
-        do {
-            (temporaryURL, response) = try await URLSession.shared.download(for: request)
-        } catch {
-            throw RuntimeProvisioningError.downloadFailed(error.localizedDescription)
+    /// - Parameter url: File to measure, when one is expected.
+    /// - Returns: Size in bytes, or `0` when there is no readable file.
+    static func fileSize(at url: URL?) -> Int64 {
+        guard let url,
+              let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
+              let size = attributes[.size] as? NSNumber else {
+            return 0
         }
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw RuntimeProvisioningError.downloadFailed("服务器返回了无效 HTTP 状态")
-        }
-        try validate(response: httpResponse)
-        do {
-            try FileManager.default.moveItem(at: temporaryURL, to: destination)
-        } catch {
-            throw RuntimeProvisioningError.downloadFailed(error.localizedDescription)
-        }
+        return size.int64Value
     }
 
     /// Rejects a response that did not come from a trusted host or did not succeed.
@@ -145,101 +161,219 @@ public struct URLSessionRuntimeAssetDownloader: RuntimeAssetDownloading, Sendabl
     }
 }
 
-/// Runs one download task and reports its byte progress.
+/// Streams one artifact to disk, reporting progress and keeping what arrived.
 ///
-/// `URLSession` asks its task delegate on the session's delegate queue, which is not the
-/// main actor, so the report is a plain sendable closure. The session deletes the file it
-/// downloaded to as soon as `urlSession(_:downloadTask:didFinishDownloadingTo:)` returns,
-/// so the file is moved to the caller's destination inside that callback.
-private final class DownloadProgressDelegate: NSObject, URLSessionDownloadDelegate, @unchecked Sendable {
+/// A data task is used instead of a download task because the bytes have to reach the file
+/// as they arrive: `URLSession` deletes a download task's temporary file whenever the
+/// transfer fails, which would throw away an interrupted download's progress. Every chunk
+/// is appended under a lock, so a cancel or a crash leaves a usable prefix on disk.
+private final class DownloadStreamDelegate: NSObject, URLSessionDataDelegate, @unchecked Sendable {
+    /// File that accumulates the bytes; the destination when there is no partial file.
+    private let partial: URL
+    /// File the completed artifact is moved to.
     private let destination: URL
-    private let onProgress: @Sendable (Int64, Int64) -> Void
+    /// Bytes the partial file already held when the request was built.
+    private let resumeBytes: Int64
+    private let onProgress: (@Sendable (Int64, Int64) -> Void)?
     private let lock = NSLock()
+    private var handle: FileHandle?
+    private var received: Int64 = 0
+    /// Bytes the transfer's own count starts from; zero when the file was restarted.
+    private var baseBytes: Int64
     private var outcome: Result<HTTPURLResponse, Error>?
     private var continuation: CheckedContinuation<HTTPURLResponse, Error>?
 
-    /// Creates a delegate that writes the finished file to one destination.
+    /// Creates a delegate for one transfer.
     ///
     /// - Parameters:
-    ///   - destination: File the downloaded archive lands in.
+    ///   - partial: File that accumulates the bytes.
+    ///   - destination: File the completed artifact lands in.
+    ///   - resumeBytes: Bytes the partial file already held.
     ///   - onProgress: Called with the bytes received and the expected total.
-    init(destination: URL, onProgress: @escaping @Sendable (Int64, Int64) -> Void) {
+    init(
+        partial: URL,
+        destination: URL,
+        resumeBytes: Int64,
+        onProgress: (@Sendable (Int64, Int64) -> Void)?
+    ) {
+        self.partial = partial
         self.destination = destination
+        self.resumeBytes = resumeBytes
+        self.baseBytes = resumeBytes
         self.onProgress = onProgress
     }
 
-    /// Downloads a request and waits for the file to arrive at the destination.
+    /// Runs a request and waits for the artifact to arrive at the destination.
     ///
     /// - Parameter request: Prepared request for a trusted artifact URL.
-    /// - Returns: The response that carried the file.
-    /// - Throws: Whatever the transfer failed with, or
-    ///   ``RuntimeProvisioningError/downloadFailed(_:)`` when the response is not an HTTP
-    ///   response.
+    /// - Returns: The response that carried the artifact.
+    /// - Throws: Whatever the transfer failed with.
     func run(request: URLRequest) async throws -> HTTPURLResponse {
         let session = URLSession(configuration: .default, delegate: self, delegateQueue: nil)
         defer { session.finishTasksAndInvalidate() }
+        try prepareFile()
         return try await withCheckedThrowingContinuation { continuation in
             lock.lock()
             self.continuation = continuation
             lock.unlock()
-            session.downloadTask(with: request).resume()
+            session.dataTask(with: request).resume()
         }
     }
 
-    /// Forwards one write report to the caller.
+    /// Reads the response and decides whether its bytes continue the partial file.
     ///
     /// - Parameters:
-    ///   - session: Session running the download; unused.
-    ///   - downloadTask: Task that wrote bytes; unused.
-    ///   - bytesWritten: Bytes written since the previous report; unused.
-    ///   - totalBytesWritten: Bytes received so far.
-    ///   - totalBytesExpectedToWrite: Expected total, or `0` when unknown.
+    ///   - session: Session running the transfer; unused.
+    ///   - dataTask: Task that received the response; unused.
+    ///   - response: Response the server sent.
+    ///   - completionHandler: Called to let the transfer proceed, or cancelled when the
+    ///     bytes on disk cannot be trusted as a prefix.
     func urlSession(
         _ session: URLSession,
-        downloadTask: URLSessionDownloadTask,
-        didWriteData bytesWritten: Int64,
-        totalBytesWritten: Int64,
-        totalBytesExpectedToWrite: Int64
+        dataTask: URLSessionDataTask,
+        didReceive response: URLResponse,
+        completionHandler: @escaping (URLSession.ResponseDisposition) -> Void
     ) {
-        onProgress(totalBytesWritten, totalBytesExpectedToWrite)
-    }
-
-    /// Moves the finished download to the destination before the session deletes it.
-    ///
-    /// - Parameters:
-    ///   - session: Session running the download; unused.
-    ///   - downloadTask: Task that finished downloading.
-    ///   - location: Temporary file the session wrote.
-    func urlSession(
-        _ session: URLSession,
-        downloadTask: URLSessionDownloadTask,
-        didFinishDownloadingTo location: URL
-    ) {
-        do {
-            try? FileManager.default.removeItem(at: destination)
-            try FileManager.default.moveItem(at: location, to: destination)
-            guard let response = downloadTask.response as? HTTPURLResponse else {
-                throw RuntimeProvisioningError.downloadFailed("服务器返回了无效 HTTP 状态")
+        guard let http = response as? HTTPURLResponse else {
+            finish(.failure(RuntimeProvisioningError.downloadFailed("服务器返回了无效 HTTP 状态")))
+            completionHandler(.cancel)
+            return
+        }
+        switch RuntimeDownloadResume.outcome(partialBytes: resumeBytes, statusCode: http.statusCode) {
+        case .append:
+            completionHandler(.allow)
+        case .replace:
+            // The server sent the whole artifact even though the request continued a file:
+            // the file has to start over, or the answer would be appended to the bytes it
+            // already duplicates.
+            guard restartFile() else {
+                finish(.failure(RuntimeProvisioningError.downloadFailed("Runtime 下载文件无法重置")))
+                completionHandler(.cancel)
+                return
             }
-            lock.lock()
-            outcome = .success(response)
-            lock.unlock()
-        } catch {
-            lock.lock()
-            outcome = .failure(error)
-            lock.unlock()
+            completionHandler(.allow)
+        case nil:
+            // The server neither continued the file nor sent the whole artifact, so the
+            // caller verifies or discards what is on disk before trying again.
+            finish(.failure(RuntimeProvisioningError.downloadFailed("Runtime 下载无法续传")))
+            completionHandler(.cancel)
         }
     }
 
-    /// Resumes the waiting caller once the task is done.
+    /// Appends one chunk to the partial file and reports the running total.
     ///
     /// - Parameters:
-    ///   - session: Session running the download; unused.
-    ///   - task: Task that completed; unused.
+    ///   - session: Session running the transfer; unused.
+    ///   - dataTask: Task that received the bytes.
+    ///   - data: Chunk to append.
+    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+        lock.lock()
+        let handle = self.handle
+        lock.unlock()
+        guard let handle else { return }
+        do {
+            try handle.write(contentsOf: data)
+        } catch {
+            finish(.failure(error))
+            dataTask.cancel()
+            return
+        }
+        lock.lock()
+        received += Int64(data.count)
+        let total = baseBytes + max(0, dataTask.countOfBytesExpectedToReceive)
+        let reported = baseBytes + received
+        lock.unlock()
+        onProgress?(reported, total)
+    }
+
+    /// Moves the finished artifact into place once the task is done.
+    ///
+    /// - Parameters:
+    ///   - session: Session running the transfer; unused.
+    ///   - task: Task that completed.
     ///   - error: Failure reported by the session, when the transfer did not finish.
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
         lock.lock()
-        let result = outcome ?? .failure(error ?? RuntimeProvisioningError.downloadFailed("Runtime 下载已中断"))
+        let handle = self.handle
+        self.handle = nil
+        lock.unlock()
+        try? handle?.close()
+
+        if let error {
+            // The bytes received so far stay on disk: the next attempt continues from them,
+            // and the caller's checksum decides whether they are the right ones.
+            finish(.failure(error))
+            return
+        }
+        do {
+            guard let response = task.response as? HTTPURLResponse else {
+                throw RuntimeProvisioningError.downloadFailed("服务器返回了无效 HTTP 状态")
+            }
+            if partial != destination {
+                try? FileManager.default.removeItem(at: destination)
+                try FileManager.default.moveItem(at: partial, to: destination)
+            }
+            finish(.success(response))
+        } catch {
+            finish(.failure(error))
+        }
+    }
+
+    /// Empties the accumulating file so a full answer starts from zero.
+    ///
+    /// - Returns: Whether the file could be reset.
+    private func restartFile() -> Bool {
+        lock.lock()
+        let handle = self.handle
+        received = 0
+        baseBytes = 0
+        lock.unlock()
+        guard let handle else { return false }
+        do {
+            try handle.truncate(atOffset: 0)
+            try handle.seek(toOffset: 0)
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    /// Creates and opens the file that accumulates the bytes.
+    ///
+    /// - Throws: ``RuntimeProvisioningError/downloadFailed(_:)`` when the file cannot be
+    ///   created or opened for writing.
+    private func prepareFile() throws {
+        let fileManager = FileManager.default
+        if !fileManager.fileExists(atPath: partial.path) {
+            try? fileManager.createDirectory(
+                at: partial.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            guard fileManager.createFile(atPath: partial.path, contents: nil) else {
+                throw RuntimeProvisioningError.downloadFailed("Runtime 下载文件无法创建")
+            }
+        }
+        do {
+            let handle = try FileHandle(forWritingTo: partial)
+            try handle.seekToEnd()
+            lock.lock()
+            self.handle = handle
+            lock.unlock()
+        } catch {
+            throw RuntimeProvisioningError.downloadFailed(error.localizedDescription)
+        }
+    }
+
+    /// Resumes the waiting caller exactly once.
+    ///
+    /// - Parameter result: Response or failure to hand back.
+    private func finish(_ result: Result<HTTPURLResponse, Error>) {
+        lock.lock()
+        guard outcome == nil else {
+            lock.unlock()
+            return
+        }
+        outcome = result
         let continuation = self.continuation
         self.continuation = nil
         lock.unlock()

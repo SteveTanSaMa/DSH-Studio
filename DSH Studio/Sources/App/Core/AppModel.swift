@@ -114,10 +114,11 @@ final class AppModel: ObservableObject {
                 if state == .ready {
                     try? self.harnessProfiles.markHealthy(name: self.runtime.configuration.profileName)
                     self.selectedHarnessProfileName = self.runtime.configuration.profileName
-                    // Every restart — including the one a workspace or profile change
-                    // triggers — is a chance for the app-owned values to have moved
-                    // ahead of the namespace the settings page reads.
-                    Task { await self.syncStudioSettingsMirror() }
+                    // Every launch — and every restart a workspace or profile change
+                    // triggers — is a chance for the settings page to hold a value the
+                    // native mirror has not seen yet, so the mirror is reconciled from
+                    // Harness rather than pushed into it.
+                    Task { await self.reconcileStudioSettings() }
                 }
                 self.schedulePluginMarketRefresh()
             }
@@ -324,22 +325,31 @@ final class AppModel: ObservableObject {
             // which admits and relaunches against it. A path echoed back by the page is
             // already the one in use, so there is nothing further to apply.
             return true
+        case SettingsStore.sidebarWidthKey:
+            // The Harness layout store is transient, so the app remembers the width the
+            // user dragged and hands it back at document start on the next launch.
+            guard let number = value as? NSNumber else { return false }
+            settings.sidebarWidth = SettingsStore.normalizedSidebarWidth(number.doubleValue)
+            return true
         default:
             return false
         }
     }
 
-    /// Republishes the app-owned preferences into the DSH Studio settings namespace.
+    /// Reconciles the native startup mirror with the settings Harness owns.
     ///
-    /// The Harness settings page reads that namespace, while the values this app needs
-    /// before Harness can start — the workspace, the layout width, and the notification
-    /// switches — live in native storage. Writing only the fields that differ keeps the
-    /// page showing what the app is actually using, including when the change came from
-    /// the app menu or a profile switch rather than from the page itself.
+    /// Harness is authoritative, so a normal launch **reads** the `dsh-studio` namespace
+    /// and adopts it into the mirror; it never publishes the mirror back except for the
+    /// workspace, which only the app can admit and relaunch against. A value the user
+    /// changed in the settings page therefore survives a restart even when the page's
+    /// `preference.sync` never arrived: the mirror is stale, and a stale mirror is not
+    /// allowed to win.
     ///
-    /// The revision Harness returns fences the write, so a value the user saved in the
-    /// page while the Runtime was restarting wins instead of being overwritten.
-    private func syncStudioSettingsMirror() async {
+    /// The one-time migration of legacy values is not this method's job: it travels to
+    /// the settings plugin through ``SettingsStore/legacyPluginEnvironment`` and is
+    /// fenced there by a namespace marker, so it runs before the first reconciliation
+    /// and cannot run again.
+    private func reconcileStudioSettings() async {
         guard let baseURL = runtime.readyURL else { return }
         do {
             let client = HarnessAPIClient(baseURL: baseURL)
@@ -348,27 +358,74 @@ final class AppModel: ObservableObject {
                 return
             }
             let stored = section.value.objectValue ?? [:]
-            let published: [String: HarnessJSONValue] = [
-                SettingsStore.workspacePathKey: .string(settings.workspaceURL.standardizedFileURL.path),
-                SettingsStore.chatContentMaxWidthKey: .number(settings.chatContentMaxWidth),
-                SettingsStore.turnCompletionNotificationKey: .string(settings.turnCompletionNotification.rawValue),
-                SettingsStore.permissionNotificationsEnabledKey: .bool(settings.permissionNotificationsEnabled),
-                SettingsStore.questionNotificationsEnabledKey: .bool(settings.questionNotificationsEnabled)
-            ]
-            let patch = published.filter { stored[$0.key] != $0.value }
-            guard !patch.isEmpty else { return }
+            let reconciliation = StudioSettingsReconciler.reconcile(
+                harness: StudioSettingsSnapshot(
+                    workspacePath: Self.string(stored[SettingsStore.workspacePathKey]),
+                    chatContentMaxWidth: Self.number(stored[SettingsStore.chatContentMaxWidthKey]),
+                    turnCompletionNotification: Self.string(stored[SettingsStore.turnCompletionNotificationKey]),
+                    permissionNotificationsEnabled: Self.boolean(stored[SettingsStore.permissionNotificationsEnabledKey]),
+                    questionNotificationsEnabled: Self.boolean(stored[SettingsStore.questionNotificationsEnabledKey])
+                ),
+                mirror: settings.studioSettingsSnapshot
+            )
+            if settings.adopt(reconciliation.adopted) {
+                HarnessWebView.applyChatContentMaxWidthOnLiveWebViews(settings.chatContentMaxWidth)
+            }
+            let adoptedKeys = [
+                reconciliation.adopted.chatContentMaxWidth != nil ? SettingsStore.chatContentMaxWidthKey : nil,
+                reconciliation.adopted.turnCompletionNotification != nil ? SettingsStore.turnCompletionNotificationKey : nil,
+                reconciliation.adopted.permissionNotificationsEnabled != nil ? SettingsStore.permissionNotificationsEnabledKey : nil,
+                reconciliation.adopted.questionNotificationsEnabled != nil ? SettingsStore.questionNotificationsEnabledKey : nil
+            ].compactMap { $0 }
+            // One line per launch is what makes the ownership model observable: it says
+            // whether the mirror had to follow Harness, and whether the app published the
+            // workspace back.
+            runtime.logs.log(
+                component: "Settings",
+                level: "info",
+                message: "settings reconciled with Harness: adopted \(adoptedKeys.count) value(s)"
+                    + (reconciliation.publishedWorkspacePath != nil ? ", workspace published" : "")
+            )
+            guard let workspace = reconciliation.publishedWorkspacePath else { return }
             _ = try await client.settingsUpdate(
                 namespace: Self.studioSettingsNamespace,
-                patch: patch,
+                patch: [SettingsStore.workspacePathKey: .string(workspace)],
                 expectedRevision: section.revision
             )
         } catch {
             runtime.logs.log(
                 component: "Settings",
                 level: "info",
-                message: "DSH Studio settings mirror not updated: \(LogRedactor.redact(error.localizedDescription))"
+                message: "DSH Studio settings mirror not reconciled: \(LogRedactor.redact(error.localizedDescription))"
             )
         }
+    }
+
+    /// The string inside a namespace value, when it holds one.
+    ///
+    /// - Parameter value: Value read from the namespace.
+    /// - Returns: The string, or `nil` for any other JSON type.
+    private static func string(_ value: HarnessJSONValue?) -> String? {
+        guard case .string(let string) = value else { return nil }
+        return string
+    }
+
+    /// The number inside a namespace value, when it holds one.
+    ///
+    /// - Parameter value: Value read from the namespace.
+    /// - Returns: The number, or `nil` for any other JSON type.
+    private static func number(_ value: HarnessJSONValue?) -> Double? {
+        guard case .number(let number) = value else { return nil }
+        return number
+    }
+
+    /// The boolean inside a namespace value, when it holds one.
+    ///
+    /// - Parameter value: Value read from the namespace.
+    /// - Returns: The boolean, or `nil` for any other JSON type.
+    private static func boolean(_ value: HarnessJSONValue?) -> Bool? {
+        guard case .bool(let flag) = value else { return nil }
+        return flag
     }
 
     private func installPluginMarketIfNeeded(allowIdle: Bool = false) async {

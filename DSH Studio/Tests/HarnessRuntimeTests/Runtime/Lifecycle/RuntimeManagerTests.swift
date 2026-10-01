@@ -275,6 +275,7 @@ final class RuntimeManagerTests: XCTestCase {
         gracefulTimeout: TimeInterval = 0.5,
         restartPolicy: RestartPolicy = RestartPolicy(),
         provisioner: (any RuntimeProvisioning)? = nil,
+        dataProfileStore: RuntimeDataProfileStore? = nil,
         crashReportDirectory: URL? = nil
     ) -> RuntimeManager {
         let factory = FakeProcessFactory(process: process)
@@ -289,6 +290,7 @@ final class RuntimeManagerTests: XCTestCase {
             restartPolicy: restartPolicy,
             validateRuntimeOnStart: false,
             provisioner: provisioner,
+            dataProfileStore: dataProfileStore,
             crashReportDirectory: crashReportDirectory
         )
     }

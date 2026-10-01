@@ -3,10 +3,7 @@
 [English](README.en.md) | **中文**
 
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="Brand/AppIcon-dark.png">
-    <img src="Brand/AppIcon-light.png" alt="DSH Studio 项目标识" width="180">
-  </picture>
+  <img src="AppIcon.icon/Assets/鲸白.png" alt="DSH Studio 项目标识" width="180">
 </p>
 
 <p align="center">
@@ -117,11 +114,8 @@ cd Plugins/dsh-studio-settings && npm ci && npm test && npm run build
 CI（`.github/workflows/ci.yml`）执行四件事：静态门禁、设置插件测试与「提交的
 `lib/client.js` 与源码一致」、完整测试套件、以及三个模块的 DocC 无警告构建。
 
-应用图标由 `Brand/` 下的原始美术资源派生；替换任一资源后运行：
-
-```bash
-Scripts/generate-app-icon.sh
-```
+应用图标是 Icon Composer 作品 `AppIcon.icon`：它以资源形式参与构建，浅色、深色与色调变体都由
+这一份文件生成，替换图标应直接编辑该文件而不是手工切图。
 
 ## 5. 架构与目录
 
@@ -133,8 +127,8 @@ Scripts/generate-app-icon.sh
 | `DSH Studio/Sources/Logging` | `DeepSeekLogging` 模块：日志与脱敏 |
 | `Plugins/dsh-studio-settings` | 一等 Harness 插件：Host 侧注册 `dsh-studio` 设置命名空间，浏览器侧注册设置页 |
 | `Tests/HarnessRuntimeTests` | 全部单元测试（含设置页契约、进程生命周期与真实子进程用例） |
-| `Scripts/` | 构建脚本、静态门禁、图标派生 |
-| `Brand/` | 应用标识原始美术资源（浅色/深色） |
+| `Scripts/` | 构建脚本与静态门禁 |
+| `AppIcon.icon` | Icon Composer 应用图标（浅色、深色、色调） |
 
 ## 6. Runtime：来源、身份与信任
 
@@ -153,6 +147,10 @@ Harness 版本不会产生新版本号，替换的是 release 附件与 catalog 
 `schemaVersion` 必须为 1）；解析后按本机架构选择 release，校验依赖 pin、数据格式与 artifact
 描述，下载后逐字节校验 SHA-256，再校验解包布局与 `manifest.json`（`schemaVersion: 3`）与
 catalog 条目一致。任一步失败即关闭，回滚完全离线。
+
+下载会流式写入磁盘：中断的传输保留已经到达的字节，下一次尝试用 `Range` 续传，而**通过校验的
+压缩包会按 sha256 缓存**，因此后续步骤（解包、原生模块、健康检查）失败后的重试不必重新下载。
+缓存的字节在复用时**重新校验 sha256**，信任模型与一次性下载完全相同。
 
 当前开发快照（无签名 catalog 时的回退值，实际安装以 catalog 为准）：
 
@@ -187,6 +185,8 @@ DSH Studio 没有独立的偏好窗口。应用设置是 Harness 设置对话框
 - **持久化归 Harness**：所有写入都经过 Harness 设置服务，并受命名空间 revision 约束。
 - 必须在 Harness 启动前就确定的值（工作区路径、对话内容宽度、三个通知开关）仍由 App 持有：
   页面把每次改动镜像回 App，App 在 Runtime 就绪后再把自己的值写回命名空间，两侧不会漂移。
+- Harness 的布局 store 只把面板几何保存在内存里；侧边栏宽度由 App 记录，并在页面渲染前交还，
+  所以拖动过的宽度在下次打开时仍然保持。
 - 菜单中的**设置…**（⌘,）打开的是同一个 Harness 对话框。
 - 页面自身无法完成的操作（原生面板、Runtime 终端、进程控制、诊断）通过经过校验的
   `WKScriptMessageHandler` 桥接，并按同一 request id 回复。
@@ -246,6 +246,7 @@ DSH Studio 可以安装并管理上游 `dshmarket` 插件。市场自己负责�
 ~/Library/Application Support/DSH Studio/DSH_HOME          # Harness 数据（可备份）
 ~/Library/Application Support/DSH Studio/Workspace         # 默认工作区
 ~/Library/Application Support/DSH Studio/Runtimes/<ver>    # 已安装 Runtime
+~/Library/Application Support/DSH Studio/RuntimeDownloads  # 已验证压缩包与未完成下载
 ~/Library/Application Support/DSH Studio/DataProfiles/<id> # 隔离数据 profile
 ~/Library/Application Support/DSH Studio/Logs              # 应用与 Runtime 日志
 ```
@@ -259,9 +260,6 @@ Application Support。工作区可在设置中选择，并受本地目录准入�
 - 首次安装需要下载约 188 MiB（197 MB）的 Runtime artifact，耗时取决于网络。
 - 第三方插件不在沙箱内运行；插件能力等同于 Harness 自身权限。
 - 当前只管理 `web` profile。
-- macOS 的 appiconset **不能**携带深色外观，因此 Finder/启动台显示浅色图标，而运行中的应用
-  （Dock、应用切换器、「关于」面板）会按系统外观在浅色/深色标识之间切换。完整的系统级深色图标
-  需要 macOS 26 的 Icon Composer 格式。
 - 「已安装的是哪个构建」目前由「版本号 + 架构 + 全部依赖 pin」判定；若发布方在原版本上重新打包
   且依赖 pin 不变（只有 artifact 字节变化），该安装会被视为同一个构建而不会提示更新。
 
@@ -270,7 +268,7 @@ Application Support。工作区可在设置中选择，并受本地目录准入�
 DSH Studio 自有源码以 MIT 许可发布，见 [LICENSE](LICENSE)。
 
 项目标识与派生的应用图标美术资源属于**独立**作品，**不**在 MIT 许可范围内，以 CC BY-NC-SA 4.0
-发布，署名与授权信息见 [NOTICE](NOTICE)。原始资源位于 `Brand/`。
+发布，署名与授权信息见 [NOTICE](NOTICE)。美术资源位于 `AppIcon.icon` 内。
 
 DeepSeek Harness 与全部 npm 依赖是各自许可下的独立作品；分发已安装 Runtime 时必须保留其声明与
 许可条款（见 [NOTICE](NOTICE) 与 Runtime 内各包的元数据）。

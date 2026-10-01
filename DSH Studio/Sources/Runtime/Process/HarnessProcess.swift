@@ -148,6 +148,12 @@ public final class SystemHarnessProcess: HarnessProcess {
     /// launchd once its parent exits, so signalling only the process this app started
     /// would leave the copy running; the descendants are recorded here so
     /// ``forceTerminate()`` can still reach the ones that ignore `SIGTERM`.
+    ///
+    /// The snapshot is taken when the shutdown starts, so a child forked in the window
+    /// between the snapshot and the signal is not covered. That window is microseconds
+    /// wide and the Runtime contract accepts the same best effort, which is why this
+    /// does not put the child in its own process group: that would mean replacing
+    /// Foundation's `Process` with `posix_spawn`.
     public func terminateGracefully() {
         guard process.isRunning else { return }
         descendantPIDs = Self.descendants(of: process.processIdentifier)

@@ -3,10 +3,7 @@
 **English** | [中文](README.md)
 
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="Brand/AppIcon-dark.png">
-    <img src="Brand/AppIcon-light.png" alt="DSH Studio project mark" width="180">
-  </picture>
+  <img src="AppIcon.icon/Assets/鲸白.png" alt="DSH Studio project mark" width="180">
 </p>
 
 <p align="center">
@@ -130,11 +127,9 @@ CI (`.github/workflows/ci.yml`) runs four jobs: the static gates; the settings p
 "the committed `lib/client.js` matches its sources"; the full test suite; and a DocC build of all
 three modules that must produce no warnings.
 
-The app icon is derived from the artwork in `Brand/`. After replacing either source:
-
-```bash
-Scripts/generate-app-icon.sh
-```
+The app icon is an Icon Composer document, `AppIcon.icon`: it is compiled as a resource, and its
+light, dark, and tinted variants all come from that one file. Replace the icon by editing it rather
+than by cutting sizes by hand.
 
 ## 5. Architecture And Layout
 
@@ -146,8 +141,8 @@ Scripts/generate-app-icon.sh
 | `DSH Studio/Sources/Logging` | `DeepSeekLogging` module: logging and redaction |
 | `Plugins/dsh-studio-settings` | The first-party Harness plugin: the Host half registers the `dsh-studio` settings namespace, the browser half registers the settings page |
 | `Tests/HarnessRuntimeTests` | All unit tests, including settings-page contract, process lifecycle, and real child-process cases |
-| `Scripts/` | Build script, static gates, icon derivation |
-| `Brand/` | Project mark sources (light and dark) |
+| `Scripts/` | Build script and static gates |
+| `AppIcon.icon` | The Icon Composer app icon (light, dark, tinted) |
 
 ## 6. Runtime: Source, Identity, Trust
 
@@ -185,6 +180,12 @@ the catalog both prove compatibility. An incompatible `dataFormat.id` (currently
 isolated data profile instead, and the previous data is never migrated, overwritten, or deleted. A
 release that declares no `dataFormat` **may not** be applied as an update.
 
+Downloads stream to disk, so an interrupted transfer keeps what already arrived and the next
+attempt continues it with a `Range` request; an archive that passed verification is cached by
+SHA-256, so a retry after a later failure (unpacking, native modules, health check) does not
+download 188 MiB again. Cached bytes are re-verified before they are used, which leaves the
+trust model exactly as it is for a fresh download.
+
 **Installation integrity** is never decided by "the directory exists": an installation is usable only
 when `manifest.json` parses and matches the signed catalog's record. Installations are assembled in a
 staging directory and published afterwards, so an interrupted or unverified install is never treated
@@ -213,6 +214,9 @@ settings dialog, which stays the single place a user configures the app:
   width, and the three notification toggles — remain app-owned. The page mirrors each change back to
   the app, and the app writes its own values into the namespace once the Runtime is ready, so the two
   sides cannot drift apart.
+- The Harness layout store keeps panel geometry in memory only, so the app remembers the sidebar
+  width the user dragged and hands it back before the page renders, which is what makes the width
+  survive a restart.
 - **Settings…** in the app menu (⌘,) opens that same Harness dialog.
 - Operations the page cannot perform itself — native panels, the Runtime terminal, process control,
   diagnostics — travel over a validated `WKScriptMessageHandler` bridge and are answered on the same
@@ -287,6 +291,7 @@ only trusted archives should be installed.
 ~/Library/Application Support/DSH Studio/DSH_HOME          # Harness data (backup-able)
 ~/Library/Application Support/DSH Studio/Workspace         # default workspace
 ~/Library/Application Support/DSH Studio/Runtimes/<ver>    # installed Runtimes
+~/Library/Application Support/DSH Studio/RuntimeDownloads  # verified archives and partial downloads
 ~/Library/Application Support/DSH Studio/DataProfiles/<id> # isolated data profiles
 ~/Library/Application Support/DSH Studio/Logs              # app and Runtime logs
 ```
@@ -303,10 +308,6 @@ directory admission checks.
   depends on the network.
 - Third-party plugins are not sandboxed; their power equals Harness's own permissions.
 - Only the `web` profile is managed today.
-- A macOS appiconset **cannot** carry a dark appearance, so Finder and Launchpad keep showing the
-  light icon while the running app (Dock, app switcher, About panel) switches between the light and
-  dark marks with the system appearance. A fully system-level dark icon would need the macOS 26 Icon
-  Composer format.
 - "Which build is installed" is currently decided by version plus architecture plus every dependency
   pin. If the publisher repacks the same version without changing a dependency pin — only the
   artifact's bytes differ — that installation reads as the same build and no update is offered.
@@ -317,7 +318,7 @@ Original DSH Studio source code is licensed under the MIT License. See [LICENSE]
 
 The project mark and the derived app icon artwork are separate works and are **not** covered by the
 MIT License. They are released under CC BY-NC-SA 4.0 with the attribution and permission information
-described in [NOTICE](NOTICE). The sources live in `Brand/`.
+described in [NOTICE](NOTICE). The artwork lives inside `AppIcon.icon`.
 
 DeepSeek Harness and all npm dependencies remain separate works under their own licenses; their
 notices and terms must be preserved when distributing a provisioned Runtime. See [NOTICE](NOTICE) and

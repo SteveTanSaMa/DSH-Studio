@@ -13,6 +13,24 @@ import Foundation
 /// that it can become ready, and restore the previous installation if it
 /// cannot. Keeping those responsibilities separate makes file operations easy
 /// to test without launching a real Harness process.
+///
+/// The sequence is a transaction over two kinds of state — the installed directories
+/// and the durable activation record — and it holds four invariants:
+///
+/// - **A failed update cannot cost the running Runtime.** Preparation only writes a
+///   candidate; nothing about the active installation or the selected data profile
+///   changes until activation succeeds, and every activation failure restores the pair
+///   it found.
+/// - **A replacement is never active before it is verified.** The candidate must match
+///   the signed release and be complete before activation, and the durable activation
+///   record is written only after the new process passed its health check, so a crash
+///   anywhere in between leaves the previous Runtime active.
+/// - **A failed profile change stays recoverable.** A profile switch is committed
+///   together with the activation, and a failure restores the previous profile *and*
+///   the previous home directory, so old Runtime and old data stay a pair.
+/// - **The plugin market is not part of activation.** It is a profile concern that runs
+///   after the Runtime is healthy; its failures are reported by the market and never
+///   roll a Runtime back.
 @MainActor
 public final class RuntimeUpdateCoordinator {
     /// Manager whose process is stopped around an activation.

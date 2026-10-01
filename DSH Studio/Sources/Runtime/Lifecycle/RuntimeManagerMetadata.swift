@@ -61,6 +61,17 @@ extension RuntimeManager {
               let manifest = RuntimeLocator.installationManifest(root: provisioner.root) else {
             return true
         }
+        // A launch that did not provision anything never registered the home it is about
+        // to use, so the profile is resolved — and, for the app-owned home, registered —
+        // here. Without this, a second launch on an already-installed Runtime failed
+        // before it could start, while the first launch on the same machine worked.
+        if activeDataProfile == nil {
+            loadSelectedDataProfile()
+        }
+        if activeDataProfile == nil, let dataProfileStore,
+           let registered = try? dataProfileStore.ensureLegacyProfile(homeURL: configuration.dshHome) {
+            activeDataProfile = registered
+        }
         guard let profile = activeDataProfile else {
             fail(.dataCompatibilityUnknown)
             return false
@@ -75,7 +86,12 @@ extension RuntimeManager {
         }
 
         guard let profileFormatID = profile.dataFormatID else {
-            if dataProfileStore?.isDataHomeEmpty(profile.homeURL) == true {
+            // The profile has no recorded format yet. Recording the one this Runtime
+            // declares before the launch is what keeps a failed start from stranding the
+            // machine: Harness writes into the home as soon as it runs, and a non-empty
+            // home with no recorded format is refused by every later launch. The Runtime
+            // is the one this app ships, so its declaration describes what it wrote there.
+            if assignDataFormat(runtimeFormat.id, to: profile) {
                 return true
             }
             fail(.dataCompatibilityUnknown)
@@ -92,6 +108,29 @@ extension RuntimeManager {
             return false
         case .requiresMigration:
             fail(.dataMigrationRequired)
+            return false
+        }
+    }
+
+    /// Records the data format a Runtime declared for one profile.
+    ///
+    /// - Parameters:
+    ///   - formatID: Format identifier taken from the Runtime manifest.
+    ///   - profile: Profile that is about to open that Runtime's data home.
+    /// - Returns: Whether the profile now carries the format.
+    private func assignDataFormat(_ formatID: String, to profile: RuntimeDataProfile) -> Bool {
+        guard let dataProfileStore else { return false }
+        let updated = profile.replacing(dataFormatID: formatID)
+        do {
+            try dataProfileStore.save(updated)
+            activeDataProfile = updated
+            return true
+        } catch {
+            logs.log(
+                component: "Runtime",
+                level: "warn",
+                message: "data format was not recorded: \(LogRedactor.redact(error.localizedDescription))"
+            )
             return false
         }
     }

@@ -79,6 +79,11 @@ extension HarnessWebView.Coordinator: WKScriptMessageHandler {
     ) async {
         do {
             let result = try await performStudioAction(action: action, payload: payload)
+            model.runtime.logs.log(
+                component: "Settings",
+                level: "info",
+                message: "page action applied: \(action ?? "unknown")"
+            )
             sendStudioActionReply(requestID: requestID, result: result, webView: webView)
         } catch {
             sendStudioActionReply(
@@ -174,6 +179,14 @@ extension HarnessWebView.Coordinator: WKScriptMessageHandler {
             guard let key = payload["key"] as? String,
                   let value = payload["value"],
                   model.applyStudioPreference(key: key, value: value) else {
+                // The page stores the value in Harness first, so a refused mirror never
+                // costs the setting itself; it only means this launch runs with the value
+                // it already had, and the next reconcile adopts what Harness holds.
+                model.runtime.logs.log(
+                    component: "Settings",
+                    level: "warn",
+                    message: "DSH Studio preference mirror refused key \(payload["key"] as? String ?? "unknown")"
+                )
                 throw StudioActionError.invalidRequest
             }
             return ["ok": true]

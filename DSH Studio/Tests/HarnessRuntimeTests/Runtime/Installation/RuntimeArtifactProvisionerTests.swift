@@ -99,6 +99,247 @@ final class RuntimeArtifactProvisionerTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: root.path))
     }
 
+    /// An update whose archive cannot be extracted leaves the active Runtime usable.
+    func testInterruptedExtractionLeavesTheActiveRuntimeUsable() async throws {
+        let parent = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: parent) }
+        let root = parent.appendingPathComponent("Runtime", isDirectory: true)
+        let release = makeArtifactRelease(sha256: artifactFixtureSHA256)
+        let installed = try await RuntimeProvisioner(
+            root: root,
+            architecture: architecture,
+            downloader: FixtureDownloader(data: Data("artifact archive fixture".utf8)),
+            commandRunner: ArtifactCommandRunner(release: release),
+            release: release
+        ).provision()
+        XCTAssertTrue(RuntimeLocator.isCompleteInstallation(root: root, architecture: architecture))
+
+        let interrupted = RuntimeProvisioner(
+            root: root,
+            architecture: architecture,
+            downloader: FixtureDownloader(data: Data("artifact archive fixture".utf8)),
+            commandRunner: ArtifactCommandRunner(release: release, extractionStatus: 1),
+            release: release
+        )
+        do {
+            _ = try await interrupted.update()
+            XCTFail("expected an extraction failure")
+        } catch let error as RuntimeProvisioningError {
+            guard case .commandFailed = error else {
+                return XCTFail("expected a command failure, got \(error)")
+            }
+        }
+
+        XCTAssertEqual(
+            RuntimeLocator.installationManifest(root: root)?.runtimeVersion,
+            installed.manifest.runtimeVersion,
+            "the active Runtime is the one that keeps running"
+        )
+        XCTAssertTrue(
+            RuntimeLocator.isCompleteInstallation(root: root, architecture: architecture),
+            "and it is still a usable installation"
+        )
+    }
+
+    /// An archive whose manifest disagrees with the catalog is never published.
+    func testManifestMismatchIsRejectedBeforePublication() async throws {
+        let parent = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: parent) }
+        let root = parent.appendingPathComponent("Runtime", isDirectory: true)
+        let release = makeArtifactRelease(sha256: artifactFixtureSHA256)
+        let provisioner = RuntimeProvisioner(
+            root: root,
+            architecture: architecture,
+            downloader: FixtureDownloader(data: Data("artifact archive fixture".utf8)),
+            commandRunner: ArtifactCommandRunner(release: release, manifestRuntimeVersion: "0.0.0-other"),
+            release: release
+        )
+
+        do {
+            _ = try await provisioner.provision()
+            XCTFail("expected a manifest mismatch")
+        } catch let error as RuntimeProvisioningError {
+            guard case .runtimeValidationFailed = error else {
+                return XCTFail("expected a manifest validation failure, got \(error)")
+            }
+        }
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: root.path))
+    }
+
+    /// A verified archive from an earlier attempt is reused instead of downloaded again.
+    func testVerifiedArchiveInTheCacheIsReused() async throws {
+        let parent = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: parent) }
+        let root = parent.appendingPathComponent("Runtime", isDirectory: true)
+        let cache = parent.appendingPathComponent("RuntimeDownloads", isDirectory: true)
+        try FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true)
+        let release = makeArtifactRelease(sha256: artifactFixtureSHA256)
+        let fixture = Data("artifact archive fixture".utf8)
+        try fixture.write(to: cache.appendingPathComponent("\(artifactFixtureSHA256).tar.gz"))
+        let downloader = RecordingArtifactDownloader(data: fixture)
+
+        _ = try await RuntimeProvisioner(
+            root: root,
+            architecture: architecture,
+            downloader: downloader,
+            commandRunner: ArtifactCommandRunner(release: release),
+            release: release,
+            downloadCacheDirectory: cache
+        ).provision()
+
+        XCTAssertTrue(downloader.downloads.isEmpty, "a verified archive must not be downloaded again")
+        XCTAssertTrue(RuntimeLocator.isCompleteInstallation(root: root, architecture: architecture))
+        XCTAssertTrue(
+            FileManager.default.fileExists(
+                atPath: cache.appendingPathComponent("\(artifactFixtureSHA256).tar.gz").path
+            ),
+            "the verified archive stays cached for the next attempt"
+        )
+    }
+
+    /// A cached archive that does not match the catalog is discarded, not trusted.
+    func testACorruptCachedArchiveIsDiscardedAndDownloadedAgain() async throws {
+        let parent = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: parent) }
+        let root = parent.appendingPathComponent("Runtime", isDirectory: true)
+        let cache = parent.appendingPathComponent("RuntimeDownloads", isDirectory: true)
+        try FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true)
+        let release = makeArtifactRelease(sha256: artifactFixtureSHA256)
+        let cached = cache.appendingPathComponent("\(artifactFixtureSHA256).tar.gz")
+        try Data("not the artifact".utf8).write(to: cached)
+        let downloader = RecordingArtifactDownloader(data: Data("artifact archive fixture".utf8))
+
+        _ = try await RuntimeProvisioner(
+            root: root,
+            architecture: architecture,
+            downloader: downloader,
+            commandRunner: ArtifactCommandRunner(release: release),
+            release: release,
+            downloadCacheDirectory: cache
+        ).provision()
+
+        XCTAssertEqual(downloader.downloads.count, 1, "a cached archive that fails the checksum is replaced")
+        XCTAssertTrue(RuntimeLocator.isCompleteInstallation(root: root, architecture: architecture))
+    }
+
+    /// An unfinished download is continued rather than restarted.
+    func testAnUnfinishedDownloadIsContinued() async throws {
+        let parent = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: parent) }
+        let root = parent.appendingPathComponent("Runtime", isDirectory: true)
+        let cache = parent.appendingPathComponent("RuntimeDownloads", isDirectory: true)
+        try FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true)
+        let release = makeArtifactRelease(sha256: artifactFixtureSHA256)
+        let partial = cache.appendingPathComponent("\(artifactFixtureSHA256).partial")
+        try Data("half an artifact".utf8).write(to: partial)
+        let downloader = RecordingArtifactDownloader(data: Data("artifact archive fixture".utf8))
+
+        _ = try await RuntimeProvisioner(
+            root: root,
+            architecture: architecture,
+            downloader: downloader,
+            commandRunner: ArtifactCommandRunner(release: release),
+            release: release,
+            downloadCacheDirectory: cache
+        ).provision()
+
+        XCTAssertEqual(downloader.downloads.first?.resumingFrom?.path, partial.path)
+        XCTAssertTrue(RuntimeLocator.isCompleteInstallation(root: root, architecture: architecture))
+    }
+
+    /// Bytes left by a transfer that failed are used when they are the artifact.
+    func testBytesLeftByAFailedTransferAreUsedWhenTheyMatch() async throws {
+        let parent = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: parent) }
+        let root = parent.appendingPathComponent("Runtime", isDirectory: true)
+        let cache = parent.appendingPathComponent("RuntimeDownloads", isDirectory: true)
+        try FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true)
+        let release = makeArtifactRelease(sha256: artifactFixtureSHA256)
+        let partial = cache.appendingPathComponent("\(artifactFixtureSHA256).partial")
+        try Data("artifact archive fixture".utf8).write(to: partial)
+        let downloader = RecordingArtifactDownloader(data: Data("artifact archive fixture".utf8))
+        downloader.error = RuntimeProvisioningError.downloadFailed("connection lost")
+
+        _ = try await RuntimeProvisioner(
+            root: root,
+            architecture: architecture,
+            downloader: downloader,
+            commandRunner: ArtifactCommandRunner(release: release),
+            release: release,
+            downloadCacheDirectory: cache
+        ).provision()
+
+        XCTAssertTrue(
+            RuntimeLocator.isCompleteInstallation(root: root, architecture: architecture),
+            "a partial that matches the catalog checksum is the artifact"
+        )
+    }
+
+    /// Bytes that are not the artifact are dropped when a transfer fails.
+    func testBytesLeftByAFailedTransferAreDroppedWhenTheyDoNotMatch() async throws {
+        let parent = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: parent) }
+        let root = parent.appendingPathComponent("Runtime", isDirectory: true)
+        let cache = parent.appendingPathComponent("RuntimeDownloads", isDirectory: true)
+        try FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true)
+        let release = makeArtifactRelease(sha256: artifactFixtureSHA256)
+        let partial = cache.appendingPathComponent("\(artifactFixtureSHA256).partial")
+        try Data("debris".utf8).write(to: partial)
+        let downloader = RecordingArtifactDownloader(data: Data("artifact archive fixture".utf8))
+        downloader.error = RuntimeProvisioningError.downloadFailed("connection lost")
+
+        do {
+            _ = try await RuntimeProvisioner(
+                root: root,
+                architecture: architecture,
+                downloader: downloader,
+                commandRunner: ArtifactCommandRunner(release: release),
+                release: release,
+                downloadCacheDirectory: cache
+            ).provision()
+            XCTFail("expected the download failure to surface")
+        } catch let error as RuntimeProvisioningError {
+            guard case .downloadFailed = error else {
+                return XCTFail("expected a download failure, got \(error)")
+            }
+        }
+
+        XCTAssertFalse(
+            FileManager.default.fileExists(atPath: partial.path),
+            "debris must not be continued from on the next attempt"
+        )
+    }
+
+    /// Cached downloads for other builds are evicted once a build is installed.
+    func testCachedArtifactsForOtherBuildsAreEvicted() async throws {
+        let parent = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: parent) }
+        let root = parent.appendingPathComponent("Runtime", isDirectory: true)
+        let cache = parent.appendingPathComponent("RuntimeDownloads", isDirectory: true)
+        try FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true)
+        let stale = cache.appendingPathComponent("0000000000000000000000000000000000000000000000000000000000000000.tar.gz")
+        try Data("an older build".utf8).write(to: stale)
+        let release = makeArtifactRelease(sha256: artifactFixtureSHA256)
+
+        _ = try await RuntimeProvisioner(
+            root: root,
+            architecture: architecture,
+            downloader: RecordingArtifactDownloader(data: Data("artifact archive fixture".utf8)),
+            commandRunner: ArtifactCommandRunner(release: release),
+            release: release,
+            downloadCacheDirectory: cache
+        ).provision()
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: stale.path), "older builds are dropped")
+        XCTAssertTrue(
+            FileManager.default.fileExists(
+                atPath: cache.appendingPathComponent("\(artifactFixtureSHA256).tar.gz").path
+            ),
+            "the installed artifact's archive is kept"
+        )
+    }
+
     private func makeArtifactRelease(sha256: String) -> RuntimeReleaseDescriptor {
         let runtimeVersion = "2026.08.20.test"
         return RuntimeReleaseDescriptor(
@@ -126,10 +367,95 @@ final class RuntimeArtifactProvisionerTests: XCTestCase {
     }
 }
 
+/// Records the artifact downloads a provisioner asks for, and can fail them.
+private final class RecordingArtifactDownloader: RuntimeAssetDownloading, @unchecked Sendable {
+    /// One recorded request.
+    struct Download: Equatable {
+        /// Trusted artifact URL that was requested.
+        let url: URL
+        /// File the artifact was written to.
+        let destination: URL
+        /// Partial file the request continued, when there was one.
+        let resumingFrom: URL?
+    }
+
+    private let data: Data
+    private let lock = NSLock()
+    private var stored: [Download] = []
+    /// When set, the transfer fails with this error after being recorded.
+    var error: Error?
+
+    /// Downloads recorded so far.
+    var downloads: [Download] {
+        lock.lock()
+        defer { lock.unlock() }
+        return stored
+    }
+
+    /// Creates a downloader that writes fixed bytes.
+    ///
+    /// - Parameter data: Bytes written to every destination.
+    init(data: Data) {
+        self.data = data
+    }
+
+    /// Records the request and writes the fixture bytes.
+    ///
+    /// - Parameters:
+    ///   - url: Requested artifact URL.
+    ///   - destination: File that receives the fixture bytes.
+    /// - Throws: The configured error, when one is set.
+    func download(from url: URL, to destination: URL) async throws {
+        try await download(from: url, to: destination, onProgress: nil)
+    }
+
+    /// Records the request and writes the fixture bytes.
+    ///
+    /// - Parameters:
+    ///   - url: Requested artifact URL.
+    ///   - destination: File that receives the fixture bytes.
+    ///   - onProgress: Receives the fixture size once.
+    /// - Throws: The configured error, when one is set.
+    func download(
+        from url: URL,
+        to destination: URL,
+        onProgress: (@Sendable (Int64, Int64) -> Void)?
+    ) async throws {
+        try await download(from: url, to: destination, resumingFrom: nil, onProgress: onProgress)
+    }
+
+    /// Records the request, including the partial file it was asked to continue.
+    ///
+    /// - Parameters:
+    ///   - url: Requested artifact URL.
+    ///   - destination: File that receives the fixture bytes.
+    ///   - partial: Partial file the request continues, when there is one.
+    ///   - onProgress: Receives the fixture size once.
+    /// - Throws: The configured error, when one is set.
+    func download(
+        from url: URL,
+        to destination: URL,
+        resumingFrom partial: URL?,
+        onProgress: (@Sendable (Int64, Int64) -> Void)?
+    ) async throws {
+        lock.lock()
+        stored.append(Download(url: url, destination: destination, resumingFrom: partial))
+        let failure = error
+        lock.unlock()
+        if let failure { throw failure }
+        try data.write(to: destination)
+        onProgress?(Int64(data.count), Int64(data.count))
+    }
+}
+
 private final class ArtifactCommandRunner: RuntimeCommandRunning, @unchecked Sendable {
     private let fileManager = FileManager.default
     private let release: RuntimeReleaseDescriptor
     private let listing: String
+    /// Status the extraction command reports; non-zero simulates an interrupted unpack.
+    private let extractionStatus: Int32
+    /// Runtime version the extracted manifest claims, when it must differ from the catalog.
+    private let manifestRuntimeVersion: String?
 
     init(
         release: RuntimeReleaseDescriptor,
@@ -139,10 +465,14 @@ private final class ArtifactCommandRunner: RuntimeCommandRunning, @unchecked Sen
         node/darwin-arm64/bin/node
         harness/
         harness/darwin-arm64/0.1.1-rc.2/package.json
-        """
+        """,
+        extractionStatus: Int32 = 0,
+        manifestRuntimeVersion: String? = nil
     ) {
         self.release = release
         self.listing = listing
+        self.extractionStatus = extractionStatus
+        self.manifestRuntimeVersion = manifestRuntimeVersion
     }
 
     func run(
@@ -158,6 +488,9 @@ private final class ArtifactCommandRunner: RuntimeCommandRunning, @unchecked Sen
               let index = arguments.firstIndex(of: "-C"),
               arguments.indices.contains(index + 1) else {
             return RuntimeCommandResult(status: 0, stdout: "", stderr: "")
+        }
+        guard extractionStatus == 0 else {
+            return RuntimeCommandResult(status: extractionStatus, stdout: "", stderr: "unpack interrupted")
         }
 
         let root = URL(fileURLWithPath: arguments[index + 1], isDirectory: true)
@@ -212,7 +545,7 @@ private final class ArtifactCommandRunner: RuntimeCommandRunning, @unchecked Sen
         try fileManager.setAttributes([.posixPermissions: NSNumber(value: 0o755)], ofItemAtPath: helper.path)
 
         let manifest = RuntimeInstallationManifest(
-            runtimeVersion: release.runtimeVersion,
+            runtimeVersion: manifestRuntimeVersion ?? release.runtimeVersion,
             architecture: release.architecture,
             nodeVersion: release.nodeVersion,
             harnessVersion: release.harnessVersion,

@@ -49,6 +49,31 @@ final class WebBridgeScriptTests: XCTestCase {
         XCTAssertTrue(source.contains("scheduleSidebarState();"))
     }
 
+    /// The layout script restores a stored sidebar width and reports later drags.
+    ///
+    /// The Harness layout store is transient, so the app is the only side that can carry
+    /// a dragged width across launches; this is the whole contract between the two.
+    func testSidebarWidthScriptRestoresStoredWidthAndReportsDrags() {
+        let source = HarnessLayoutWebBridge.source
+
+        XCTAssertTrue(source.contains("window.__deepseekStudioSidebarWidth"))
+        XCTAssertTrue(source.contains("[class*=\"_handle\"]"))
+        XCTAssertTrue(
+            source.contains("Element.prototype.setPointerCapture"),
+            "replaying the drag needs the capture call stubbed for a synthetic pointer"
+        )
+        XCTAssertTrue(source.contains("\"pointerdown\""))
+        XCTAssertTrue(source.contains("\"pointermove\""))
+        XCTAssertTrue(source.contains("\"pointerup\""))
+        XCTAssertTrue(source.contains("data-sidebar-collapsed"))
+        XCTAssertTrue(source.contains("\"preference.sync\""))
+        XCTAssertTrue(source.contains("\"sidebarWidth\""))
+        XCTAssertTrue(
+            source.contains("deepseekStudio"),
+            "the report goes through the app's own message handler"
+        )
+    }
+
     /// The hero controls follow the composer card's measured bounds.
     func testHeroControlsTrackRenderedComposerCardBounds() {
         let source = HarnessLayoutWebBridge.source

@@ -25,29 +25,54 @@ extension RuntimeManager {
             level: "info",
             message: "health check \(cleanBaseURL.appendingPathComponent("api/settings/describe").absoluteString)"
         )
-        // A late response from an old process must not mark its replacement
-        // ready, so the generation is checked again after this await.
-        let healthy = await healthChecker.check(
-            baseURL: url,
-            timeout: configuration.healthCheckTimeout
-        )
-        guard state == .starting, generation == processGeneration else { return }
-        if healthy {
-            startupTask?.cancel()
-            startupTask = nil
-            restartTracker.reset()
-            restartCount = 0
-            readyURL = url
-            state = .ready
-            guard activateSelectedDataProfileIfPossible() else {
-                fail(.runtimeProvisioningFailed("无法保存 Runtime 数据环境状态"))
+        // Harness prints its ready line as soon as its server accepts a connection, and
+        // the token exchange the probe needs can lose that first race. The probe is
+        // therefore retried until the launch deadline instead of failing on the first
+        // answer, which is what turned a slow start into a failed launch. The deadline
+        // stays inside the startup timeout so the reason is the health check's, not the
+        // timeout's.
+        let deadline = Date().addingTimeInterval(configuration.startupTimeout * 0.75)
+        var attempt = 0
+        while true {
+            attempt += 1
+            // A late response from an old process must not mark its replacement
+            // ready, so the generation is checked again after this await.
+            let healthy = await healthChecker.check(
+                baseURL: url,
+                timeout: configuration.healthCheckTimeout
+            )
+            guard state == .starting, generation == processGeneration else { return }
+            if healthy {
+                startupTask?.cancel()
+                startupTask = nil
+                restartTracker.reset()
+                restartCount = 0
+                readyURL = url
+                state = .ready
+                guard activateSelectedDataProfileIfPossible() else {
+                    fail(.runtimeProvisioningFailed("无法保存 Runtime 数据环境状态"))
+                    return
+                }
+                logs.log(component: "Harness", level: "info", message: "health check ok")
+                logs.log(component: "Runtime", level: "info", message: "state ready")
                 return
             }
-            logs.log(component: "Harness", level: "info", message: "health check ok")
-            logs.log(component: "Runtime", level: "info", message: "state ready")
-        } else {
-            fail(.healthCheckFailed)
+            guard Date() < deadline else { break }
+            logs.log(
+                component: "Harness",
+                level: "info",
+                message: "health check attempt \(attempt) not ready: "
+                    + (healthChecker.lastFailureDescription ?? "unknown reason")
+            )
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            guard state == .starting, generation == processGeneration else { return }
         }
+        logs.log(
+            component: "Harness",
+            level: "error",
+            message: "health check failed: \(healthChecker.lastFailureDescription ?? "unknown reason")"
+        )
+        fail(.healthCheckFailed)
     }
 
     /// Records the child's exit and decides between a crash and a clean stop.

@@ -6,6 +6,45 @@ import XCTest
 /// Shutdown cases: graceful, forced, and coalesced stops.
 extension RuntimeManagerTests {
 
+    /// A stop returns as soon as the Runtime is gone, not when the budget runs out.
+    ///
+    /// The graceful budget is a deadline for a Runtime that will not leave; waiting it out
+    /// unconditionally made every quit take the full ten seconds even though Harness exits
+    /// in milliseconds.
+    @MainActor
+    func testStopReturnsWhenTheProcessExitsBeforeTheGracefulBudget() async {
+        let fake = FakeHarnessProcess()
+        let manager = makeManager(process: fake, gracefulTimeout: 3)
+        manager.start()
+        _ = await waitUntil(fake.launchCount == 1)
+
+        let started = Date()
+        await manager.stop()
+        let elapsed = Date().timeIntervalSince(started)
+
+        XCTAssertEqual(manager.state, .terminated)
+        XCTAssertLessThan(elapsed, 1, "a Runtime that exits immediately must not cost the budget")
+        XCTAssertEqual(fake.forceCount, 0, "nothing had to be killed")
+    }
+
+    /// A Runtime that refuses to leave is still killed when the budget expires.
+    @MainActor
+    func testAStubbornProcessIsKilledWhenTheGracefulBudgetExpires() async {
+        let fake = FakeHarnessProcess()
+        fake.ignoreGracefulTermination = true
+        let manager = makeManager(process: fake, gracefulTimeout: 0.3)
+        manager.start()
+        _ = await waitUntil(fake.launchCount == 1)
+
+        let started = Date()
+        await manager.stop()
+        let elapsed = Date().timeIntervalSince(started)
+
+        XCTAssertEqual(manager.state, .terminated)
+        XCTAssertEqual(fake.forceCount, 1, "the deadline still forces the Runtime out")
+        XCTAssertGreaterThan(elapsed, 0.25, "the budget is allowed to elapse first")
+    }
+
     /// A graceful stop terminates the child and reports the terminated state.
     @MainActor
     func testGracefulStop() async {

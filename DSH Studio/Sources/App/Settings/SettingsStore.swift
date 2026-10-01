@@ -9,7 +9,23 @@ import Combine
 import DeepSeekRuntime
 import Foundation
 
-/// Persists only app-owned settings; Harness's own settings stay in Harness.
+/// The app's startup mirror of the settings Harness owns.
+///
+/// Ownership, in one place:
+///
+/// - **Harness Settings is the authoritative persisted configuration.** Everything a
+///   user configures lives in the `dsh-studio` namespace and is written through
+///   Harness's settings service, fenced by the namespace revision.
+/// - **This store is a startup mirror.** Three of the values have to be known before
+///   Harness can start — the layout width the injected CSS uses and the two
+///   notification switches — and Harness's settings document is only readable once its
+///   local server is up. The store also survives the case where the Runtime is not
+///   installed yet, or the settings plugin is not present in the active profile.
+/// - **The mirror must never overwrite authoritative Harness settings after the
+///   initial migration.** A normal launch reads the namespace and adopts it
+///   (``adopt(_:)``); the only value it publishes is the workspace, which the app owns
+///   because only it can admit a directory and relaunch Harness against it
+///   (``legacyPluginEnvironment`` carries the one-time migration of legacy values).
 @MainActor
 final class SettingsStore: ObservableObject {
     /// Defaults key for the chat content width.
@@ -34,6 +50,10 @@ final class SettingsStore: ObservableObject {
     static let questionNotificationsEnabledDefault = true
     /// Defaults key for the selected workspace path.
     static let workspacePathKey = "workspacePath"
+    /// Defaults key for the sidebar width the user dragged to.
+    static let sidebarWidthKey = "sidebarWidth"
+    /// Range the sidebar accepts, mirroring the Harness layout contract's drag clamp.
+    static let sidebarWidthRange = 264.0...420.0
 
     private let defaults: UserDefaults
 
@@ -82,6 +102,30 @@ final class SettingsStore: ObservableObject {
         }
     }
 
+    /// Width the sidebar was last dragged to, in CSS pixels.
+    ///
+    /// The Harness layout store keeps panel geometry in memory only — its own contract
+    /// calls those preferences transient — so a width the user dragged would be gone on
+    /// the next launch. The app remembers it and hands it back to the page at document
+    /// start, which replays it through the same drag the user performed.
+    ///
+    /// `nil` until the page reports a width, which is what keeps a first launch from
+    /// pushing a value the user never chose.
+    @Published var sidebarWidth: Double? {
+        didSet {
+            guard let sidebarWidth else {
+                defaults.removeObject(forKey: Self.sidebarWidthKey)
+                return
+            }
+            let normalized = Self.normalizedSidebarWidth(sidebarWidth)
+            if normalized != sidebarWidth {
+                self.sidebarWidth = normalized
+                return
+            }
+            defaults.set(normalized, forKey: Self.sidebarWidthKey)
+        }
+    }
+
     /// Loads every app-owned preference, falling back to the documented defaults.
     ///
     /// A stored workspace that no longer passes admission is replaced by the default
@@ -110,6 +154,8 @@ final class SettingsStore: ObservableObject {
         questionNotificationsEnabled = defaults.object(
             forKey: Self.questionNotificationsEnabledKey
         ) as? Bool ?? Self.questionNotificationsEnabledDefault
+        sidebarWidth = (defaults.object(forKey: Self.sidebarWidthKey) as? NSNumber)
+            .map { Self.normalizedSidebarWidth($0.doubleValue) }
     }
 
     /// Clamps a width to the supported range.
@@ -121,6 +167,16 @@ final class SettingsStore: ObservableObject {
         // Clamp persisted or WebView-provided values before they affect CSS.
         guard let value, value.isFinite else { return chatContentMaxWidthDefault }
         return min(max(value, chatContentMaxWidthRange.lowerBound), chatContentMaxWidthRange.upperBound)
+    }
+
+    /// Clamps a width to the supported range.
+    ///
+    /// - Parameter value: Candidate width; non-finite values fall back to the range's
+    ///   lower bound, which is the narrowest sidebar the layout accepts.
+    /// - Returns: A width inside ``sidebarWidthRange``.
+    static func normalizedSidebarWidth(_ value: Double) -> Double {
+        guard value.isFinite else { return sidebarWidthRange.lowerBound }
+        return min(max(value, sidebarWidthRange.lowerBound), sidebarWidthRange.upperBound)
     }
 
     /// Resolves a stored notification preference.
@@ -136,6 +192,43 @@ final class SettingsStore: ObservableObject {
             return turnCompletionNotificationDefault
         }
         return preference
+    }
+
+    /// The five shared preferences as this store currently holds them.
+    var studioSettingsSnapshot: StudioSettingsSnapshot {
+        StudioSettingsSnapshot(
+            workspacePath: workspaceURL.standardizedFileURL.path,
+            chatContentMaxWidth: chatContentMaxWidth,
+            turnCompletionNotification: turnCompletionNotification.rawValue,
+            permissionNotificationsEnabled: permissionNotificationsEnabled,
+            questionNotificationsEnabled: questionNotificationsEnabled
+        )
+    }
+
+    /// Adopts the values Harness owns.
+    ///
+    /// A field Harness did not supply, and the workspace it may hold, are left as they
+    /// are: adoption only ever follows the authoritative settings.
+    ///
+    /// - Parameter snapshot: Values read from the DSH Studio namespace.
+    /// - Returns: Whether the width changed, so the caller can re-apply the injected CSS.
+    @discardableResult
+    func adopt(_ snapshot: StudioSettingsSnapshot) -> Bool {
+        let previousWidth = chatContentMaxWidth
+        if let width = snapshot.chatContentMaxWidth {
+            chatContentMaxWidth = width
+        }
+        if let raw = snapshot.turnCompletionNotification,
+           let preference = TurnCompletionNotificationPreference(rawValue: raw) {
+            turnCompletionNotification = preference
+        }
+        if let enabled = snapshot.permissionNotificationsEnabled {
+            permissionNotificationsEnabled = enabled
+        }
+        if let enabled = snapshot.questionNotificationsEnabled {
+            questionNotificationsEnabled = enabled
+        }
+        return chatContentMaxWidth != previousWidth
     }
 
     /// Encodes only the five legacy preference fields for the one-launch

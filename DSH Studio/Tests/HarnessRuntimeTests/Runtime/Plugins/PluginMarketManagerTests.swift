@@ -71,6 +71,29 @@ final class PluginMarketManagerTests: XCTestCase {
         XCTAssertEqual(manager.state.installState, .corrupted)
     }
 
+    /// A market failure never rolls the Runtime back.
+    ///
+    /// The market is not a condition of Runtime activation, so a refresh that cannot be
+    /// installed must leave the activated Runtime, its files, and its process alone.
+    func testAFailedRefreshLeavesTheRuntimeUntouched() async throws {
+        let process = FakeHarnessProcess()
+        let manager = makeManager(process: process)
+        let harnessEntry = manager.runtime.configuration.harnessEntry
+        let state = manager.runtime.state
+        try writeCompleteFixture(in: manager.profileStore, includeBundle: false)
+
+        await manager.refresh()
+
+        XCTAssertEqual(manager.state.installState, .corrupted, "the failure is reported")
+        XCTAssertEqual(manager.runtime.state, state, "the Runtime keeps its lifecycle state")
+        XCTAssertEqual(
+            manager.runtime.configuration.harnessEntry,
+            harnessEntry,
+            "the activated Runtime does not move"
+        )
+        XCTAssertEqual(process.launchCount, 0, "nothing is launched or rolled back")
+    }
+
     /// A Runtime older than the plugin supports reports as incompatible, not broken.
     func testRefreshClassifiesLegacyHarnessAsIncompatible() async throws {
         let manager = makeManager(harnessVersion: "0.1.0-rc.6")

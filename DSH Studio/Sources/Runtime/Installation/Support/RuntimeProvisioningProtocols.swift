@@ -54,6 +54,22 @@ public protocol RuntimeAssetDownloading: Sendable {
         to destination: URL,
         onProgress: (@Sendable (Int64, Int64) -> Void)?
     ) async throws
+
+    /// Downloads one pinned artifact, continuing a partial file when the server allows it.
+    ///
+    /// - Parameters:
+    ///   - url: Trusted HTTPS artifact URL.
+    ///   - destination: File the artifact is written to.
+    ///   - partial: Partial file to continue, when one exists.
+    ///   - onProgress: Called with the bytes received and the expected total; the total
+    ///     is `0` when the server sends no length. Passing `nil` reports nothing.
+    /// - Throws: When the download fails or the destination cannot be written.
+    func download(
+        from url: URL,
+        to destination: URL,
+        resumingFrom partial: URL?,
+        onProgress: (@Sendable (Int64, Int64) -> Void)?
+    ) async throws
 }
 
 /// Shared behaviour for downloaders.
@@ -71,6 +87,23 @@ public extension RuntimeAssetDownloading {
         onProgress: (@Sendable (Int64, Int64) -> Void)?
     ) async throws {
         try await download(from: url, to: destination)
+    }
+
+    /// Starts over, for downloaders that cannot continue a partial file.
+    ///
+    /// - Parameters:
+    ///   - url: Trusted HTTPS artifact URL.
+    ///   - destination: File the artifact is written to.
+    ///   - partial: Ignored.
+    ///   - onProgress: Forwarded to the plain progress download.
+    /// - Throws: Whatever the progress download throws.
+    func download(
+        from url: URL,
+        to destination: URL,
+        resumingFrom partial: URL?,
+        onProgress: (@Sendable (Int64, Int64) -> Void)?
+    ) async throws {
+        try await download(from: url, to: destination, onProgress: onProgress)
     }
 }
 

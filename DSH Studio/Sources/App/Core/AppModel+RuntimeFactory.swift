@@ -102,7 +102,11 @@ extension RuntimeManager {
             : RuntimeProvisioner(
                 root: root,
                 release: release,
-                dataProfileStore: dataProfileStore
+                dataProfileStore: dataProfileStore,
+                // Verified archives and unfinished downloads live here rather than in the
+                // staging directory, so a retry after a failed install does not start the
+                // 188 MiB download over.
+                downloadCacheDirectory: support.appendingPathComponent("RuntimeDownloads", isDirectory: true)
             )
         return RuntimeManager(
             configuration: configuration,

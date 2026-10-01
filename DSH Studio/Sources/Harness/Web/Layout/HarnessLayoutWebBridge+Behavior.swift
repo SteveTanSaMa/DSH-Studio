@@ -20,6 +20,96 @@ extension HarnessLayoutWebBridge {
       let heroResizeObserver;
       let sidebarStateRetryTimer = 0;
       let sidebarStateRetryCount = 0;
+      let sidebarWidthApplied = false;
+      let sidebarWidthReported = -1;
+      let sidebarWidthReportTimer = 0;
+
+      // The Harness layout store keeps panel geometry in memory, so a dragged sidebar
+      // width is gone after a restart. The app stores it and hands it back at document
+      // start; the page replays it once through the same drag the user performed, then
+      // reports later drags so the app can store those too.
+      const sidebarWidthHandlerName = "deepseekStudio";
+      const sidebarWidthMessageType = "dshStudio.action";
+
+      const reportSidebarWidth = (width) => {
+        if (!Number.isFinite(width) || width <= 0) return;
+        if (sidebarWidthReported === width) return;
+        sidebarWidthReported = width;
+        const handlers = window.webkit && window.webkit.messageHandlers;
+        const handler = handlers && handlers[sidebarWidthHandlerName];
+        if (!handler) return;
+        try {
+          handler.postMessage({
+            type: sidebarWidthMessageType,
+            action: "preference.sync",
+            payload: { key: "sidebarWidth", value: width },
+          });
+        } catch (error) {
+          // A page opened without the native bridge simply keeps the width it has.
+        }
+      };
+
+      const scheduleSidebarWidthReport = (width) => {
+        if (sidebarWidthReportTimer !== 0) window.clearTimeout(sidebarWidthReportTimer);
+        sidebarWidthReportTimer = window.setTimeout(() => {
+          sidebarWidthReportTimer = 0;
+          reportSidebarWidth(width);
+        }, 250);
+      };
+
+      /**
+       * Replay a stored width by dragging the panel handle the distance between the
+       * current and stored widths. The handle captures the pointer, which a synthetic
+       * pointer cannot do, so that one call is stubbed for the duration of the drag: it
+       * is bookkeeping for a real pointer, and the store only reads the coordinates.
+       */
+      const dragSidebarHandle = (handle, delta) => {
+        const capture = Element.prototype.setPointerCapture;
+        Element.prototype.setPointerCapture = function () {};
+        try {
+          const origin = handle.getBoundingClientRect().right;
+          const shared = {
+            bubbles: true,
+            cancelable: true,
+            composed: true,
+            pointerId: 1,
+            pointerType: "mouse",
+            isPrimary: true,
+            button: 0,
+          };
+          handle.dispatchEvent(new PointerEvent("pointerdown", {
+            ...shared, buttons: 1, clientX: origin,
+          }));
+          handle.dispatchEvent(new PointerEvent("pointermove", {
+            ...shared, buttons: 1, clientX: origin + delta,
+          }));
+          handle.dispatchEvent(new PointerEvent("pointerup", {
+            ...shared, buttons: 0, clientX: origin + delta,
+          }));
+        } finally {
+          Element.prototype.setPointerCapture = capture;
+        }
+      };
+
+      const applyStoredSidebarWidth = (frame, currentWidth) => {
+        if (sidebarWidthApplied) return false;
+        const stored = Number(window.__deepseekStudioSidebarWidth);
+        if (!Number.isFinite(stored) || stored <= 0) {
+          sidebarWidthApplied = true;
+          return false;
+        }
+        if (Number.isFinite(currentWidth) && Math.abs(currentWidth - stored) < 1) {
+          sidebarWidthApplied = true;
+          sidebarWidthReported = Math.round(stored);
+          return false;
+        }
+        const handle = frame.querySelector('[class*="_handle"]');
+        if (!handle) return false;
+        dragSidebarHandle(handle, stored - currentWidth);
+        sidebarWidthApplied = true;
+        sidebarWidthReported = Math.round(stored);
+        return true;
+      };
 
       const setPixelProperty = (element, name, value) => {
         if (!Number.isFinite(value)) return;
@@ -144,6 +234,13 @@ extension HarnessLayoutWebBridge {
               frame.style.setProperty("--deepseek-studio-details-width", detailsWidth);
             }
           }
+          const sidebarWidth = tracks.length > 0 ? parseFloat(tracks[0]) : NaN;
+          if (!applyStoredSidebarWidth(frame, sidebarWidth)
+              && !frame.hasAttribute("data-sidebar-collapsed")) {
+            // Only an expanded rail carries the width the user dragged; the collapsed
+            // rail is the contract's own 56px and must never be reported as a choice.
+            scheduleSidebarWidthReport(Math.round(sidebarWidth));
+          }
           const nextSidebarState = frame.hasAttribute("data-sidebar-collapsed")
             ? "collapsed"
             : "expanded";
@@ -254,7 +351,9 @@ extension HarnessLayoutWebBridge {
       });
       observer.observe(document.documentElement, {
         attributes: true,
-        attributeFilter: ["data-sidebar-collapsed"],
+        // `data-sidebar-collapsed` marks a panel transition; `style` carries the grid
+        // tracks, which is how a width the user dragged reaches this script.
+        attributeFilter: ["data-sidebar-collapsed", "style"],
         childList: true,
         subtree: true,
       });
@@ -262,6 +361,29 @@ extension HarnessLayoutWebBridge {
       syncInputScrollBoundaryGuards();
       scheduleSidebarState();
       scheduleHeroAlignment();
+      // Report the width the page starts with, so the app has a value even when no
+      // mutation ever triggers another sync pass. The frame can appear well after this
+      // script runs — a first-run dialog or a slow plugin can hold the page back — so the
+      // attempt is repeated until it lands.
+      let sidebarWidthReportAttempts = 0;
+      const reportInitialSidebarWidth = () => {
+        const frame = document.querySelector('[class*="_frame"]');
+        if (!frame) return false;
+        const tracks = getComputedStyle(frame).gridTemplateColumns.trim().split(/\s+/);
+        const width = tracks.length > 0 ? parseFloat(tracks[0]) : NaN;
+        if (!Number.isFinite(width) || width <= 0) return false;
+        if (!applyStoredSidebarWidth(frame, width)
+            && !frame.hasAttribute("data-sidebar-collapsed")) {
+          scheduleSidebarWidthReport(Math.round(width));
+        }
+        return true;
+      };
+      const scheduleInitialSidebarWidth = () => {
+        sidebarWidthReportAttempts += 1;
+        if (reportInitialSidebarWidth() || sidebarWidthReportAttempts >= 20) return;
+        window.setTimeout(scheduleInitialSidebarWidth, 750);
+      };
+      window.setTimeout(scheduleInitialSidebarWidth, 500);
     })();
     """#
 }
