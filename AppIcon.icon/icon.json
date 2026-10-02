@@ -1,35 +1,35 @@
 {
-  "fill" : {
-    "automatic-gradient" : "extended-srgb:0.00000,0.53333,1.00000,1.00000"
+  "fill": {
+    "automatic-gradient": "extended-srgb:0.00000,0.53333,1.00000,1.00000"
   },
-  "groups" : [
+  "groups": [
     {
-      "layers" : [
+      "layers": [
         {
-          "blend-mode" : "normal",
-          "fill" : "automatic",
-          "image-name" : "鲸白.png",
-          "name" : "鲸白",
-          "position" : {
-            "scale" : 1.05,
-            "translation-in-points" : [
+          "blend-mode": "normal",
+          "fill": "automatic",
+          "image-name": "whale-girl.png",
+          "name": "whale-girl",
+          "position": {
+            "scale": 1.05,
+            "translation-in-points": [
               146,
               -124
             ]
           }
         }
       ],
-      "shadow" : {
-        "kind" : "neutral",
-        "opacity" : 0.6
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.6
       },
-      "translucency" : {
-        "enabled" : true,
-        "value" : 0.2
+      "translucency": {
+        "enabled": true,
+        "value": 0.2
       }
     }
   ],
-  "supported-platforms" : {
-    "squares" : "shared"
+  "supported-platforms": {
+    "squares": "shared"
   }
 }

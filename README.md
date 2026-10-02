@@ -3,7 +3,7 @@
 [English](README.en.md) | **中文**
 
 <p align="center">
-  <img src="AppIcon.icon/Assets/鲸白.png" alt="DSH Studio 项目标识" width="180">
+  <img src="AppIcon.icon/Assets/whale-girl.png" alt="DSH Studio 项目标识" width="180">
 </p>
 
 <p align="center">
